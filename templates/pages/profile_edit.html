@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Modifier mon profil{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+
+      <!-- En-tête -->
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'accounts:profile' %}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+          <h4 class="fw-bold mb-0">Modifier mon profil</h4>
+          <p class="text-muted small mb-0">Mettez à jour vos informations personnelles</p>
+        </div>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Section : Informations personnelles -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-person me-2 text-green"></i>Informations personnelles
+          </h6>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Prénom</label>
+              {{ profile_form.first_name }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Nom</label>
+              {{ profile_form.last_name }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Téléphone</label>
+              {{ profile_form.phone_number }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Ville</label>
+              {{ profile_form.city }}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Biographie</label>
+              {{ profile_form.bio }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Section : Photo de profil -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-image me-2 text-green"></i>Photo de profil
+          </h6>
+          <div class="d-flex align-items-center gap-4">
+            {% if user.avatar %}
+              <img src="{{ user.avatar.url }}" width="80" height="80"
+                   class="rounded-circle object-fit-cover border" />
+            {% else %}
+              <div style="width:80px; height:80px; border-radius:50%;
+                          background:linear-gradient(135deg,#1B7A3E,#F47920);
+                          display:flex; align-items:center; justify-content:center;
+                          font-size:2rem; color:white; font-weight:900;">
+                {{ user.get_short_name|first|upper }}
+              </div>
+            {% endif %}
+            <div class="flex-grow-1">
+              {{ profile_form.avatar }}
+              <div class="text-muted small mt-1">
+                JPG, PNG — max 2 Mo. Taille recommandée : 200×200px
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section : Paramètres -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-gear me-2 text-green"></i>Paramètres
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Langue préférée</label>
+              {{ profile_form.preferred_language }}
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">Notifications</label>
+            <div class="d-flex flex-wrap gap-4 mt-1">
+              <div class="form-check">
+                {{ profile_form.notify_email }}
+                <label class="form-check-label small">
+                  {{ profile_form.notify_email.label }}
+                </label>
+              </div>
+              <div class="form-check">
+                {{ profile_form.notify_sms }}
+                <label class="form-check-label small">
+                  {{ profile_form.notify_sms.label }}
+                </label>
+              </div>
+              <div class="form-check">
+                {{ profile_form.notify_push }}
+                <label class="form-check-label small">
+                  {{ profile_form.notify_push.label }}
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section : Organisateur -->
+        {% if user.is_organizer %}
+        <div class="ip-card p-4 mb-4"
+             style="border-left: 4px solid #1B7A3E;">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-building me-2 text-green"></i>Profil organisateur
+          </h6>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Nom de l'organisation</label>
+              {{ organizer_form.organization_name }}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Description</label>
+              {{ organizer_form.organization_description }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Logo</label>
+              {{ organizer_form.organization_logo }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Site web</label>
+              {{ organizer_form.organization_website }}
+            </div>
+          </div>
+
+          {% if not user.is_organizer_verified %}
+          <div class="alert ip-alert alert-warning mt-3 mb-0">
+            <i class="bi bi-clock-history me-2"></i>
+            Votre compte organisateur est en attente de vérification par notre équipe.
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Boutons -->
+        <div class="d-flex gap-3">
+          <button type="submit" class="btn btn-green btn-lg px-5">
+            <i class="bi bi-check-lg me-2"></i>Enregistrer
+          </button>
+          <a href="{% url 'accounts:profile' %}"
+             class="btn btn-outline-secondary btn-lg px-4">
+            Annuler
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

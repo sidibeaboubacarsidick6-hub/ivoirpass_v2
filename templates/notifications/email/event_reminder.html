@@ -1,0 +1,60 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">C'est demain ! 🎉</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ user.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Rappel : vous avez un billet pour l'événement de demain !
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Événement</span>
+    <span class="info-value">{{ event.title }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date</span>
+    <span class="info-value">
+      {{ event.start_date|date:"d F Y à H\hi" }}
+    </span>
+  </div>
+  {% if event.venue_name %}
+  <div class="info-row">
+    <span class="info-label">Lieu</span>
+    <span class="info-value">{{ event.venue_name }}</span>
+  </div>
+  {% endif %}
+  <div class="info-row">
+    <span class="info-label">Adresse</span>
+    <span class="info-value">{{ event.venue_address|default:event.venue_city }}</span>
+  </div>
+  {% if event.doors_open %}
+  <div class="info-row">
+    <span class="info-label">Ouverture des portes</span>
+    <span class="info-value">{{ event.doors_open|time:"H\hi" }}</span>
+  </div>
+  {% endif %}
+  <div class="info-row">
+    <span class="info-label">Votre billet</span>
+    <span class="info-value">
+      {{ ticket.ticket_type.name }} — {{ ticket.ticket_number }}
+    </span>
+  </div>
+</div>
+
+<p class="email-text" style="font-size:13px; color:#6c757d;">
+  💡 N'oubliez pas votre billet QR Code (joint ou disponible dans l'app).
+</p>
+
+<center>
+  <a href="{{ platform_url }}/billets/mes-billets/{{ ticket.ticket_number }}/"
+     class="btn-cta">
+    Voir mon billet QR
+  </a>
+</center>
+
+{% endblock %}

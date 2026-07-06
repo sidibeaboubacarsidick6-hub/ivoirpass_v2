@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% block title %}Commander — {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <h4 class="fw-bold mb-4">
+        <i class="bi bi-cart-check me-2 text-green"></i>Récapitulatif de commande
+      </h4>
+
+      <!-- Produit -->
+      <div class="ip-card p-4 mb-4">
+        <div class="d-flex gap-3 align-items-center mb-3">
+          {% if product.cover_image %}
+            <img src="{{ product.cover_image.url }}"
+                 width="70" height="70"
+                 class="rounded-3 object-fit-cover" />
+          {% endif %}
+          <div>
+            <div class="fw-bold">{{ product.name }}</div>
+            {% if product.author %}
+              <div class="text-muted small">{{ product.author }}</div>
+            {% endif %}
+            <div class="text-green fw-bold">{{ product.price|floatformat:0 }} FCFA</div>
+            <span class="badge" style="background:{% if product.is_digital %}#1B7A3E{% else %}#F47920{% endif %}; color:white; font-size:0.72rem;">
+              {{ product.get_product_type_display }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <form method="POST" action="{% url 'store:buy' product.slug %}"
+            x-data="{ delivery: '{% if product.is_physical %}delivery{% else %}download{% endif %}' }">
+        {% csrf_token %}
+
+        <!-- Quantité (produit physique) -->
+        {% if product.is_physical %}
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold mb-3 small text-uppercase text-muted border-bottom pb-2">
+            <i class="bi bi-boxes me-2 text-green"></i>Quantité
+          </h6>
+          <select name="quantity" class="form-select">
+            {% for i in "12345" %}
+              {% if forloop.counter <= product.stock %}
+              <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="quantity" value="1" />
+        {% endif %}
+
+        <!-- Méthode de livraison (bundle uniquement) -->
+        {% if product.product_type == 'bundle' %}
+        <div class="ip-card p-4 mb-4" x-data>
+          <h6 class="fw-bold mb-3 small text-uppercase text-muted border-bottom pb-2">
+            <i class="bi bi-truck me-2 text-green"></i>Méthode de livraison
+          </h6>
+          <div class="row g-3">
+            <div class="col-6">
+              <label style="cursor:pointer; display:block;">
+                <input type="radio" name="delivery_method" value="download"
+                       class="d-none" x-model="delivery" />
+                <div class="p-3 rounded-3 border text-center"
+                     :class="delivery === 'download' ? 'border-success bg-success bg-opacity-10' : 'border-light'">
+                  <div style="font-size:1.5rem;">💾</div>
+                  <div class="fw-bold small mt-1">Numérique</div>
+                  <div class="text-muted" style="font-size:0.72rem;">Téléchargement immédiat</div>
+                </div>
+              </label>
+            </div>
+            <div class="col-6">
+              <label style="cursor:pointer; display:block;">
+                <input type="radio" name="delivery_method" value="delivery"
+                       class="d-none" x-model="delivery" />
+                <div class="p-3 rounded-3 border text-center"
+                     :class="delivery === 'delivery' ? 'border-success bg-success bg-opacity-10' : 'border-light'">
+                  <div style="font-size:1.5rem;">📦</div>
+                  <div class="fw-bold small mt-1">Physique</div>
+                  <div class="text-muted" style="font-size:0.72rem;">Livraison à domicile</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        {% else %}
+          <input type="hidden" name="delivery_method"
+                 value="{% if product.is_digital %}download{% else %}delivery{% endif %}" />
+        {% endif %}
+
+        <!-- Adresse de livraison (produit physique ou bundle+livraison) -->
+        <div class="ip-card p-4 mb-4"
+             x-show="delivery === 'delivery'">
+          <h6 class="fw-bold mb-3 small text-uppercase text-muted border-bottom pb-2">
+            <i class="bi bi-geo-alt me-2 text-green"></i>Adresse de livraison
+          </h6>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Nom complet *</label>
+              <input type="text" name="delivery_name"
+                     class="form-control"
+                     placeholder="Prénom et Nom"
+                     :required="delivery === 'delivery'"
+                     value="{{ user.get_full_name }}" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Téléphone *</label>
+              <input type="tel" name="delivery_phone"
+                     class="form-control"
+                     placeholder="+225 07 XX XX XX XX"
+                     :required="delivery === 'delivery'"
+                     value="{{ user.phone_number }}" />
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Adresse complète *</label>
+              <input type="text" name="delivery_address"
+                     class="form-control"
+                     placeholder="Quartier, rue, numéro..."
+                     :required="delivery === 'delivery'" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Ville *</label>
+              <input type="text" name="delivery_city"
+                     class="form-control"
+                     placeholder="Abidjan"
+                     :required="delivery === 'delivery'"
+                     value="Abidjan" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Commune</label>
+              <input type="text" name="delivery_commune"
+                     class="form-control"
+                     placeholder="Cocody, Yopougon..." />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Pays</label>
+              <input type="text" name="delivery_country"
+                     class="form-control"
+                     value="Côte d'Ivoire" />
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">
+                Instructions (optionnel)
+              </label>
+              <textarea name="delivery_instructions"
+                        class="form-control" rows="2"
+                        placeholder="Point de repère, instructions particulières..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Total -->
+        <div class="ip-card p-4 mb-4"
+             style="border-left:4px solid #1B7A3E;">
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Total à payer</span>
+            <span class="fw-bold fs-5 text-green">
+              {{ product.price|floatformat:0 }} FCFA
+            </span>
+          </div>
+        </div>
+
+        <!-- Bouton paiement -->
+        <button type="submit" class="btn btn-orange btn-lg w-100 mb-3">
+          <i class="bi bi-lock me-2"></i>
+          Payer {{ product.price|floatformat:0 }} FCFA via PayDunya
+        </button>
+
+        <p class="text-muted small text-center">
+          <i class="bi bi-shield-check me-1 text-green"></i>
+          Paiement 100% sécurisé — Wave, Orange Money, MTN MoMo, Carte Bancaire
+        </p>
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

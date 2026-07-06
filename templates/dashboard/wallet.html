@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Mon Wallet{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'dashboard:index' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h4 class="fw-bold mb-0">
+      <i class="bi bi-wallet2 me-2 text-green"></i>Mon Wallet
+    </h4>
+  </div>
+
+  <!-- Soldes -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ip-card p-4 text-center"
+           style="border-top:4px solid #1B7A3E;">
+        <div class="text-muted small mb-1">Disponible</div>
+        <div style="font-size:2rem; font-weight:900; color:#1B7A3E;">
+          {{ wallet.balance_available|floatformat:0 }}
+        </div>
+        <div class="text-muted small">FCFA</div>
+        <a href="{% url 'dashboard:withdraw' %}"
+           class="btn btn-green btn-sm mt-3 w-100">
+          <i class="bi bi-send me-1"></i>Reverser
+        </a>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ip-card p-4 text-center"
+           style="border-top:4px solid #F47920;">
+        <div class="text-muted small mb-1">En attente</div>
+        <div style="font-size:2rem; font-weight:900; color:#F47920;">
+          {{ wallet.balance_pending|floatformat:0 }}
+        </div>
+        <div class="text-muted small">FCFA</div>
+        <div class="text-muted mt-3" style="font-size:0.78rem;">
+          <i class="bi bi-clock me-1"></i>Disponible sous 48h
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ip-card p-4 text-center"
+           style="border-top:4px solid #6c757d;">
+        <div class="text-muted small mb-1">Total reversé</div>
+        <div style="font-size:2rem; font-weight:900; color:#6c757d;">
+          {{ wallet.balance_withdrawn|floatformat:0 }}
+        </div>
+        <div class="text-muted small">FCFA</div>
+        <div class="text-muted mt-3" style="font-size:0.78rem;">
+          Cumul total
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Historique transactions -->
+    <div class="col-lg-8">
+      <div class="ip-card">
+        <div class="p-4 border-bottom">
+          <h6 class="fw-bold mb-0">
+            <i class="bi bi-clock-history me-2 text-green"></i>
+            Historique des transactions
+          </h6>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for tx in transactions %}
+          <div class="list-group-item px-4 py-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="d-flex align-items-center gap-3">
+                <div style="width:36px; height:36px; border-radius:50%;
+                            background:{% if tx.type == 'credit' %}#edf7f1{% else %}#fff8f0{% endif %};
+                            display:flex; align-items:center; justify-content:center;
+                            font-size:1rem;">
+                  {% if tx.type == 'credit' %}⬆️{% else %}⬇️{% endif %}
+                </div>
+                <div>
+                  <div class="fw-semibold small">{{ tx.description }}</div>
+                  {% if tx.reference %}
+                  <div class="text-muted" style="font-size:0.75rem; font-family:monospace;">
+                    {{ tx.reference }}
+                  </div>
+                  {% endif %}
+                  <div class="text-muted" style="font-size:0.75rem;">
+                    {{ tx.created_at|date:"d/m/Y H:i" }}
+                  </div>
+                </div>
+              </div>
+              <div class="text-end">
+                <div class="fw-bold {% if tx.type == 'credit' %}text-green{% else %}text-orange{% endif %}">
+                  {% if tx.type == 'credit' %}+{% else %}-{% endif %}
+                  {{ tx.amount|floatformat:0 }} FCFA
+                </div>
+                <div class="text-muted" style="font-size:0.75rem;">
+                  Solde : {{ tx.balance_after|floatformat:0 }} FCFA
+                </div>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="text-center py-4 text-muted">
+            Aucune transaction.
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Demandes de reversement -->
+    <div class="col-lg-4">
+      <div class="ip-card">
+        <div class="p-4 border-bottom d-flex justify-content-between">
+          <h6 class="fw-bold mb-0">
+            <i class="bi bi-send me-2 text-orange"></i>
+            Reversements
+          </h6>
+          <a href="{% url 'dashboard:withdraw' %}"
+             class="btn btn-orange btn-sm">
+            + Nouveau
+          </a>
+        </div>
+        {% for wr in withdrawals %}
+        <div class="p-3 border-bottom">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <span style="font-family:monospace; font-size:0.8rem; color:#6c757d;">
+              {{ wr.reference }}
+            </span>
+            {% if wr.status == 'pending' %}
+              <span class="badge" style="background:#F47920; font-size:0.7rem;">
+                En attente
+              </span>
+            {% elif wr.status == 'processed' %}
+              <span class="badge bg-success" style="font-size:0.7rem;">Traité</span>
+            {% elif wr.status == 'rejected' %}
+              <span class="badge bg-danger" style="font-size:0.7rem;">Rejeté</span>
+            {% else %}
+              <span class="badge bg-info" style="font-size:0.7rem;">Approuvé</span>
+            {% endif %}
+          </div>
+          <div class="fw-bold">{{ wr.amount|floatformat:0 }} FCFA</div>
+          <div class="text-muted small">
+            {{ wr.get_payout_method_display }} — {{ wr.payout_phone }}
+          </div>
+          <div class="text-muted" style="font-size:0.75rem;">
+            {{ wr.created_at|date:"d/m/Y H:i" }}
+          </div>
+          {% if wr.admin_note %}
+          <div class="mt-1 text-muted" style="font-size:0.75rem;">
+            <i class="bi bi-chat me-1"></i>{{ wr.admin_note }}
+          </div>
+          {% endif %}
+        </div>
+        {% empty %}
+        <div class="text-center py-4 text-muted small">
+          Aucune demande de reversement.
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

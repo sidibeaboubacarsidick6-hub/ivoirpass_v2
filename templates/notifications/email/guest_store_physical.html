@@ -1,0 +1,11 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+<h1 class="email-title">Commande confirmée ! 📦</h1>
+<p class="email-text">Bonjour <strong>{{ order.buyer_name }}</strong>,</p>
+<div class="info-box">
+  <div class="info-row"><span class="info-label">Commande</span><span class="info-value">{{ order.order_number }}</span></div>
+  <div class="info-row"><span class="info-label">Produit</span><span class="info-value">{{ order.product.name }}</span></div>
+  <div class="info-row"><span class="info-label">Total</span><span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span></div>
+</div>
+<p class="email-text">🚚 Livraison sous 3-5 jours ouvrés.</p>
+{% endblock %}

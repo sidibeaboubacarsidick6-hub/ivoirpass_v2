@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} un produit{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'store:my_products' %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h4 class="fw-bold mb-0">
+      {% if action == 'Créer' %}
+        <i class="bi bi-plus-circle me-2 text-orange"></i>Ajouter un produit
+      {% else %}
+        <i class="bi bi-pencil me-2 text-green"></i>Modifier le produit
+      {% endif %}
+    </h4>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data"
+        x-data="{ type: '{{ product.product_type|default:'physical' }}' }">
+    {% csrf_token %}
+    <div class="row g-4">
+
+      <!-- Colonne principale -->
+      <div class="col-lg-8">
+
+        <!-- Informations générales -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-info-circle me-2 text-green"></i>Informations générales
+          </h6>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.name.label }}</label>
+            {{ form.name }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.subtitle.label }}</label>
+            {{ form.subtitle }}
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.category.label }}</label>
+              {{ form.category }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.product_type.label }}</label>
+              <select name="product_type" class="form-select" x-model="type">
+                <option value="physical">📦 Physique (livraison)</option>
+                <option value="digital">💾 Numérique (téléchargement)</option>
+                <option value="bundle">🎁 Bundle (physique + numérique)</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.short_description.label }}</label>
+            {{ form.short_description }}
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.description.label }}</label>
+            {{ form.description }}
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.tags.label }}</label>
+            {{ form.tags }}
+          </div>
+        </div>
+
+        <!-- Section métadonnées dynamiques selon le type de produit -->
+        <div class="ip-card p-4 mb-4" x-data="{ type: '{{ product.product_type|default:'physical' }}' }">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-card-text me-2 text-green"></i>Métadonnées
+          </h6>
+
+          <!-- Champs communs -->
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Auteur / Artiste</label>
+              {{ form.author }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Éditeur / Label</label>
+              {{ form.publisher }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small">Année</label>
+              {{ form.year }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small">Langue</label>
+              {{ form.language }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small">ISBN</label>
+              {{ form.isbn }}
+            </div>
+
+            <!-- Pages uniquement pour livres -->
+            <div class="col-md-3"
+                 x-show="type === 'physical' || type === 'bundle'">
+              <label class="form-label fw-semibold small">Nombre de pages</label>
+              {{ form.pages }}
+            </div>
+
+            <!-- Durée uniquement pour albums/podcasts/films -->
+            <div class="col-md-3"
+                 x-show="type === 'digital'">
+              <label class="form-label fw-semibold small">Durée (ex: 45 min)</label>
+              {{ form.duration }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Médias et fichiers -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-image me-2 text-green"></i>Médias & Fichiers
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.cover_image.label }}</label>
+              {% if product.cover_image %}
+                <img src="{{ product.cover_image.url }}"
+                     class="rounded-2 mb-2 d-block"
+                     style="max-height:80px;" />
+              {% endif %}
+              {{ form.cover_image }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.preview_file.label }}</label>
+              {{ form.preview_file }}
+              <div class="text-muted small mt-1">
+                Extrait gratuit visible publiquement
+              </div>
+            </div>
+            <div class="col-12" x-show="type !== 'physical'">
+              <label class="form-label fw-semibold small">{{ form.digital_file.label }}</label>
+              {{ form.digital_file }}
+              <div class="text-muted small mt-1">
+                <i class="bi bi-shield-lock me-1 text-green"></i>
+                Fichier sécurisé — accessible uniquement après achat
+              </div>
+              {% if product.digital_file %}
+              <div class="mt-1 text-muted small">
+                Fichier actuel : {{ product.file_extension }}
+                ({{ product.file_size_mb }} Mo)
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Colonne latérale -->
+      <div class="col-lg-4">
+        <div class="ip-card p-4 sticky-top" style="top:80px;">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-sliders me-2 text-green"></i>Prix & Publication
+          </h6>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.price.label }}</label>
+            {{ form.price }}
+          </div>
+
+          <div class="mb-3" x-show="type === 'bundle'">
+            <label class="form-label fw-semibold small">{{ form.price_physical.label }}</label>
+            {{ form.price_physical }}
+          </div>
+
+          <div class="mb-3" x-show="type === 'bundle'">
+            <label class="form-label fw-semibold small">{{ form.price_digital.label }}</label>
+            {{ form.price_digital }}
+          </div>
+
+          <div class="mb-3" x-show="type !== 'digital'">
+            <label class="form-label fw-semibold small">{{ form.stock.label }}</label>
+            {{ form.stock }}
+          </div>
+
+          <div class="mb-3" x-show="type !== 'physical'">
+            <label class="form-label fw-semibold small">{{ form.download_limit.label }}</label>
+            {{ form.download_limit }}
+          </div>
+
+          <div class="mb-3" x-show="type !== 'physical'">
+            <label class="form-label fw-semibold small">{{ form.download_expiry_hours.label }}</label>
+            {{ form.download_expiry_hours }}
+            <div class="text-muted small mt-1">Heures après achat</div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold small">{{ form.status.label }}</label>
+            {{ form.status }}
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-orange btn-lg">
+              <i class="bi bi-check-lg me-2"></i>
+              {% if action == 'Créer' %}Créer le produit{% else %}Enregistrer{% endif %}
+            </button>
+            <a href="{% url 'store:my_products' %}"
+               class="btn btn-outline-secondary">
+              Annuler
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+{% endblock %}

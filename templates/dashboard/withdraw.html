@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Demande de reversement{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'dashboard:wallet' %}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h4 class="fw-bold mb-0">
+          <i class="bi bi-send me-2 text-orange"></i>
+          Demande de reversement
+        </h4>
+      </div>
+
+      <!-- Solde disponible -->
+      <div class="ip-card p-4 mb-4"
+           style="border-left:4px solid #1B7A3E; background:#edf7f1;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Solde disponible</div>
+            <div style="font-size:1.8rem; font-weight:900; color:#1B7A3E;">
+              {{ wallet.balance_available|floatformat:0 }} FCFA
+            </div>
+          </div>
+          <i class="bi bi-wallet2" style="font-size:2.5rem; color:#1B7A3E; opacity:0.3;"></i>
+        </div>
+      </div>
+
+      {% if wallet.balance_available >= min_amount %}
+
+      <div class="ip-card p-4">
+        <form method="POST" x-data="{ method: 'wave' }">
+          {% csrf_token %}
+
+          <!-- Montant -->
+          <div class="mb-4">
+            <label class="form-label fw-bold">
+              Montant à reverser (FCFA) *
+            </label>
+            <input type="number" name="amount"
+                   class="form-control form-control-lg"
+                   min="{{ min_amount }}"
+                   max="{{ wallet.balance_available|floatformat:0 }}"
+                   placeholder="{{ min_amount }}"
+                   required />
+            <div class="text-muted small mt-1">
+              Minimum {{ min_amount|floatformat:0 }} FCFA —
+              Maximum {{ wallet.balance_available|floatformat:0 }} FCFA
+            </div>
+          </div>
+
+          <!-- Méthode -->
+          <div class="mb-4">
+            <label class="form-label fw-bold">Méthode de reversement *</label>
+            <div class="row g-3">
+              {% for val, label in methods %}
+              <div class="col-6">
+                <label style="cursor:pointer; display:block;">
+                  <input type="radio" name="payout_method"
+                         value="{{ val }}" class="d-none" x-model="method" />
+                  <div class="p-3 rounded-3 border text-center"
+                       :class="method==='{{ val }}'
+                         ? 'border-success bg-success bg-opacity-10 fw-bold'
+                         : 'border-light'"
+                       style="transition:all 0.2s; font-size:0.9rem;">
+                    {{ label }}
+                  </div>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Numéro Mobile Money -->
+          <div class="mb-3">
+            <label class="form-label fw-bold">
+              Numéro Mobile Money *
+            </label>
+            <input type="tel" name="payout_phone"
+                   class="form-control"
+                   value="{{ wallet.payout_phone }}"
+                   placeholder="+225 07 XX XX XX XX"
+                   required />
+            <div class="text-muted small mt-1">
+              Numéro enregistré sur votre compte
+              <span x-text="method.charAt(0).toUpperCase() + method.slice(1)"></span>
+            </div>
+          </div>
+
+          <!-- Nom bénéficiaire -->
+          <div class="mb-4">
+            <label class="form-label fw-bold">
+              Nom du bénéficiaire *
+            </label>
+            <input type="text" name="payout_name"
+                   class="form-control"
+                   value="{{ wallet.payout_name }}"
+                   placeholder="Nom tel qu'enregistré sur le compte"
+                   required />
+          </div>
+
+          <!-- Avertissement -->
+          <div class="alert ip-alert alert-warning mb-4">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Vérifiez bien le numéro et le nom — les virements incorrects
+            ne peuvent pas être annulés. Traitement sous <strong>24-48h ouvrées</strong>.
+          </div>
+
+          <button type="submit" class="btn btn-orange btn-lg w-100">
+            <i class="bi bi-send me-2"></i>
+            Soumettre la demande
+          </button>
+
+        </form>
+      </div>
+
+      {% else %}
+      <div class="ip-card p-5 text-center">
+        <i class="bi bi-wallet2" style="font-size:3rem; color:#ddd;"></i>
+        <h5 class="mt-3 text-muted">Solde insuffisant</h5>
+        <p class="text-muted small">
+          Le montant minimum de reversement est
+          <strong>{{ min_amount|floatformat:0 }} FCFA</strong>.<br>
+          Votre solde actuel : <strong>{{ wallet.balance_available|floatformat:0 }} FCFA</strong>.
+        </p>
+        <a href="{% url 'dashboard:wallet' %}" class="btn btn-outline-secondary mt-2">
+          Retour au wallet
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}

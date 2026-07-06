@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}Historique — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'scanner:scan_event' event.pk %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-clock-history me-2 text-green"></i>Historique des scans
+      </h4>
+      <p class="text-muted small mb-0">{{ event.title }}</p>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">
+          {{ stats.total }}
+        </div>
+        <div class="text-muted small">Total</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#28a857;">
+          {{ stats.valid }}
+        </div>
+        <div class="text-muted small">Valides</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#dc3545;">
+          {{ stats.rejected }}
+        </div>
+        <div class="text-muted small">Rejetés</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Journal des scans -->
+  <div class="ip-card">
+    <div class="p-4 border-bottom">
+      <h6 class="fw-bold mb-0">Journal des 100 derniers scans</h6>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Participant</th>
+            <th>Type billet</th>
+            <th>Résultat</th>
+            <th class="pe-4">Heure</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="ps-4">
+              {% if log.ticket %}
+              <div class="fw-semibold small">
+                {{ log.ticket.buyer.get_full_name }}
+              </div>
+              <div class="text-muted" style="font-size:0.78rem; font-family:monospace;">
+                {{ log.ticket.ticket_number }}
+              </div>
+              {% else %}
+              <span class="text-muted small">QR inconnu</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if log.ticket %}
+              <span class="badge bg-light text-dark border small">
+                {{ log.ticket.ticket_type.name }}
+              </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if log.result == 'valid' %}
+                <span class="badge bg-success">✅ Valide</span>
+              {% elif log.result == 'already_used' %}
+                <span class="badge bg-danger">❌ Déjà utilisé</span>
+              {% elif log.result == 'wrong_event' %}
+                <span class="badge bg-warning text-dark">⚠️ Mauvais événement</span>
+              {% elif log.result == 'invalid_qr' %}
+                <span class="badge bg-secondary">⛔ QR invalide</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ log.get_result_display }}</span>
+              {% endif %}
+            </td>
+            <td class="pe-4 text-muted small">
+              {{ log.scanned_at|date:"H:i:s" }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center py-4 text-muted">
+              Aucun scan enregistré.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

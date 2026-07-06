@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Billet {{ ticket.ticket_number }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+
+      <!-- Carte billet stylisée -->
+      <div class="ip-card overflow-hidden">
+
+        <!-- En-tête vert -->
+        <div style="background:linear-gradient(135deg,#1a1a2e,#1B7A3E);
+                    padding:24px; color:white; text-align:center;">
+          <div style="font-size:1.4rem; font-weight:900; margin-bottom:4px;">
+            <span>Ivoir</span><span style="color:#F47920;">Pass</span>
+          </div>
+          <div style="font-size:0.8rem; opacity:0.75;">Billet officiel</div>
+        </div>
+
+        <div class="p-4">
+          <!-- Événement -->
+          <h5 class="fw-bold text-center mb-1">{{ ticket.event.title }}</h5>
+          <div class="text-center text-orange mb-3">
+            {{ ticket.event.start_date|date:"d F Y — H\hi" }}
+          </div>
+
+          <!-- Infos -->
+          <div class="border rounded-3 p-3 mb-3 bg-light">
+            <div class="row g-2 text-center">
+              <div class="col-6 border-end">
+                <div class="text-muted small">Type</div>
+                <div class="fw-bold small">{{ ticket.ticket_type.name }}</div>
+              </div>
+              <div class="col-6">
+                <div class="text-muted small">Lieu</div>
+                <div class="fw-bold small">
+                  {{ ticket.event.venue_city }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- QR Code -->
+          <div class="text-center my-4">
+            {% if ticket.qr_code_image %}
+              <img src="{{ ticket.qr_code_image.url }}"
+                   width="180" height="180"
+                   class="rounded-3 border border-2 border-success" />
+            {% else %}
+              <div style="width:180px; height:180px; margin:auto;
+                          background:#f0f7f3; border-radius:12px;
+                          display:flex; align-items:center; justify-content:center;
+                          border:2px dashed #1B7A3E;">
+                <i class="bi bi-qr-code" style="font-size:3rem; color:#1B7A3E;"></i>
+              </div>
+            {% endif %}
+            <div style="font-family:monospace; font-size:0.8rem;
+                        color:#6c757d; margin-top:8px;">
+              {{ ticket.ticket_number }}
+            </div>
+          </div>
+
+          <!-- Statut -->
+          <div class="text-center mb-3">
+            {% if ticket.status == 'valid' %}
+              <span class="badge bg-success px-4 py-2" style="font-size:0.85rem;">
+                <i class="bi bi-check-circle me-1"></i>Valide
+              </span>
+            {% elif ticket.status == 'used' %}
+              <span class="badge bg-secondary px-4 py-2" style="font-size:0.85rem;">
+                <i class="bi bi-check2-all me-1"></i>Utilisé
+                {% if ticket.scanned_at %}
+                  — {{ ticket.scanned_at|date:"d/m/Y H:i" }}
+                {% endif %}
+              </span>
+            {% else %}
+              <span class="badge bg-danger px-4 py-2">
+                {{ ticket.get_status_display }}
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Acheteur -->
+          <div class="text-center text-muted small border-top pt-3">
+            <i class="bi bi-person me-1"></i>
+            {{ ticket.buyer.get_full_name }}
+            <br>Commande : {{ ticket.order_item.order.order_number }}
+          </div>
+        </div>
+
+        <!-- Pied de carte -->
+        <div style="background:#f8f9fa; padding:12px 16px;
+                    border-top:2px dashed #dee2e6;
+                    display:flex; justify-content:space-between; align-items:center;">
+          <a href="{% url 'tickets:download_pdf' ticket.ticket_number %}"
+             class="btn btn-green btn-sm">
+            <i class="bi bi-download me-1"></i>Télécharger PDF
+          </a>
+          <a href="{% url 'tickets:my_tickets' %}"
+             class="btn btn-outline-secondary btn-sm">
+            Mes billets
+          </a>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

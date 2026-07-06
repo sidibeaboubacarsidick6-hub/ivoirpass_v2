@@ -7,8 +7,23 @@ from .base import *
 DEBUG = True
 
 # Tous les hôtes autorisés en dev
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+# Autorise toutes les origines ngrok
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '.ngrok-free.dev']
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://revengeless-unfervent-deandrea.ngrok-free.dev" ,
+    "https://*.ngrok-free.dev",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "https://revengeless-unfervent-deandrea.ngrok-free.dev",
+    "https://*.ngrok-free.dev",
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
+SECURE_SSL_REDIRECT = False  # Pour ngrok
+SESSION_COOKIE_SECURE = False  # Pour ngrok
+CSRF_COOKIE_SECURE = False  # Pour ngrok
 # Base de données locale
 DATABASES = {
     'default': {
@@ -21,9 +36,21 @@ DATABASES = {
     }
 }
 
-# Email affiché dans la console en développement
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# EMAIL — Console (développement rapide)
+# ============================================
+#EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# ============================================
+# EMAIL — Gmail SMTP
+# ============================================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST          = 'smtp.gmail.com'
+EMAIL_PORT          = 587
+EMAIL_USE_TLS       = True
+EMAIL_HOST_USER     = config('EMAIL_HOST_USER',     default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL  = f'IvoirPass <{config("EMAIL_HOST_USER", default="")}>'
 
+# ============================================
 # CORS - autorise toutes les origines en développement
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -31,27 +58,17 @@ CORS_ALLOW_ALL_ORIGINS = True
 # INSTALLED_APPS += ['debug_toolbar']
 
 # Logs plus verbeux en développement
+LOGIN_URL = '/accounts/login/'  
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
+        'console': {'class': 'logging.StreamHandler'},
     },
     'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'apps': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+        'apps.store': {
+            'handlers':  ['console'],
+            'level':     'DEBUG',
             'propagate': False,
         },
     },

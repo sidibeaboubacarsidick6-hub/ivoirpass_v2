@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Confirmer votre email{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="ip-card p-5 text-center">
+
+        <div style="width:80px; height:80px; border-radius:50%;
+                    background:linear-gradient(135deg,#1B7A3E,#28a857);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1.5rem; font-size:2.5rem;">
+          ✉️
+        </div>
+
+        <h4 class="fw-bold mb-2">Confirmer votre email</h4>
+
+        <p class="text-muted mb-4">
+          Vous êtes sur le point de confirmer l'adresse
+          <strong>{{ confirmation.email_address.email }}</strong>
+          pour votre compte IvoirPass.
+        </p>
+
+        <form method="POST" action="{% url 'account_confirm_email' confirmation.key %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-green btn-lg w-100 mb-3">
+            <i class="bi bi-check-circle me-2"></i>
+            Confirmer mon adresse email
+          </button>
+        </form>
+
+        <p class="text-muted small">
+          Si vous n'avez pas créé de compte IvoirPass,
+          vous pouvez ignorer cette page.
+        </p>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

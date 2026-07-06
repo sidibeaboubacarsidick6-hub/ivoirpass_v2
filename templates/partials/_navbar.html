@@ -1,0 +1,179 @@
+{% load static %}
+
+<nav class="navbar navbar-expand-lg ip-navbar sticky-top">
+  <div class="container">
+
+    <!-- Logo -->
+    <a class="navbar-brand" href="{% url 'home' %}">
+      <img src="{% static 'images/favicon.png' %}"
+           height="36" class="me-2"
+           style="vertical-align:middle;" />
+      <span class="brand-ivoir">Ivoir</span><span class="brand-pass">Pass</span>
+    </a>
+
+    <!-- Toggler mobile -->
+    <div x-data="{ open: false }">
+      <button class="navbar-toggler border-0" type="button"
+              @click="open = !open; $nextTick(() => {
+                let el = document.getElementById('navbarMain');
+                open ? el.classList.add('show') : el.classList.remove('show')
+              })"
+              aria-label="Menu">
+        <i class="bi bi-list text-white fs-4"></i>
+      </button>
+    </div>
+
+    <div class="collapse navbar-collapse" id="navbarMain">
+
+      <!-- Navigation publique (acheteur) -->
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
+             href="{% url 'home' %}">
+            <i class="bi bi-house-door me-1"></i>Accueil
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if 'events' in request.resolver_match.namespace|default:'' %}active{% endif %}"
+             href="{% url 'events:list' %}">
+            <i class="bi bi-calendar-event me-1"></i>Événements
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if 'store' in request.resolver_match.namespace|default:'' %}active{% endif %}"
+             href="{% url 'store:list' %}">
+            <i class="bi bi-shop me-1"></i>Boutique
+          </a>
+        </li>
+      </ul>
+
+      <!-- Actions droite -->
+      <div class="d-flex align-items-center gap-2">
+
+        {% if user.is_authenticated %}
+        <!-- Organisateur connecté -->
+        <div x-data="{ open: false }" class="position-relative">
+          <button class="btn btn-ip-outline d-flex align-items-center gap-2"
+                  @click="open = !open"
+                  @keydown.escape="open = false"
+                  type="button">
+            {% if user.avatar %}
+              <img src="{{ user.avatar.url }}" width="28" height="28"
+                   class="rounded-circle" style="object-fit:cover;" />
+            {% else %}
+              <span style="width:28px; height:28px; border-radius:50%;
+                           background:linear-gradient(135deg,#1B7A3E,#F47920);
+                           display:inline-flex; align-items:center;
+                           justify-content:center; font-size:0.8rem;
+                           font-weight:900; color:white;">
+                {{ user.get_short_name|first|upper }}
+              </span>
+            {% endif %}
+            <span class="d-none d-md-inline"
+                  style="max-width:120px; overflow:hidden;
+                         text-overflow:ellipsis; white-space:nowrap;">
+              {{ user.display_name }}
+            </span>
+            <i class="bi bi-chevron-down small"
+               :style="open ? 'transform:rotate(180deg)' : ''"
+               style="transition:transform 0.2s;"></i>
+          </button>
+
+          <!-- Dropdown organisateur -->
+          <div x-show="open"
+               x-transition:enter="transition ease-out duration-150"
+               x-transition:enter-start="opacity-0"
+               x-transition:enter-end="opacity-100"
+               x-transition:leave="transition ease-in duration-100"
+               x-transition:leave-start="opacity-100"
+               x-transition:leave-end="opacity-0"
+               @click.outside="open = false"
+               style="position:absolute; top:calc(100% + 8px); right:0;
+                      min-width:240px; background:white; border-radius:12px;
+                      border:1px solid #e5e7eb;
+                      box-shadow:0 10px 40px rgba(0,0,0,0.15); z-index:9999;"
+               x-cloak>
+
+            <!-- Header -->
+            <div style="padding:12px 16px; border-bottom:1px solid #f0f0f0;">
+              <div class="text-muted" style="font-size:0.72rem;">Espace organisateur</div>
+              <div class="fw-bold text-truncate" style="font-size:0.9rem;">
+                {{ user.email }}
+              </div>
+              <span style="display:inline-block; margin-top:4px; padding:2px 10px;
+                           border-radius:20px; font-size:0.72rem; font-weight:700;
+                           background:#1B7A3E; color:white;">
+                {{ user.get_role_display }}
+              </span>
+            </div>
+
+            <!-- Liens organisateur -->
+            <div style="padding:6px 0;">
+              <a href="{% url 'dashboard:index' %}" class="ip-dropdown-link">
+                <i class="bi bi-speedometer2" style="color:#1B7A3E; width:16px;"></i>
+                Dashboard
+              </a>
+              <a href="{% url 'events:my_events' %}" class="ip-dropdown-link">
+                <i class="bi bi-calendar-event" style="color:#1B7A3E; width:16px;"></i>
+                Mes événements
+              </a>
+              <a href="{% url 'events:create' %}" class="ip-dropdown-link">
+                <i class="bi bi-plus-circle" style="color:#1B7A3E; width:16px;"></i>
+                Créer un événement
+              </a>
+              <a href="{% url 'store:my_products' %}" class="ip-dropdown-link">
+                <i class="bi bi-bag" style="color:#1B7A3E; width:16px;"></i>
+                Mes produits
+              </a>
+              <a href="{% url 'dashboard:wallet' %}" class="ip-dropdown-link">
+                <i class="bi bi-wallet2" style="color:#F47920; width:16px;"></i>
+                Mon Wallet
+              </a>
+              {% if user.is_scanner_agent or user.is_organizer or user.is_platform_admin %}
+              <a href="{% url 'scanner:index' %}" class="ip-dropdown-link">
+                <i class="bi bi-qr-code-scan" style="color:#1B7A3E; width:16px;"></i>
+                Scanner QR
+              </a>
+              {% endif %}
+              {% if user.is_staff %}
+              <div style="border-top:1px solid #f0f0f0; margin:4px 0;"></div>
+              <a href="{% url 'admin:index' %}" class="ip-dropdown-link">
+                <i class="bi bi-gear" style="color:#F47920; width:16px;"></i>
+                Administration
+              </a>
+              {% endif %}
+              <div style="border-top:1px solid #f0f0f0; margin:4px 0;"></div>
+              <a href="{% url 'accounts:profile' %}" class="ip-dropdown-link">
+                <i class="bi bi-person" style="color:#6c757d; width:16px;"></i>
+                Mon profil
+              </a>
+              <form method="POST" action="{% url 'account_logout' %}">
+                {% csrf_token %}
+                <button type="submit"
+                        style="display:flex; align-items:center; gap:10px;
+                               padding:9px 16px; color:#dc3545; font-size:0.9rem;
+                               background:none; border:none; width:100%;
+                               text-align:left; cursor:pointer;"
+                        onmouseover="this.style.background='#fff5f5'"
+                        onmouseout="this.style.background='transparent'">
+                  <i class="bi bi-box-arrow-right" style="width:16px;"></i>
+                  Déconnexion
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {% else %}
+        <!-- Visiteur — boutons organisateur uniquement -->
+        <a href="{% url 'account_login' %}"
+           class="btn btn-ip-outline d-flex align-items-center gap-1">
+          <i class="bi bi-building me-1"></i>
+          <span>Espace Organisateur</span>
+        </a>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</nav>

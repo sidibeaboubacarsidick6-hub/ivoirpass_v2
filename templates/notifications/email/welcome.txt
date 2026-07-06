@@ -1,0 +1,12 @@
+Bienvenue sur IvoirPass !
+
+Bonjour {{ user.get_short_name }},
+
+Votre compte IvoirPass a été créé avec succès.
+
+Email : {{ user.email }}
+Rôle  : {{ user.get_role_display }}
+
+Découvrez les événements sur {{ platform_url }}/evenements/
+
+© {{ year }} IvoirPass — MKS Soft Technologies

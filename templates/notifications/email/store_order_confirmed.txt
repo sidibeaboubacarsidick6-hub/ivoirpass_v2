@@ -1,0 +1,15 @@
+Commande boutique IvoirPass confirmée !
+
+Commande  : {{ order.order_number }}
+Produit   : {{ order.product.name }}
+Total     : {{ order.total|floatformat:0 }} FCFA
+
+{% if download_links %}
+Liens de téléchargement :
+{% for link in download_links %}
+{{ platform_url }}/boutique/telecharger/{{ link.token }}/
+Expire le {{ link.expires_at|date:"d/m/Y" }}
+{% endfor %}
+{% endif %}
+
+© {{ year }} IvoirPass

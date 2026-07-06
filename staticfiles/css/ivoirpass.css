@@ -1,0 +1,347 @@
+/* ============================================
+   IVOIRPASS V2 — Charte graphique
+   Couleurs : Vert Côte d'Ivoire + Orange vif
+   ============================================ */
+
+/* --- Variables CSS --- */
+[x-cloak] { display: none !important; }
+:root {
+  --ip-green:        #1B7A3E;   /* Vert drapeau CI */
+  --ip-green-light:  #28a857;
+  --ip-green-dark:   #145c2e;
+  --ip-orange:       #F47920;   /* Orange vif */
+  --ip-orange-light: #f9a15a;
+  --ip-orange-dark:  #c45e0e;
+  --ip-dark:         #1a1a2e;
+  --ip-gray:         #6c757d;
+  --ip-light:        #f8f9fa;
+  --ip-white:        #ffffff;
+  --ip-border:       #dee2e6;
+  --ip-shadow:       0 4px 20px rgba(0,0,0,0.08);
+  --ip-radius:       12px;
+  --ip-radius-sm:    8px;
+  --ip-transition:   all 0.25s ease;
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #2d2d2d;
+  background-color: #f5f7fa;
+  line-height: 1.6;
+}
+
+a { color: var(--ip-green); text-decoration: none; transition: var(--ip-transition); }
+a:hover { color: var(--ip-orange); }
+
+/* ============================================
+   NAVBAR
+   ============================================ */
+.ip-navbar {
+  background: var(--ip-dark) !important;
+  border-bottom: 3px solid var(--ip-orange);
+  padding: 0.6rem 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+
+.ip-navbar .navbar-brand {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.ip-navbar .navbar-brand .brand-ivoir {
+  color: var(--ip-white);
+}
+
+.ip-navbar .navbar-brand .brand-pass {
+  color: var(--ip-orange);
+}
+
+.ip-navbar .nav-link {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 500;
+  padding: 0.5rem 1rem !important;
+  border-radius: var(--ip-radius-sm);
+  transition: var(--ip-transition);
+}
+
+.ip-navbar .nav-link:hover,
+.ip-navbar .nav-link.active {
+  color: var(--ip-orange) !important;
+  background: rgba(255,255,255,0.08);
+}
+
+/* --- Boutons Navbar --- */
+.btn-ip-primary {
+  background: var(--ip-orange);
+  color: var(--ip-white);
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  padding: 0.45rem 1.2rem;
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-ip-primary:hover {
+  background: var(--ip-orange-dark);
+  color: var(--ip-white);
+  transform: translateY(-1px);
+}
+
+.btn-ip-outline {
+  background: transparent;
+  color: var(--ip-white);
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: var(--ip-radius-sm);
+  padding: 0.4rem 1.2rem;
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-ip-outline:hover {
+  border-color: var(--ip-orange);
+  color: var(--ip-orange);
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.ip-hero {
+  background: linear-gradient(135deg, var(--ip-dark) 0%, var(--ip-green-dark) 100%);
+  color: white;
+  padding: 100px 0 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ip-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(244,121,32,0.15) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.ip-hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.ip-hero .highlight { color: var(--ip-orange); }
+
+/* ============================================
+   CARDS
+   ============================================ */
+.ip-card {
+  background: var(--ip-white);
+  border-radius: var(--ip-radius);
+  border: 1px solid var(--ip-border);
+  box-shadow: var(--ip-shadow);
+  transition: var(--ip-transition);
+  overflow: hidden;
+}
+
+.ip-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+}
+
+.ip-card .card-img-top {
+  height: 200px;
+  object-fit: cover;
+}
+
+.ip-card-event .event-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--ip-orange);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   BOUTONS GLOBAUX
+   ============================================ */
+.btn-green {
+  background: var(--ip-green);
+  color: white;
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-green:hover {
+  background: var(--ip-green-dark);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-orange {
+  background: var(--ip-orange);
+  color: white;
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-orange:hover {
+  background: var(--ip-orange-dark);
+  color: white;
+}
+
+/* ============================================
+   BADGES ET STATUTS
+   ============================================ */
+.badge-organizer {
+  background: linear-gradient(135deg, var(--ip-green), var(--ip-green-light));
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-verified {
+  background: var(--ip-green);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.ip-footer {
+  background: var(--ip-dark);
+  color: rgba(255,255,255,0.75);
+  padding: 60px 0 30px;
+  border-top: 3px solid var(--ip-orange);
+}
+
+.ip-footer h5 {
+  color: var(--ip-orange);
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.ip-footer a {
+  color: rgba(255,255,255,0.65);
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  transition: var(--ip-transition);
+}
+
+.ip-footer a:hover { color: var(--ip-orange); padding-left: 4px; }
+
+.ip-footer-bottom {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin-top: 40px;
+  padding-top: 20px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ============================================
+   ALERTES / MESSAGES
+   ============================================ */
+.ip-alert {
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  border-left: 4px solid;
+  padding: 0.85rem 1.2rem;
+  font-size: 0.92rem;
+}
+
+.ip-alert.alert-success { border-left-color: var(--ip-green); background: #edf7f1; color: #145c2e; }
+.ip-alert.alert-danger  { border-left-color: #dc3545; background: #fdf0f0; color: #8b1a1a; }
+.ip-alert.alert-warning { border-left-color: var(--ip-orange); background: #fff8f0; color: #7a3a00; }
+.ip-alert.alert-info    { border-left-color: #0dcaf0; background: #f0faff; color: #0a5c75; }
+
+/* ============================================
+   UTILITAIRES
+   ============================================ */
+.text-green  { color: var(--ip-green) !important; }
+.text-orange { color: var(--ip-orange) !important; }
+.bg-green    { background: var(--ip-green) !important; }
+.bg-orange   { background: var(--ip-orange) !important; }
+
+.section-title {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 800;
+  color: var(--ip-dark);
+  margin-bottom: 0.5rem;
+}
+
+.section-title span { color: var(--ip-orange); }
+
+.section-divider {
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--ip-green), var(--ip-orange));
+  border-radius: 2px;
+  margin: 0 auto 2rem;
+}
+
+/* Loader */
+.ip-loader {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 768px) {
+  .ip-hero { padding: 60px 0 50px; }
+  .ip-navbar .navbar-brand { font-size: 1.3rem; }
+}
+
+/* Liens dropdown navbar */
+.ip-dropdown-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  color: #374151;
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.ip-dropdown-link:hover {
+  background: #f9fafb;
+  color: #1B7A3E;
+}
+.min-vh-100{
+    min-height:100vh;
+}
+
+.ip-card{
+    width:100%;
+}

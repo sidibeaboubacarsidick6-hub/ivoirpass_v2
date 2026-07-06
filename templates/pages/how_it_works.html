@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Comment ça marche - IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+          <li class="breadcrumb-item active">Comment ça marche</li>
+        </ol>
+      </nav>
+
+      <h1 class="fw-bold mb-4">Comment ça marche ?</h1>
+      <div class="section-divider mb-4"></div>
+      
+      <p class="text-muted lead mb-5">
+        Découvrez en 5 étapes simples comment réserver vos billets sur IvoirPass.
+      </p>
+
+      <div class="position-relative">
+        <!-- Étape 1 -->
+        <div class="d-flex mb-4">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-search"></i>
+            </div>
+            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #1B7A3E, transparent); margin:8px auto 0;"></div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">Étape 1 : Trouvez votre événement</h5>
+            <p class="text-muted">Parcourez notre catalogue d'événements culturels et sportifs en Côte d'Ivoire.</p>
+          </div>
+        </div>
+
+        <!-- Étape 2 -->
+        <div class="d-flex mb-4">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#F47920;">
+              <i class="bi bi-ticket-perforated"></i>
+            </div>
+            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #F47920, transparent); margin:8px auto 0;"></div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">Étape 2 : Choisissez vos billets</h5>
+            <p class="text-muted">Sélectionnez le nombre de billets et la catégorie qui vous convient.</p>
+          </div>
+        </div>
+
+        <!-- Étape 3 -->
+        <div class="d-flex mb-4">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-credit-card"></i>
+            </div>
+            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #1B7A3E, transparent); margin:8px auto 0;"></div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">Étape 3 : Payez en toute sécurité</h5>
+            <p class="text-muted">Réglez par Wave, Orange Money ou MTN MoMo en quelques secondes.</p>
+          </div>
+        </div>
+
+        <!-- Étape 4 -->
+        <div class="d-flex mb-4">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#F47920;">
+              <i class="bi bi-qr-code"></i>
+            </div>
+            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #F47920, transparent); margin:8px auto 0;"></div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">Étape 4 : Recevez vos billets</h5>
+            <p class="text-muted">Recevez vos QR codes par email et SMS. Entrée garantie !</p>
+          </div>
+        </div>
+
+        <!-- Étape 5 -->
+        <div class="d-flex mb-4">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-check-circle"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">Étape 5 : Profitez de l'événement</h5>
+            <p class="text-muted">Présentez votre QR code à l'entrée et profitez du spectacle !</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center mt-5 p-4" style="background:#f8f9fa; border-radius:12px;">
+        <h5 class="fw-bold mb-2">Prêt à réserver ?</h5>
+        <p class="text-muted mb-3">Des milliers d'événements vous attendent</p>
+        <a href="{% url 'events:list' %}" class="btn btn-orange px-5">
+          <i class="bi bi-calendar-event me-2"></i>Voir les événements
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

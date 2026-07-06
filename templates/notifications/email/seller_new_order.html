@@ -1,0 +1,79 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Nouvelle commande à livrer ! 📦</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ seller.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Vous avez reçu une nouvelle commande pour un produit physique.
+  Merci de préparer l'expédition dans les meilleurs délais.
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">N° de commande</span>
+    <span class="info-value">{{ order.order_number }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Produit</span>
+    <span class="info-value">{{ order.product.name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Quantité</span>
+    <span class="info-value">{{ order.quantity }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Montant</span>
+    <span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span>
+  </div>
+</div>
+
+<h3 style="font-size:15px; font-weight:700; margin:20px 0 10px; color:#1a1a2e;">
+  📍 Informations client
+</h3>
+
+<div class="info-box" style="background:#fff8f0; border-left-color:#F47920;">
+  <div class="info-row">
+    <span class="info-label">Nom</span>
+    <span class="info-value">{{ order.delivery_name|default:buyer_name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Téléphone</span>
+    <span class="info-value">{{ order.delivery_phone|default:buyer_phone }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Email</span>
+    <span class="info-value">{{ buyer_email }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Adresse</span>
+    <span class="info-value">{{ order.delivery_address }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Ville</span>
+    <span class="info-value">{{ order.delivery_city }}{% if order.delivery_commune %}, {{ order.delivery_commune }}{% endif %}</span>
+  </div>
+  {% if order.delivery_instructions %}
+  <div class="info-row">
+    <span class="info-label">Instructions</span>
+    <span class="info-value">{{ order.delivery_instructions }}</span>
+  </div>
+  {% endif %}
+</div>
+
+<p class="email-text" style="color:#6c757d; font-size:13px;">
+  ⚠️ N'oubliez pas de renseigner le numéro de suivi une fois le colis expédié —
+  votre client pourra suivre sa commande.
+</p>
+
+<center>
+  <a href="{{ platform_url }}/dashboard/commandes-physiques/"
+     class="btn-cta btn-green">
+    Gérer mes commandes
+  </a>
+</center>
+
+{% endblock %}

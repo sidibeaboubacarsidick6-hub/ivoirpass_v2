@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+{% block title %}Stats — {{ event.title }}{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- En-tête -->
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <a href="{% url 'dashboard:index' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div class="flex-grow-1">
+      <h4 class="fw-bold mb-0">{{ event.title }}</h4>
+      <p class="text-muted small mb-0">
+        {{ event.start_date|date:"d F Y — H\hi" }} —
+        {{ event.venue_city }}
+      </p>
+    </div>
+    <a href="{% url 'dashboard:participants' event.slug %}"
+       class="btn btn-green">
+      <i class="bi bi-people me-2"></i>Participants
+    </a>
+  </div>
+
+  <!-- KPIs existants -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">
+          {{ event.tickets_sold }}
+        </div>
+        <div class="text-muted small">Tickets vendus</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#F47920;">
+          {{ gross_revenue|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Revenus bruts (FCFA)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">
+          {{ net_revenue|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Revenus nets (FCFA)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#6c757d;">
+          {{ commission|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Commission IvoirPass</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOUVEAUX KPIS : Participants, Scannés, Places restantes -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center"
+           style="border-top:3px solid #1B7A3E;">
+        <div style="font-size:1.4rem; font-weight:900; color:#1B7A3E;">
+          {{ total_participants }}
+        </div>
+        <div class="text-muted small">Participants inscrits</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center"
+           style="border-top:3px solid #F47920;">
+        <div style="font-size:1.4rem; font-weight:900; color:#F47920;">
+          {{ scanned_count }}
+        </div>
+        <div class="text-muted small">Entrées scannées</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center"
+           style="border-top:3px solid #6c757d;">
+        <div style="font-size:1.4rem; font-weight:900; color:#6c757d;">
+          {% if tickets_remaining is None %}∞{% else %}{{ tickets_remaining }}{% endif %}
+        </div>
+        <div class="text-muted small">Places restantes</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info commission dynamique -->
+  <div class="alert ip-alert alert-info mb-4">
+    <i class="bi bi-percent me-2"></i>
+    Commission IvoirPass : <strong>{{ commission_rate }}%</strong>
+    prélevée sur votre reversement —
+    Brut : <strong>{{ gross_revenue|floatformat:0 }} FCFA</strong> →
+    Net : <strong>{{ net_revenue|floatformat:0 }} FCFA</strong>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Graphique ventes -->
+    {% if sales_timeline %}
+    <div class="col-lg-8">
+      <div class="ip-card p-4">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-graph-up me-2 text-green"></i>
+          Tickets vendus par jour
+        </h6>
+        <canvas id="timelineChart" height="120"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Tickets par type -->
+    <div class="col-lg-4">
+      <div class="ip-card p-4">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-pie-chart me-2 text-orange"></i>
+          Répartition par type
+        </h6>
+        {% for ts in ticket_stats %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="fw-semibold small">{{ ts.ticket_type.name }}</span>
+            <span class="text-muted small">
+              {{ ts.sold }} / {% if ts.ticket_type.quantity > 0 %}{{ ts.ticket_type.quantity }}{% else %}∞{% endif %}
+            </span>
+          </div>
+          <div class="progress" style="height:8px;">
+            <div class="progress-bar bg-success"
+                 style="width:{{ ts.fill_rate }}%"></div>
+          </div>
+          <div class="d-flex justify-content-between mt-1">
+            <span style="font-size:0.75rem; color:#6c757d;">
+              {{ ts.fill_rate }}%
+            </span>
+            <span style="font-size:0.75rem; color:#1B7A3E; font-weight:600;">
+              {{ ts.revenue|floatformat:0 }} FCFA
+            </span>
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-muted small">Aucun type de ticket.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Commandes récentes -->
+  <div class="ip-card mt-4">
+    <div class="p-4 border-bottom">
+      <h6 class="fw-bold mb-0">
+        <i class="bi bi-receipt me-2 text-green"></i>
+        Commandes récentes
+      </h6>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Commande</th>
+            <th>Acheteur</th>
+            <th>Tickets</th>
+            <th>Montant</th>
+            <th class="pe-4">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in recent_orders %}
+          <tr>
+            <td class="ps-4">
+              <span style="font-family:monospace; font-size:0.85rem;">
+                {{ order.order_number }}
+              </span>
+            </td>
+            <td>
+              <div class="fw-semibold small">{{ order.buyer.get_full_name }}</div>
+              <div class="text-muted" style="font-size:0.78rem;">
+                {{ order.buyer.email }}
+              </div>
+            </td>
+            <td>
+              {% for item in order.items.all %}
+                <span class="badge bg-light text-dark border small">
+                  {{ item.quantity }}× {{ item.ticket_type.name }}
+                </span>
+              {% endfor %}
+            </td>
+            <td class="fw-semibold text-green">
+              {{ order.total|floatformat:0 }} FCFA
+            </td>
+            <td class="pe-4 text-muted small">
+              {{ order.paid_at|date:"d/m/Y H:i" }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center py-3 text-muted">
+              Aucune commande.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if sales_timeline %}
+<script>
+new Chart(document.getElementById('timelineChart'), {
+  type: 'bar',
+  data: {
+    labels: [{% for d in sales_timeline %}"{{ d.date }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+    datasets: [{
+      label: 'Tickets vendus',
+      data:  [{% for d in sales_timeline %}{{ d.qty }}{% if not forloop.last %},{% endif %}{% endfor %}],
+      backgroundColor: 'rgba(27,122,62,0.7)',
+      borderColor:     '#1B7A3E',
+      borderWidth:     1,
+      borderRadius:    4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

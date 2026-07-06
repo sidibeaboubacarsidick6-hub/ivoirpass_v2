@@ -1,0 +1,12 @@
+Votre téléchargement IvoirPass est prêt !
+
+Commande : {{ order.order_number }}
+Produit  : {{ order.product.name }}
+Total    : {{ order.total|floatformat:0 }} FCFA
+
+{% for link in download_links %}
+Télécharger : {{ platform_url }}/boutique/telecharger/{{ link.token }}/
+Expire le : {{ link.expires_at|date:"d/m/Y" }}
+{% endfor %}
+
+© {{ year }} IvoirPass

@@ -1,0 +1,13 @@
+Événement annulé — IvoirPass
+
+Bonjour {{ user.get_short_name }},
+
+L'événement « {{ event.title }} » prévu le
+{{ event.start_date|date:"d/m/Y" }} a été annulé.
+
+Votre billet {{ ticket.ticket_number }} sera remboursé
+sous 5-7 jours ouvrés.
+
+Contact : {{ support_email }}
+
+© {{ year }} IvoirPass

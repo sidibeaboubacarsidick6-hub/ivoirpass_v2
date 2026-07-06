@@ -1,0 +1,16 @@
+Nouvelle commande à livrer — IvoirPass
+
+Commande : {{ order.order_number }}
+Produit   : {{ order.product.name }}
+Quantité  : {{ order.quantity }}
+Montant   : {{ order.total|floatformat:0 }} FCFA
+
+Client :
+Nom      : {{ order.delivery_name|default:buyer_name }}
+Téléphone: {{ order.delivery_phone|default:buyer_phone }}
+Adresse  : {{ order.delivery_address }}
+Ville    : {{ order.delivery_city }}
+
+Gérer vos commandes : {{ platform_url }}/dashboard/commandes-physiques/
+
+© {{ year }} IvoirPass

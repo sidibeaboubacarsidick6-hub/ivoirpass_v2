@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Conditions d'utilisation - IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+          <li class="breadcrumb-item active">Conditions d'utilisation</li>
+        </ol>
+      </nav>
+
+      <h1 class="fw-bold mb-4">Conditions d'utilisation</h1>
+      <div class="section-divider mb-4"></div>
+      
+      <p class="text-muted">Dernière mise à jour : {% now "d F Y" %}</p>
+
+      <div class="mt-4">
+        <h5 class="fw-bold mt-4">1. Acceptation des conditions</h5>
+        <p class="text-muted">En utilisant IvoirPass, vous acceptez pleinement les présentes conditions d'utilisation.</p>
+
+        <h5 class="fw-bold mt-4">2. Comptes utilisateurs</h5>
+        <p class="text-muted">Pour utiliser nos services, vous devez créer un compte et fournir des informations exactes. Vous êtes responsable de la sécurité de votre compte.</p>
+
+        <h5 class="fw-bold mt-4">3. Achat de billets</h5>
+        <p class="text-muted">Les billets achetés sur IvoirPass sont nominatifs et ne sont pas remboursables sauf en cas d'annulation de l'événement.</p>
+
+        <h5 class="fw-bold mt-4">4. Paiements</h5>
+        <p class="text-muted">Les paiements sont sécurisés et traités via nos partenaires : Wave, Orange Money, MTN MoMo.</p>
+
+        <h5 class="fw-bold mt-4">5. Organisateurs</h5>
+        <p class="text-muted">Les organisateurs s'engagent à fournir des informations exactes sur leurs événements et à respecter les délais.</p>
+
+        <h5 class="fw-bold mt-4">6. Responsabilité</h5>
+        <p class="text-muted">IvoirPass agit comme intermédiaire entre les organisateurs et les acheteurs. Nous ne sommes pas responsables du contenu des événements.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

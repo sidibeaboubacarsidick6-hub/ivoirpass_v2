@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Mes billets{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <h4 class="fw-bold mb-4">
+    <i class="bi bi-ticket-perforated me-2 text-orange"></i>Mes billets
+  </h4>
+
+  {% if upcoming %}
+  <h6 class="fw-bold text-green mb-3">
+    <i class="bi bi-calendar-check me-1"></i>À venir ({{ upcoming|length }})
+  </h6>
+  <div class="row g-3 mb-5">
+    {% for ticket in upcoming %}
+    <div class="col-md-6 col-lg-4">
+      <div class="ip-card p-3">
+        {% if ticket.event.cover_image %}
+          <img src="{{ ticket.event.cover_image.url }}"
+               class="rounded-2 w-100 mb-2"
+               style="height:100px; object-fit:cover;" />
+        {% endif %}
+        <div class="fw-bold mb-1">{{ ticket.event.title|truncatechars:35 }}</div>
+        <div class="text-orange small mb-1">
+          <i class="bi bi-calendar3 me-1"></i>
+          {{ ticket.event.start_date|date:"d M Y" }}
+        </div>
+        <div class="text-muted small mb-2">
+          <i class="bi bi-ticket me-1"></i>{{ ticket.ticket_type.name }}
+        </div>
+        <div class="mb-2">
+          <span class="badge {% if ticket.status == 'valid' %}bg-success{% elif ticket.status == 'used' %}bg-secondary{% else %}bg-danger{% endif %}">
+            {{ ticket.get_status_display }}
+          </span>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'tickets:ticket_detail' ticket.ticket_number %}"
+             class="btn btn-green btn-sm flex-grow-1">
+            <i class="bi bi-qr-code me-1"></i>Billet
+          </a>
+          <a href="{% url 'tickets:download_pdf' ticket.ticket_number %}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-download"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if past %}
+  <h6 class="fw-bold text-muted mb-3">
+    <i class="bi bi-clock-history me-1"></i>Passés ({{ past|length }})
+  </h6>
+  <div class="row g-3">
+    {% for ticket in past %}
+    <div class="col-md-6 col-lg-4">
+      <div class="ip-card p-3 opacity-75">
+        <div class="fw-bold mb-1">{{ ticket.event.title|truncatechars:35 }}</div>
+        <div class="text-muted small mb-1">
+          {{ ticket.event.start_date|date:"d M Y" }}
+        </div>
+        <div class="text-muted small mb-2">{{ ticket.ticket_type.name }}</div>
+        <a href="{% url 'tickets:ticket_detail' ticket.ticket_number %}"
+           class="btn btn-outline-secondary btn-sm">
+          Voir le billet
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not upcoming and not past %}
+  <div class="text-center py-5">
+    <i class="bi bi-ticket-perforated" style="font-size:4rem; color:#ddd;"></i>
+    <h5 class="mt-3 text-muted">Aucun billet pour le moment</h5>
+    <a href="{% url 'events:list' %}" class="btn btn-green mt-3">
+      Découvrir les événements
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

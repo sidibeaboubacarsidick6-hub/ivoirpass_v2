@@ -1,0 +1,8 @@
+Rappel IvoirPass — C'est demain !
+
+Événement : {{ event.title }}
+Date      : {{ event.start_date|date:"d F Y à H:i" }}
+Lieu      : {{ event.venue_name|default:event.venue_city }}
+Billet    : {{ ticket.ticket_number }}
+
+© {{ year }} IvoirPass

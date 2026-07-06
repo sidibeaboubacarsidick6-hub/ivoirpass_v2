@@ -1,0 +1,100 @@
+{% load static %}
+<footer class="ip-footer mt-auto">
+  <div class="container">
+    <div class="row g-4">
+
+      <!-- Colonne 1 : Logo & description -->
+      <div class="col-lg-4 col-md-6">
+        <div class="mb-3">
+          <span style="font-size:1.8rem; font-weight:900;">
+            <span style="color:white;">Ivoir</span><span style="color:#F47920;">Pass</span>
+          </span>
+        </div>
+        <p style="color:rgba(255,255,255,0.65); font-size:0.9rem; line-height:1.7;">
+          La plateforme ivoirienne de référence pour la billetterie d'événements
+          et la distribution de produits culturels.
+        </p>
+        <!-- Réseaux sociaux -->
+        <div class="d-flex gap-3 mt-3">
+          <a href="#" class="text-white opacity-75 fs-5" title="Facebook">
+            <i class="bi bi-facebook"></i>
+          </a>
+          <a href="#" class="text-white opacity-75 fs-5" title="Instagram">
+            <i class="bi bi-instagram"></i>
+          </a>
+          <a href="#" class="text-white opacity-75 fs-5" title="Twitter/X">
+            <i class="bi bi-twitter-x"></i>
+          </a>
+          <a href="#" class="text-white opacity-75 fs-5" title="WhatsApp">
+            <i class="bi bi-whatsapp"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Colonne 2 : Navigation -->
+      <div class="col-lg-2 col-md-6 col-6">
+        <h5>Plateforme</h5>
+        <a href="{% url 'events:list' %}">Événements</a>
+        <a href="#">Boutique</a>
+        <a href="#">Cagnottes</a>
+        <a href="#">Organisateurs</a>
+      </div>
+
+      <!-- Colonne 3 : Aide -->
+      <div class="col-lg-2 col-md-6 col-6">
+        <h5>Aide</h5>
+        <a href="{% url 'core:how_it_works' %}">Comment ça marche</a>
+        <a href="{% url 'core:faq' %}">FAQ</a>
+        <a href="{% url 'core:contact' %}">Contact</a>
+        <a href="{% url 'core:report_problem' %}">Signaler un problème</a>
+      </div>
+
+      <!-- Colonne 4 : Paiement & Contact -->
+      <div class="col-lg-4 col-md-6">
+        <h5>Paiements acceptés</h5>
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          <span class="badge bg-light text-dark px-3 py-2 rounded-3">
+            <i class="bi bi-phone me-1"></i>Wave
+          </span>
+          <span class="badge bg-warning text-dark px-3 py-2 rounded-3">
+            Orange Money
+          </span>
+          <span class="badge bg-warning text-dark px-3 py-2 rounded-3">
+            MTN MoMo
+          </span>
+          <span class="badge bg-secondary px-3 py-2 rounded-3">
+            Moov Africa
+          </span>
+          <span class="badge bg-secondary px-3 py-2 rounded-3">
+            Card Visa 
+          </span>
+        </div>
+
+        <h5 class="mt-3">Contact</h5>
+        <a href="mailto:infos@mks-soft-technologies.com">
+          <i class="bi bi-envelope me-2"></i>infos@mks-soft-technologies.com
+        </a>
+        <a href="tel:+2250759872161">
+          <i class="bi bi-telephone me-2"></i>+225 07 59 87 21 61
+        </a>
+        <div class="mt-2" style="color:rgba(255,255,255,0.5); font-size:0.85rem;">
+          <i class="bi bi-geo-alt me-1"></i>Abidjan, Côte d'Ivoire
+        </div>
+      </div>
+
+    </div><!-- /.row -->
+
+    <!-- Footer bottom -->
+    <div class="ip-footer-bottom d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+      <div>
+        © 2026 <strong style="color:rgba(255,255,255,0.7);">IvoirPass</strong> —
+        Développé par <a href="#" style="color:#F47920;">MKS Soft Technologies</a>
+      </div>
+      <div class="d-flex gap-3">
+        <a href="{% url 'core:cgu' %}" style="color:rgba(255,255,255,0.5);">Conditions d'utilisation</a>
+        <a href=" {'core:privacy_policy' %}" style="color:rgba(255,255,255,0.5);">Politique de confidentialité</a>
+      </div>
+    </div>
+
+  </div><!-- /.container -->
+</footer>

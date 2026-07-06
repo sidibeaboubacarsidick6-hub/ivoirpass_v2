@@ -1,0 +1,73 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Vos billets sont prêts ! 🎟️</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ buyer_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Votre paiement a été confirmé avec succès.
+  <strong>Vos billets PDF sont joints à cet email.</strong>
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">N° de commande</span>
+    <span class="info-value">{{ order.order_number }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Montant payé</span>
+    <span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Paiement</span>
+    <span class="info-value">{{ order.payment_method|upper }}</span>
+  </div>
+</div>
+
+{% for item in tickets_with_links %}
+<div style="border:2px solid #1B7A3E; border-radius:12px;
+            padding:18px; margin-bottom:14px;">
+  <div style="font-weight:700; font-size:16px; color:#1a1a2e; margin-bottom:6px;">
+    {{ item.ticket.event.title }}
+  </div>
+  <div style="color:#F47920; font-size:13px; margin-bottom:10px;">
+    📅 {{ item.ticket.event.start_date|date:"d F Y à H\hi" }}
+    &nbsp;·&nbsp;
+    📍 {{ item.ticket.event.venue_name|default:item.ticket.event.venue_city }}
+  </div>
+  <div style="margin-bottom:12px;">
+    <span style="background:#1B7A3E; color:white; padding:4px 14px;
+                 border-radius:20px; font-size:12px; font-weight:700;">
+      {{ item.ticket.ticket_type.name }}
+    </span>
+    <span style="font-family:monospace; font-size:11px;
+                 color:#6c757d; margin-left:10px;">
+      {{ item.ticket.ticket_number }}
+    </span>
+  </div>
+
+  <!-- Bouton téléchargement -->
+  <a href="{{ item.download_url }}"
+     class="btn-cta"
+     style="display:inline-block; padding:10px 24px;
+            background:#1B7A3E; color:white; text-decoration:none;
+            border-radius:8px; font-weight:700; font-size:14px;">
+    ⬇️ Télécharger mon billet PDF
+  </a>
+</div>
+{% endfor %}
+
+<div style="background:#f8f9fa; border-radius:8px; padding:16px; margin-top:20px;">
+  <p style="font-size:13px; color:#6c757d; margin:0;">
+    📎 <strong>Vos billets sont aussi joints en PDF à cet email.</strong><br>
+    Présentez le QR Code à l'entrée de l'événement depuis votre téléphone —
+    aucune impression nécessaire.<br><br>
+    ⚠️ <strong>Conservez cet email</strong> — il vous permettra de récupérer
+    vos billets en cas de besoin.
+  </p>
+</div>
+
+{% endblock %}

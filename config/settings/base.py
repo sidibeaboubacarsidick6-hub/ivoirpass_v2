@@ -11,6 +11,12 @@ from decouple import config
 # ============================================
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+LOGIN_REDIRECT_URL         = '/redirect/'
+ACCOUNT_SIGNUP_REDIRECT_URL = '/redirect/'
+LOGOUT_REDIRECT_URL         = '/'
+
+# Ferme l'inscription publique — uniquement accessible via lien direct admin si besoin
+ACCOUNT_ADAPTER = 'apps.accounts.adapters.NoPublicSignupAdapter'
 # ============================================
 # SÉCURITÉ
 # ============================================
@@ -53,6 +59,7 @@ LOCAL_APPS = [
     'apps.scanner',
     'apps.store',
     'apps.notifications',
+    'apps.core'
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -189,16 +196,27 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = 'bootstrap5'
 CRISPY_TEMPLATE_PACK = 'bootstrap5'
 
 # ============================================
-# ALLAUTH (Authentification sociale)
+# ALLAUTH — Authentification
 # ============================================
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_VERIFICATION = 'optional'
-LOGIN_REDIRECT_URL = '/'
+ACCOUNT_EMAIL_REQUIRED          = True
+ACCOUNT_UNIQUE_EMAIL            = True
+ACCOUNT_USERNAME_REQUIRED       = False
+ACCOUNT_AUTHENTICATION_METHOD  = 'email'
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+
+
+# ✅ Vérification email OBLIGATOIRE
+ACCOUNT_EMAIL_VERIFICATION      = 'mandatory'
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION    = True
+ACCOUNT_CONFIRM_EMAIL_ON_GET           = True
+
 LOGOUT_REDIRECT_URL = '/'
 
+# Formulaire d'inscription personnalisé
+ACCOUNT_FORMS = {
+    'signup': 'apps.accounts.forms.IvoirPassSignupForm',
+}
 # ============================================
 # REDIS (Cache)
 # ============================================
@@ -238,3 +256,41 @@ IVOIRPASS = {
 
 # Clé primaire par défaut
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# ============================================
+# MODÈLE UTILISATEUR PERSONNALISÉ
+# ============================================
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
+
+# ============================================
+# PAYDUNYA
+# ============================================
+PAYDUNYA_MASTER_KEY  = config('PAYDUNYA_MASTER_KEY',  default='')
+PAYDUNYA_PRIVATE_KEY = config('PAYDUNYA_PRIVATE_KEY', default='')
+PAYDUNYA_TOKEN       = config('PAYDUNYA_TOKEN',        default='')
+PAYDUNYA_MODE        = config('PAYDUNYA_MODE',         default='test')
+PAYDUNYA_BASE_URL    = config('PAYDUNYA_BASE_URL',     default='http://localhost:8000')
+
+# URL de l'API PayDunya selon le mode
+PAYDUNYA_API_BASE = (
+    'https://app.paydunya.com/sandbox-api/v1'
+    if PAYDUNYA_MODE == 'test'
+    else 'https://app.paydunya.com/api/v1'
+)
+
+# ============================================
+# NOTIFICATIONS
+# ============================================
+SMS_ENABLED = config('SMS_ENABLED', default=False, cast=bool)
+
+# Orange SMS CI
+ORANGE_SMS_CLIENT_ID     = config('ORANGE_SMS_CLIENT_ID',     default='')
+ORANGE_SMS_CLIENT_SECRET = config('ORANGE_SMS_CLIENT_SECRET', default='')
+ORANGE_SMS_SENDER_NAME   = config('ORANGE_SMS_SENDER_NAME',   default='IvoirPass')
+
+# Twilio
+TWILIO_ACCOUNT_SID  = config('TWILIO_ACCOUNT_SID',  default='')
+TWILIO_AUTH_TOKEN   = config('TWILIO_AUTH_TOKEN',    default='')
+TWILIO_FROM_NUMBER  = config('TWILIO_FROM_NUMBER',   default='')

@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% block title %}Commande {{ order.order_number }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'store:my_orders' %}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h4 class="fw-bold mb-0">
+          Commande {{ order.order_number }}
+        </h4>
+      </div>
+
+      <div class="ip-card p-4 mb-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          {% if order.product.cover_image %}
+            <img src="{{ order.product.cover_image.url }}"
+                 width="80" height="80"
+                 class="rounded-3 object-fit-cover" />
+          {% endif %}
+          <div>
+            <div class="fw-bold fs-6">{{ order.product.name }}</div>
+            <div class="text-muted small">{{ order.product.author }}</div>
+            <div class="text-green fw-bold">
+              {{ order.total|floatformat:0 }} FCFA
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 border-top pt-3">
+          <div class="col-6">
+            <div class="text-muted small">Quantité</div>
+            <div class="fw-semibold">{{ order.quantity }}</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Statut</div>
+            <div>
+              {% if order.status == 'paid' %}
+                <span class="badge bg-success">Payée</span>
+              {% elif order.status == 'shipped' %}
+                <span class="badge bg-info">Expédiée</span>
+              {% elif order.status == 'delivered' %}
+                <span class="badge bg-success">Livrée</span>
+              {% else %}
+                <span class="badge bg-secondary">
+                  {{ order.get_status_display }}
+                </span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Date de commande</div>
+            <div class="fw-semibold small">
+              {{ order.created_at|date:"d/m/Y H:i" }}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Paiement</div>
+            <div class="fw-semibold small">
+              {{ order.payment_method|default:"—" }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Téléchargements -->
+      {% if download_links %}
+      <div class="ip-card p-4 mb-4"
+           style="border-left:4px solid #1B7A3E;">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-download me-2 text-green"></i>
+          Vos liens de téléchargement
+        </h6>
+        {% for link in download_links %}
+        <div class="mb-3 p-3 rounded-3 {% if link.is_valid %}bg-light{% else %}bg-danger bg-opacity-10{% endif %}">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="small fw-semibold">
+                Lien #{{ forloop.counter }}
+              </div>
+              <div class="text-muted" style="font-size:0.75rem;">
+                {{ link.download_count }}/{{ link.max_downloads }} téléchargement{{ link.max_downloads|pluralize }}
+                — Expire le {{ link.expires_at|date:"d/m/Y à H:i" }}
+              </div>
+            </div>
+            {% if link.is_valid %}
+            <a href="{% url 'store:download' link.token %}"
+               class="btn btn-green btn-sm">
+              <i class="bi bi-download me-1"></i>
+              Télécharger
+            </a>
+            {% else %}
+            <span class="badge bg-secondary">Expiré</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Livraison physique -->
+      {% if order.delivery_address %}
+      <div class="ip-card p-4 mb-4">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-truck me-2 text-orange"></i>
+          Adresse de livraison
+        </h6>
+        <div class="text-muted small">
+          {% if order.delivery_name %}
+          <div class="fw-semibold text-dark">
+            {{ order.delivery_name }}
+          </div>
+          {% endif %}
+          {% if order.delivery_phone %}
+          <div>{{ order.delivery_phone }}</div>
+          {% endif %}
+          {{ order.delivery_address|linebreaksbr }}<br>
+          {% if order.delivery_commune %}
+            {{ order.delivery_commune }},
+          {% endif %}
+          {{ order.delivery_city }}
+          {% if order.delivery_country %}
+            — {{ order.delivery_country }}
+          {% endif %}
+          {% if order.delivery_instructions %}
+          <div class="mt-2 fst-italic">
+            « {{ order.delivery_instructions }} »
+          </div>
+          {% endif %}
+        </div>
+        {% if order.tracking_number %}
+        <div class="mt-2">
+          <span class="text-muted small">N° de suivi : </span>
+          <strong>{{ order.tracking_number }}</strong>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Suivi de livraison -->
+      {% if order.delivery_method == 'delivery' %}
+      <div class="ip-card p-4 mt-3">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-truck me-2 text-orange"></i>
+          Suivi de livraison
+        </h6>
+        <div class="d-flex align-items-center gap-3 mb-2">
+          {% if order.status == 'shipped' %}
+            <span class="badge bg-info px-3 py-2">📦 Expédiée</span>
+          {% elif order.status == 'delivered' %}
+            <span class="badge bg-success px-3 py-2">✅ Livrée</span>
+          {% else %}
+            <span class="badge bg-secondary px-3 py-2">⏳ En préparation</span>
+          {% endif %}
+        </div>
+        {% if order.tracking_number %}
+        <div class="text-muted small">
+          N° de suivi : <strong>{{ order.tracking_number }}</strong>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}

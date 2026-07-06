@@ -1,0 +1,11 @@
+Vos téléchargements IvoirPass sont prêts !
+
+Commande : {{ order.order_number }}
+Produit  : {{ order.product.name }}
+Total    : {{ order.total|floatformat:0 }} FCFA
+
+{% for item in links_with_urls %}
+Télécharger : {{ item.url }}
+{% endfor %}
+
+© {{ year }} IvoirPass

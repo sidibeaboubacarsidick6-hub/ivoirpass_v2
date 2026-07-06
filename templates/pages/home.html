@@ -1,0 +1,598 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Accueil{% endblock %}
+{% block meta_description %}Achetez vos billets d'événements en Côte d'Ivoire. Musique, cinéma, théâtre, culture ivoirienne — sur IvoirPass.{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ============================================
+   CAROUSEL HERO
+   ============================================ */
+.hero-carousel {
+  position: relative;
+  width: 340px;
+  height: 280px;
+  margin: auto;
+}
+
+.hero-carousel-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-card {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(40px) scale(0.96);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.hero-card.active {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: all;
+}
+
+.hero-card.prev {
+  opacity: 0;
+  transform: translateX(-40px) scale(0.96);
+}
+
+.hero-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.hero-card-no-img {
+  width: 100%;
+  height: 160px;
+  background: linear-gradient(135deg, rgba(27,122,62,0.3), rgba(244,121,32,0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.5rem;
+}
+
+.hero-card-body {
+  padding: 12px 14px;
+}
+
+.hero-card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-card-meta {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.65);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.hero-card-price {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #F47920;
+  margin-top: 6px;
+}
+
+/* Indicateurs carousel */
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.carousel-dot.active {
+  background: #F47920;
+  width: 20px;
+  border-radius: 3px;
+}
+
+/* Placeholder si aucun événement */
+.hero-placeholder {
+  width: 340px;
+  height: 280px;
+  margin: auto;
+  background: rgba(255,255,255,0.06);
+  border-radius: 20px;
+  border: 2px dashed rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: rgba(255,255,255,0.4);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- =============================================
+     HERO SECTION
+     ============================================= -->
+<section class="ip-hero">
+  <div class="container">
+    <div class="row align-items-center gy-4">
+
+      <!-- Texte gauche -->
+      <div class="col-lg-7">
+        <span class="badge bg-orange text-white mb-3 px-3 py-2"
+              style="background:#F47920 !important; border-radius:20px; font-size:0.82rem;">
+          🇨🇮 La billetterie 100% ivoirienne
+        </span>
+        <h1>
+          Votre <span class="highlight">culture</span>,<br>
+          vos <span class="highlight">événements</span>,<br>
+          en un clic.
+        </h1>
+        <p class="lead mt-3 mb-4" style="color:rgba(255,255,255,0.8); max-width:520px;">
+          Achetez vos billets, commandez vos livres et albums, soutenez vos artistes préférés.
+          Paiement Wave, Orange Money, MTN MoMo.
+        </p>
+        <div class="d-flex gap-3 flex-wrap">
+          <a href="{% url 'events:list' %}" class="btn btn-orange btn-lg px-4">
+            <i class="bi bi-calendar-event me-2"></i>Voir les événements
+          </a>
+          <a href="{% url 'store:list' %}" class="btn btn-ip-outline btn-lg px-4">
+            <i class="bi bi-shop me-2"></i>Boutique culturelle
+          </a>
+        </div>
+      </div>
+
+      <!-- Carousel droite -->
+      <div class="col-lg-5 d-none d-lg-block text-center">
+
+        {% if featured_events %}
+        <div x-data="heroCarousel({{ featured_events|length }})" x-init="init()">
+          <div class="hero-carousel">
+            <div class="hero-carousel-track">
+
+              {% for event in featured_events %}
+              <div class="hero-card"
+                   :class="{
+                     'active': current === {{ forloop.counter0 }},
+                     'prev':   current > {{ forloop.counter0 }}
+                   }">
+
+                {% if event.cover_image %}
+                  <img src="{{ event.cover_image.url }}"
+                       alt="{{ event.title }}" />
+                {% else %}
+                  <div class="hero-card-no-img">
+                    <i class="bi {{ event.category.icon|default:'bi-calendar-event' }}"
+                       style="color:rgba(255,255,255,0.5);"></i>
+                  </div>
+                {% endif %}
+
+                <div class="hero-card-body">
+                  {% if event.category %}
+                  <div style="margin-bottom:4px;">
+                    <span style="font-size:0.68rem; font-weight:700;
+                                 padding:2px 8px; border-radius:20px;
+                                 background:{{ event.category.color|default:'#1B7A3E' }};
+                                 color:white;">
+                      {{ event.category.name }}
+                    </span>
+                  </div>
+                  {% endif %}
+
+                  <div class="hero-card-title">{{ event.title }}</div>
+
+                  <div class="hero-card-meta">
+                    <span>
+                      <i class="bi bi-calendar3 me-1"></i>
+                      {{ event.start_date|date:"d M Y" }}
+                    </span>
+                    <span>
+                      <i class="bi bi-geo-alt me-1"></i>
+                      {{ event.venue_city }}
+                    </span>
+                  </div>
+
+                  <div class="hero-card-price">
+                    {% if event.is_free %}
+                      Gratuit
+                    {% elif event.min_price > 0 %}
+                      À partir de {{ event.min_price|floatformat:0 }} FCFA
+                    {% else %}
+                      Voir les tarifs
+                    {% endif %}
+                  </div>
+                </div>
+
+                <!-- Lien vers l'événement -->
+                <a href="{{ event.get_absolute_url }}"
+                   style="position:absolute; inset:0; z-index:1;"
+                   title="{{ event.title }}"></a>
+
+              </div>
+              {% endfor %}
+
+            </div>
+          </div>
+
+          <!-- Dots navigation -->
+          <div class="carousel-dots mt-3">
+            {% for event in featured_events %}
+            <button class="carousel-dot"
+                    :class="{ 'active': current === {{ forloop.counter0 }} }"
+                    @click="goTo({{ forloop.counter0 }})">
+            </button>
+            {% endfor %}
+          </div>
+
+          <!-- Flèches navigation -->
+          <div class="d-flex justify-content-center gap-3 mt-3">
+            <button @click="prev()"
+                    style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+                           color:white; width:36px; height:36px; border-radius:50%;
+                           display:flex; align-items:center; justify-content:center;
+                           cursor:pointer; transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.2)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button @click="next()"
+                    style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+                           color:white; width:36px; height:36px; border-radius:50%;
+                           display:flex; align-items:center; justify-content:center;
+                           cursor:pointer; transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.2)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        {% else %}
+        <!-- Placeholder si aucun événement publié -->
+        <div class="hero-placeholder">
+          <i class="bi bi-ticket-perforated" style="font-size:3.5rem;"></i>
+          <span class="mt-2 small">Aucun événement pour le moment</span>
+          {% if user.is_organizer or user.is_platform_admin %}
+          <a href="{% url 'events:create' %}"
+             class="btn btn-orange btn-sm mt-3">
+            <i class="bi bi-plus me-1"></i>Créer un événement
+          </a>
+          {% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================
+     STATS RAPIDES
+     ============================================= -->
+<section style="background:white; border-bottom:1px solid #eee;">
+  <div class="container py-4">
+    <div class="row text-center g-3">
+      <div class="col-6 col-md-3">
+        <div class="py-3">
+          <div style="font-size:1.8rem; font-weight:900; color:#1B7A3E;">94+</div>
+          <div class="text-muted small">Événements organisés</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="py-3">
+          <div style="font-size:1.8rem; font-weight:900; color:#F47920;">19 000+</div>
+          <div class="text-muted small">Tickets vendus</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="py-3">
+          <div style="font-size:1.8rem; font-weight:900; color:#1B7A3E;">100+</div>
+          <div class="text-muted small">Organisateurs actifs</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="py-3">
+          <div style="font-size:1.8rem; font-weight:900; color:#F47920;">4+</div>
+          <div class="text-muted small">Modes de paiement</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================
+     ÉVÉNEMENTS À VENIR
+     ============================================= -->
+<section class="py-5">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 class="section-title">Événements à <span>venir</span></h2>
+      <div class="section-divider"></div>
+      <p class="text-muted">Concerts, festivals, spectacles et expositions en Côte d'Ivoire</p>
+    </div>
+
+    {% if upcoming_events %}
+    <div class="row g-4">
+      {% for event in upcoming_events %}
+      <div class="col-lg-4 col-md-6">
+        <div class="ip-card ip-card-event h-100 position-relative">
+
+          <!-- Image -->
+          <div style="position:relative; height:200px; overflow:hidden;">
+            {% if event.cover_image %}
+              <img src="{{ event.cover_image.url }}"
+                   style="width:100%; height:200px; object-fit:cover;" />
+            {% else %}
+              <div style="height:200px;
+                          background:linear-gradient(135deg,
+                            {{ event.category.color|default:'#1B7A3E' }}22,
+                            {{ event.category.color|default:'#1B7A3E' }}44);
+                          display:flex; align-items:center; justify-content:center;">
+                <i class="bi {{ event.category.icon|default:'bi-calendar-event' }}"
+                   style="font-size:3rem;
+                          color:{{ event.category.color|default:'#1B7A3E' }};
+                          opacity:0.5;"></i>
+              </div>
+            {% endif %}
+
+            <!-- Badge catégorie -->
+            {% if event.category %}
+            <span style="position:absolute; top:10px; left:10px;
+                         background:{{ event.category.color|default:'#1B7A3E' }};
+                         color:white; font-size:0.72rem; font-weight:700;
+                         padding:3px 10px; border-radius:20px;">
+              {{ event.category.name }}
+            </span>
+            {% endif %}
+
+            <!-- Badge sold out / gratuit -->
+            {% if event.is_sold_out %}
+            <span style="position:absolute; top:10px; right:10px;
+                         background:#dc3545; color:white; font-size:0.72rem;
+                         font-weight:700; padding:3px 10px; border-radius:20px;">
+              Complet
+            </span>
+            {% elif event.is_free %}
+            <span style="position:absolute; top:10px; right:10px;
+                         background:#1B7A3E; color:white; font-size:0.72rem;
+                         font-weight:700; padding:3px 10px; border-radius:20px;">
+              Gratuit
+            </span>
+            {% endif %}
+          </div>
+
+          <div class="card-body p-3 d-flex flex-column">
+            <!-- Date -->
+            <div class="text-orange small fw-semibold mb-1">
+              <i class="bi bi-calendar3 me-1"></i>
+              {{ event.start_date|date:"d M Y — H\hi" }}
+            </div>
+
+            <!-- Titre -->
+            <h6 class="fw-bold mb-1 lh-sm">
+              <a href="{{ event.get_absolute_url }}"
+                 class="text-dark text-decoration-none stretched-link">
+                {{ event.title }}
+              </a>
+            </h6>
+
+            <!-- Lieu -->
+            <div class="text-muted small mb-2">
+              <i class="bi bi-geo-alt me-1"></i>
+              {{ event.venue_name|default:event.venue_city }}
+            </div>
+
+            <!-- Description courte -->
+            {% if event.short_description %}
+            <p class="text-muted small mb-2"
+               style="flex:1; display:-webkit-box; -webkit-line-clamp:2;
+                      -webkit-box-orient:vertical; overflow:hidden;">
+              {{ event.short_description }}
+            </p>
+            {% endif %}
+
+            <!-- Prix + CTA -->
+            <div class="d-flex justify-content-between align-items-center
+                        mt-auto pt-2 border-top">
+              <span class="fw-bold text-green">
+                {% if event.is_free %}
+                  Gratuit
+                {% elif event.min_price > 0 %}
+                  À partir de {{ event.min_price|floatformat:0 }} FCFA
+                {% else %}
+                  Voir les tarifs
+                {% endif %}
+              </span>
+              <span class="btn btn-green btn-sm px-3"
+                    style="z-index:2; position:relative;">
+                Voir <i class="bi bi-arrow-right ms-1"></i>
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- =============================================
+         PAGINATION - AJOUTÉE ICI
+         ============================================= -->
+    {% if upcoming_events.has_other_pages %}
+    <nav class="mt-4 d-flex justify-content-center">
+      <ul class="pagination">
+        {% if upcoming_events.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ upcoming_events.previous_page_number }}">
+            <i class="bi bi-chevron-left"></i>
+          </a>
+        </li>
+        {% endif %}
+
+        {% for num in upcoming_events.paginator.page_range %}
+        <li class="page-item {% if upcoming_events.number == num %}active{% endif %}">
+          <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+        </li>
+        {% endfor %}
+
+        {% if upcoming_events.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ upcoming_events.next_page_number }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- Aucun événement publié -->
+    <div class="text-center py-5">
+      <i class="bi bi-calendar-x" style="font-size:4rem; color:#ddd;"></i>
+      <h5 class="mt-3 text-muted">Aucun événement disponible pour le moment</h5>
+      <p class="text-muted small">Revenez bientôt !</p>
+      {% if user.is_authenticated and user.is_organizer %}
+      <a href="{% url 'events:create' %}" class="btn btn-orange mt-3">
+        <i class="bi bi-plus-lg me-2"></i>Créer le premier événement
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="text-center mt-4">
+      <a href="{% url 'events:list' %}" class="btn btn-outline-secondary px-5">
+        Voir tous les événements <i class="bi bi-arrow-right ms-1"></i>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================
+     POURQUOI IVOIRPASS
+     ============================================= -->
+<section class="py-5" style="background:#f0f7f3;">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 class="section-title">Pourquoi <span>IvoirPass</span> ?</h2>
+      <div class="section-divider"></div>
+    </div>
+    <div class="row g-4 text-center">
+      <div class="col-md-4">
+        <div class="ip-card p-4 h-100">
+          <div class="mb-3" style="font-size:2.5rem; color:#1B7A3E;">
+            <i class="bi bi-phone"></i>
+          </div>
+          <h5 class="fw-bold">Paiement Mobile</h5>
+          <p class="text-muted small">
+            Wave, Orange Money, MTN MoMo. Payez en quelques secondes sans carte bancaire.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ip-card p-4 h-100">
+          <div class="mb-3" style="font-size:2.5rem; color:#F47920;">
+            <i class="bi bi-qr-code"></i>
+          </div>
+          <h5 class="fw-bold">QR Code Instantané</h5>
+          <p class="text-muted small">
+            Recevez votre billet QR Code par email et SMS. Entrée sécurisée en 2 secondes.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ip-card p-4 h-100">
+          <div class="mb-3" style="font-size:2.5rem; color:#1B7A3E;">
+            <i class="bi bi-shield-check"></i>
+          </div>
+          <h5 class="fw-bold">100% Sécurisé</h5>
+          <p class="text-muted small">
+            Transactions chiffrées. Remboursement garanti en cas d'annulation d'événement.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================
+     CTA ORGANISATEURS
+     ============================================= -->
+<section class="py-5"
+         style="background:linear-gradient(135deg,#1a1a2e 0%,#145c2e 100%); color:white;">
+  <div class="container text-center">
+    <h2 style="font-size:2rem; font-weight:800; margin-bottom:1rem;">
+      Vous êtes organisateur d'événements ?
+    </h2>
+    <p style="color:rgba(255,255,255,0.75); max-width:550px; margin:0 auto 2rem;">
+      Créez votre compte organisateur, publiez vos événements et gérez vos ventes
+      en temps réel depuis votre dashboard.
+    </p>
+    <a href="{% url 'account_signup' %}" class="btn btn-orange btn-lg px-5">
+      <i class="bi bi-rocket-takeoff me-2"></i>Démarrer gratuitement
+    </a>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function heroCarousel(total) {
+  return {
+    current: 0,
+    total:   total,
+    timer:   null,
+
+    init() {
+      // Démarrage automatique toutes les 4 secondes
+      if (this.total > 1) {
+        this.timer = setInterval(() => this.next(), 4000);
+      }
+    },
+
+    next() {
+      this.current = (this.current + 1) % this.total;
+    },
+
+    prev() {
+      this.current = (this.current - 1 + this.total) % this.total;
+    },
+
+    goTo(index) {
+      this.current = index;
+      // Réinitialise le timer après clic manuel
+      if (this.timer) {
+        clearInterval(this.timer);
+        this.timer = setInterval(() => this.next(), 4000);
+      }
+    }
+  }
+}
+</script>
+{% endblock %}

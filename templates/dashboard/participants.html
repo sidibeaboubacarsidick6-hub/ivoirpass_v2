@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block title %}Participants — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <a href="{% url 'dashboard:event_stats' event.slug %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div class="flex-grow-1">
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-people me-2 text-green"></i>Participants
+      </h4>
+      <p class="text-muted small mb-0">{{ event.title }}</p>
+    </div>
+  </div>
+
+  <!-- Stats rapides -->
+  <div class="row g-3 mb-4">
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.5rem; font-weight:900; color:#1B7A3E;">
+          {{ stats.total }}
+        </div>
+        <div class="text-muted small">Total</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.5rem; font-weight:900; color:#28a857;">
+          {{ stats.valid }}
+        </div>
+        <div class="text-muted small">Valides</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.5rem; font-weight:900; color:#6c757d;">
+          {{ stats.used }}
+        </div>
+        <div class="text-muted small">Scannés</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="ip-card p-3 mb-4">
+    <form method="GET" class="d-flex gap-3 flex-wrap align-items-center">
+      <input type="text" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width:250px;"
+             placeholder="Rechercher email, nom, ticket..." />
+      <select name="status" class="form-select form-select-sm" style="max-width:160px;">
+        <option value="">Tous les statuts</option>
+        <option value="valid"   {% if status_filter == 'valid' %}selected{% endif %}>Valides</option>
+        <option value="used"    {% if status_filter == 'used'  %}selected{% endif %}>Scannés</option>
+        <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>Expirés</option>
+      </select>
+      <button type="submit" class="btn btn-green btn-sm">
+        <i class="bi bi-search me-1"></i>Filtrer
+      </button>
+      <a href="{% url 'dashboard:participants' event.slug %}"
+         class="btn btn-outline-secondary btn-sm">
+        Reset
+      </a>
+    </form>
+  </div>
+  <a href="{% url 'dashboard:export_participants' event.slug %}"
+   class="btn btn-outline-success btn-sm">
+   <i class="bi bi-download me-1"></i>Exporter CSV
+  </a>
+
+  <!-- Tableau participants -->
+  <div class="ip-card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Participant</th>
+            <th>Type de billet</th>
+            <th>N° Ticket</th>
+            <th>Statut</th>
+            <th class="pe-4">Acheté le</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ticket in tickets %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold small">
+                {{ ticket.buyer.get_full_name }}
+              </div>
+              <div class="text-muted" style="font-size:0.78rem;">
+                {{ ticket.buyer.email }}
+              </div>
+              {% if ticket.buyer.phone_number %}
+              <div class="text-muted" style="font-size:0.75rem;">
+                <i class="bi bi-phone me-1"></i>{{ ticket.buyer.phone_number }}
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border">
+                {{ ticket.ticket_type.name }}
+              </span>
+            </td>
+            <td>
+              <span style="font-family:monospace; font-size:0.8rem;">
+                {{ ticket.ticket_number }}
+              </span>
+            </td>
+            <td>
+              {% if ticket.status == 'valid' %}
+                <span class="badge bg-success">Valide</span>
+              {% elif ticket.status == 'used' %}
+                <span class="badge bg-secondary">
+                  Scanné
+                  {% if ticket.scanned_at %}
+                    — {{ ticket.scanned_at|date:"H:i" }}
+                  {% endif %}
+                </span>
+              {% elif ticket.status == 'expired' %}
+                <span class="badge bg-warning text-dark">Expiré</span>
+              {% else %}
+                <span class="badge bg-danger">Annulé</span>
+              {% endif %}
+            </td>
+            <td class="pe-4 text-muted small">
+              {{ ticket.created_at|date:"d/m/Y H:i" }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center py-4 text-muted">
+              Aucun participant trouvé.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

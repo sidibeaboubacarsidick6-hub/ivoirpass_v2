@@ -1,0 +1,266 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ event.title }}{% endblock %}
+{% block meta_description %}{{ event.short_description|default:event.title }}{% endblock %}
+
+{% block content %}
+
+<!-- Cover image -->
+<div style="background:{% if event.cover_image %}url('{{ event.cover_image.url }}') center/cover{% else %}linear-gradient(135deg,#1a1a2e,#1B7A3E){% endif %};
+            height:400px; position:relative;">
+  <div style="position:absolute; inset:0; background:rgba(0,0,0,0.55);"></div>
+  <div class="container h-100 d-flex align-items-end pb-4" style="position:relative;">
+    <div class="text-white">
+      {% if event.category %}
+      <span style="background:{{ event.category.color|default:'#1B7A3E' }};
+                   color:white; font-size:0.8rem; font-weight:700;
+                   padding:4px 14px; border-radius:20px; display:inline-block; margin-bottom:0.8rem;">
+        <i class="bi {{ event.category.icon }} me-1"></i>{{ event.category.name }}
+      </span>
+      {% endif %}
+      <h1 class="fw-bold mb-2" style="font-size:clamp(1.6rem,4vw,2.6rem); text-shadow:0 2px 8px rgba(0,0,0,0.4);">
+        {{ event.title }}
+      </h1>
+      {% if event.subtitle %}
+        <p style="color:rgba(255,255,255,0.85); font-size:1.05rem;">{{ event.subtitle }}</p>
+      {% endif %}
+      <div class="d-flex flex-wrap gap-3 mt-2" style="font-size:0.9rem; color:rgba(255,255,255,0.8);">
+        <span><i class="bi bi-calendar3 me-1 text-orange"></i>{{ event.start_date|date:"d F Y — H\hi" }}</span>
+        {% if event.venue_city %}
+          <span><i class="bi bi-geo-alt me-1 text-orange"></i>{{ event.venue_name|default:event.venue_city }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container py-5">
+  <div class="row g-4">
+
+    <!-- Contenu principal -->
+    <div class="col-lg-8">
+
+      <!-- Description -->
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-info-circle me-2"></i>À propos de cet événement
+        </h5>
+        <div style="line-height:1.8; white-space:pre-line;">{{ event.description }}</div>
+      </div>
+
+      <!-- Informations pratiques -->
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-map me-2"></i>Informations pratiques
+        </h5>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <div class="text-muted small mb-1">Date et heure</div>
+            <div class="fw-semibold">
+              <i class="bi bi-calendar3 text-orange me-1"></i>
+              {{ event.start_date|date:"d F Y" }}<br>
+              <span class="text-muted small">
+                {{ event.start_date|date:"H\hi" }} → {{ event.end_date|date:"H\hi" }}
+              </span>
+            </div>
+          </div>
+          {% if event.doors_open %}
+          <div class="col-sm-6">
+            <div class="text-muted small mb-1">Ouverture des portes</div>
+            <div class="fw-semibold">
+              <i class="bi bi-door-open text-orange me-1"></i>
+              {{ event.doors_open|time:"H\hi" }}
+            </div>
+          </div>
+          {% endif %}
+          {% if event.venue_name %}
+          <div class="col-sm-6">
+            <div class="text-muted small mb-1">Lieu</div>
+            <div class="fw-semibold">
+              <i class="bi bi-building text-orange me-1"></i>{{ event.venue_name }}
+            </div>
+          </div>
+          {% endif %}
+          {% if event.venue_address %}
+          <div class="col-sm-6">
+            <div class="text-muted small mb-1">Adresse</div>
+            <div class="fw-semibold">
+              <i class="bi bi-geo-alt text-orange me-1"></i>{{ event.venue_address }}
+            </div>
+          </div>
+          {% endif %}
+          {% if event.online_link %}
+          <div class="col-12">
+            <div class="text-muted small mb-1">Lien en ligne</div>
+            <a href="{{ event.online_link }}" target="_blank" class="btn btn-outline-success btn-sm">
+              <i class="bi bi-camera-video me-1"></i>Rejoindre en ligne
+            </a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Organisateur -->
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-person-badge me-2"></i>Organisateur
+        </h5>
+        <div class="d-flex align-items-center gap-3">
+          {% if event.organizer.organization_logo %}
+            <img src="{{ event.organizer.organization_logo.url }}"
+                 width="60" height="60" class="rounded-3 object-fit-cover border" />
+          {% elif event.organizer.avatar %}
+            <img src="{{ event.organizer.avatar.url }}"
+                 width="60" height="60" class="rounded-circle object-fit-cover" />
+          {% else %}
+            <div style="width:60px; height:60px; border-radius:50%;
+                        background:linear-gradient(135deg,#1B7A3E,#F47920);
+                        display:flex; align-items:center; justify-content:center;
+                        font-size:1.4rem; color:white; font-weight:900;">
+              {{ event.organizer.get_short_name|first|upper }}
+            </div>
+          {% endif %}
+          <div>
+            <div class="fw-bold">
+              {{ event.organizer.organization_name|default:event.organizer.get_full_name }}
+              {% if event.organizer.is_organizer_verified %}
+                <i class="bi bi-patch-check-fill text-success small ms-1" title="Certifié"></i>
+              {% endif %}
+            </div>
+            {% if event.organizer.organization_description %}
+              <div class="text-muted small">{{ event.organizer.organization_description|truncatechars:120 }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Événements similaires -->
+      {% if similar_events %}
+      <div>
+        <h5 class="fw-bold mb-3">
+          <i class="bi bi-collection me-2 text-green"></i>Événements similaires
+        </h5>
+        <div class="row g-3">
+          {% for ev in similar_events %}
+          <div class="col-md-4">
+            <a href="{{ ev.get_absolute_url }}" class="text-decoration-none">
+              <div class="ip-card p-3">
+                {% if ev.cover_image %}
+                  <img src="{{ ev.cover_image.url }}" class="rounded-2 mb-2 w-100"
+                       style="height:100px; object-fit:cover;" />
+                {% endif %}
+                <div class="fw-bold small text-dark">{{ ev.title }}</div>
+                <div class="text-orange small">{{ ev.start_date|date:"d M Y" }}</div>
+              </div>
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Sidebar : tickets -->
+    <div class="col-lg-4">
+      <div class="ip-card p-4 sticky-top" style="top:80px;">
+
+        <!-- Statut vente -->
+        {% if event.is_sold_out %}
+          <div class="alert alert-danger text-center mb-3">
+            <i class="bi bi-x-circle-fill me-2"></i><strong>Complet</strong>
+          </div>
+        {% elif not event.is_on_sale %}
+          <div class="alert alert-warning text-center mb-3">
+            <i class="bi bi-clock me-2"></i>
+            {% if event.is_past %}Ventes terminées{% else %}Ventes bientôt{% endif %}
+          </div>
+        {% endif %}
+
+        <h5 class="fw-bold mb-3">
+          <i class="bi bi-ticket-perforated me-2 text-orange"></i>Billets
+        </h5>
+
+        {% for ticket in ticket_types %}
+        <div class="border rounded-3 p-3 mb-3
+                    {% if ticket.is_sold_out %}opacity-50{% endif %}">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div class="fw-bold">{{ ticket.name }}</div>
+            <div class="fw-bold text-green">
+              {% if ticket.is_free %}Gratuit{% else %}{{ ticket.price|floatformat:0 }} FCFA{% endif %}
+            </div>
+          </div>
+          {% if ticket.description %}
+            <div class="text-muted small mb-2">{{ ticket.description }}</div>
+          {% endif %}
+          {% if ticket.remaining is not None %}
+            <div class="text-muted small mb-2">
+              <i class="bi bi-people me-1"></i>
+              {% if ticket.is_sold_out %}
+                <span class="text-danger">Épuisé</span>
+              {% else %}
+                {{ ticket.remaining }} place{{ ticket.remaining|pluralize }} restante{{ ticket.remaining|pluralize }}
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+        {% empty %}
+        <p class="text-muted small">Aucun type de billet configuré.</p>
+        {% endfor %}
+
+        <!-- ============================================ -->
+        <!-- 🔥 BOUTON ACHAT MODIFIÉ (Phase 4) 🔥          -->
+        <!-- ============================================ -->
+        {% if event.is_on_sale and not event.is_sold_out %}
+          <a href="{% url 'tickets:guest_checkout' event.slug %}" 
+             class="btn btn-orange btn-lg w-100 mt-2" 
+             style="font-size:1rem; font-weight:700;">
+            <i class="bi bi-ticket-perforated me-2"></i> Acheter mes billets
+          </a>
+        {% endif %}
+
+        <!-- Partage -->
+        <hr class="my-3">
+        <div class="text-center">
+          <span class="text-muted small d-block mb-2">Partager cet événement</span>
+          <div class="d-flex justify-content-center gap-2">
+            <a href="https://wa.me/?text={{ event.title|urlencode }}%20{{ request.build_absolute_uri }}"
+               target="_blank" class="btn btn-outline-success btn-sm">
+              <i class="bi bi-whatsapp"></i>
+            </a>
+            <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}"
+               target="_blank" class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-facebook"></i>
+            </a>
+            <button onclick="copyToClipboard('{{ request.build_absolute_uri }}')"
+                    class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-link-45deg"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Lien copié dans le presse-papiers !');
+  }).catch(() => {
+    // Fallback
+    const input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    alert('Lien copié dans le presse-papiers !');
+  });
+}
+</script>
+
+{% endblock %}

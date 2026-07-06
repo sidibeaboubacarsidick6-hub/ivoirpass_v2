@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Commande confirmée{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+
+      <!-- Succès -->
+      <div class="text-center mb-5">
+        <div style="width:80px; height:80px; border-radius:50%;
+                    background:linear-gradient(135deg,#1B7A3E,#28a857);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1rem; font-size:2rem;">
+          ✅
+        </div>
+        <h3 class="fw-bold text-green">Commande confirmée !</h3>
+        <p class="text-muted">
+          Commande <strong>{{ order.order_number }}</strong> —
+          {{ order.total|floatformat:0 }} FCFA
+        </p>
+      </div>
+
+      <!-- Tickets -->
+      {% for ticket in tickets %}
+      <div class="ip-card p-4 mb-3">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <div class="fw-bold fs-6 mb-1">
+              {{ ticket.event.title }}
+            </div>
+            <div class="text-muted small mb-1">
+              <i class="bi bi-ticket me-1 text-green"></i>
+              {{ ticket.ticket_type.name }}
+            </div>
+            <div class="text-muted small mb-1">
+              <i class="bi bi-calendar3 me-1 text-orange"></i>
+              {{ ticket.event.start_date|date:"d F Y — H\hi" }}
+            </div>
+            <div class="text-muted small mb-2">
+              <i class="bi bi-geo-alt me-1 text-orange"></i>
+              {{ ticket.event.venue_name|default:ticket.event.venue_city }}
+            </div>
+            <div class="d-flex gap-2">
+              <a href="{% url 'tickets:ticket_detail' ticket.ticket_number %}"
+                 class="btn btn-green btn-sm">
+                <i class="bi bi-qr-code me-1"></i>Voir le billet
+              </a>
+              <a href="{% url 'tickets:download_pdf' ticket.ticket_number %}"
+                 class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-download me-1"></i>PDF
+              </a>
+            </div>
+          </div>
+          <div class="col-md-4 text-center mt-3 mt-md-0">
+            {% if ticket.qr_code_image %}
+              <img src="{{ ticket.qr_code_image.url }}"
+                   width="120" height="120"
+                   class="rounded-3 border" />
+            {% endif %}
+            <div class="text-muted mt-1"
+                 style="font-size:0.72rem; font-family:monospace;">
+              {{ ticket.ticket_number }}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="text-center mt-4 d-flex gap-3 justify-content-center">
+        <a href="{% url 'tickets:my_tickets' %}" class="btn btn-green px-4">
+          <i class="bi bi-collection me-2"></i>Tous mes billets
+        </a>
+        <a href="{% url 'events:list' %}" class="btn btn-outline-secondary px-4">
+          Voir plus d'événements
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

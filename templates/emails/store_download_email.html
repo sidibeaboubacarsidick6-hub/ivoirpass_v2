@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
+  <div style="background: #1a1a2e; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="color: #F47920; margin: 0;">IvoirPass Boutique</h1>
+    <p style="color: rgba(255,255,255,0.6); margin: 5px 0 0;">Téléchargement disponible</p>
+  </div>
+  
+  <div style="padding: 25px; background: white; border-radius: 0 0 8px 8px;">
+    <h2 style="margin-top: 0;">📥 Votre produit est disponible</h2>
+    <p>Bonjour <strong>{{ buyer.get_full_name|default:buyer.email }}</strong>,</p>
+    <p>Votre commande <strong>#{{ order.order_number }}</strong> est confirmée.</p>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1B7A3E;">
+      <p style="margin: 5px 0;"><strong>Produit :</strong> {{ product.name }}</p>
+      <p style="margin: 5px 0;"><strong>Quantité :</strong> {{ order.quantity }}</p>
+      <p style="margin: 5px 0;"><strong>Montant :</strong> {{ order.total|floatformat:0 }} FCFA</p>
+    </div>
+    
+    <h3 style="font-size: 16px; margin: 20px 0 10px;">📎 Liens de téléchargement :</h3>
+    
+    {% for link in download_links %}
+    <div style="background: #f0f7f3; padding: 12px 15px; border-radius: 6px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 14px;">
+        <strong>Fichier {{ forloop.counter }}</strong>
+        <span style="color: #888; font-size: 12px; margin-left: 10px;">
+          ({{ link.max_downloads }} téléchargements max)
+        </span>
+      </span>
+      <a href="{{ base_url }}/boutique/telecharger/{{ link.token }}/" 
+         style="background: #1B7A3E; color: white; text-decoration: none; padding: 6px 14px; border-radius: 4px; font-size: 13px;">
+        Télécharger
+      </a>
+    </div>
+    <p style="color: #888; font-size: 11px; margin: 2px 0 12px 15px;">
+      ⏰ Lien valable jusqu'au {{ link.expires_at|date:"d/m/Y H:i" }}
+    </p>
+    {% endfor %}
+    
+    <p style="color: #555; margin-top: 20px;">
+      Vous pouvez aussi retrouver vos fichiers dans votre espace 
+      <a href="{{ base_url }}/boutique/mes-commandes/{{ order.order_number }}/" style="color: #1B7A3E;">
+        Mes commandes
+      </a>.
+    </p>
+    
+    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+    <p style="color: #888; font-size: 12px; text-align: center;">
+      © 2026 IvoirPass — La plateforme culturelle ivoirienne<br>
+      <a href="{{ base_url }}" style="color: #F47920;">www.ivoirpass.com</a>
+    </p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}FAQ - IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+          <li class="breadcrumb-item active">FAQ</li>
+        </ol>
+      </nav>
+
+      <h1 class="fw-bold mb-4">Questions fréquentes</h1>
+      <div class="section-divider mb-4"></div>
+      
+      <p class="text-muted lead mb-4">
+        Les réponses aux questions les plus fréquentes sur IvoirPass.
+      </p>
+
+      <div class="accordion" id="faqAccordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Comment créer un compte IvoirPass ?
+            </button>
+          </h2>
+          <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Cliquez sur "S'inscrire" en haut à droite, remplissez le formulaire avec vos informations et confirmez votre email. C'est gratuit et rapide !
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Quels moyens de paiement sont acceptés ?
+            </button>
+          </h2>
+          <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Nous acceptons Wave, Orange Money, MTN MoMo, Moov Africa et les cartes bancaires (Visa, Mastercard).
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Comment recevoir mes billets ?
+            </button>
+          </h2>
+          <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Après paiement, vous recevez vos billets par email et par SMS avec un QR code unique pour chaque billet.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Puis-je annuler ou échanger mes billets ?
+            </button>
+          </h2>
+          <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Les billets sont nominatifs et non remboursables sauf en cas d'annulation de l'événement. Voir nos conditions d'utilisation pour plus de détails.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Comment signaler un problème ?
+            </button>
+          </h2>
+          <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Utilisez notre <a href="{% url 'core:report_problem' %}">formulaire de signalement</a> ou contactez-nous directement par email à infos@mks-soft-technologies.com
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6">
+              <i class="bi bi-question-circle me-2 text-orange"></i>
+              Comment devenir organisateur sur IvoirPass ?
+            </button>
+          </h2>
+          <div id="faq6" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Créez un compte, puis demandez le statut d'organisateur depuis votre tableau de bord. Notre équipe validera votre demande sous 48h.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center mt-5 p-4" style="background:#f8f9fa; border-radius:12px;">
+        <h6 class="fw-bold mb-2">Vous n'avez pas trouvé votre réponse ?</h6>
+        <p class="text-muted small mb-3">Contactez-nous, nous sommes là pour vous aider</p>
+        <a href="{% url 'core:contact' %}" class="btn btn-outline-orange px-4">
+          <i class="bi bi-envelope me-2"></i>Nous contacter
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

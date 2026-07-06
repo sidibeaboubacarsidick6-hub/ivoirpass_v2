@@ -1,0 +1,59 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Votre téléchargement est prêt ! 💾</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ order.buyer.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Votre paiement a été confirmé. Téléchargez votre produit via le lien ci-dessous.
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Commande</span>
+    <span class="info-value">{{ order.order_number }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Produit</span>
+    <span class="info-value">{{ order.product.name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Montant</span>
+    <span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span>
+  </div>
+</div>
+
+{% if download_links %}
+<div style="background:#fff8f0; border-left:4px solid #F47920;
+            border-radius:8px; padding:20px; margin:20px 0;">
+  <h3 style="font-size:15px; font-weight:700; margin-bottom:12px; color:#F47920;">
+    💾 Votre lien de téléchargement
+  </h3>
+  {% for link in download_links %}
+  <div style="margin-bottom:12px;">
+    <a href="{{ platform_url }}/boutique/telecharger/{{ link.token }}/"
+       class="btn-cta"
+       style="display:inline-block; padding:12px 24px; font-size:14px;">
+      ⬇️ Télécharger maintenant
+    </a>
+    <div style="font-size:11px; color:#6c757d; margin-top:6px;">
+      ⚠️ Lien valable {{ order.product.download_expiry_hours }}h —
+      {{ link.max_downloads }} téléchargement{{ link.max_downloads|pluralize }} maximum.
+      Expire le {{ link.expires_at|date:"d/m/Y à H:i" }}.
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<center>
+  <a href="{{ platform_url }}/boutique/mes-commandes/"
+     class="btn-cta btn-green">
+    Voir ma commande
+  </a>
+</center>
+
+{% endblock %}

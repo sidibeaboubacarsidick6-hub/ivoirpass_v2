@@ -1,0 +1,669 @@
+/* ============================================
+   IVOIRPASS V2 — Charte graphique
+   Couleurs : Vert Côte d'Ivoire + Orange vif
+   ============================================ */
+
+[x-cloak] { display: none !important; }
+
+:root {
+  --ip-green:        #1B7A3E;   /* Vert drapeau CI */
+  --ip-green-light:  #28a857;
+  --ip-green-dark:   #145c2e;
+  --ip-orange:       #F47920;   /* Orange vif */
+  --ip-orange-light: #f9a15a;
+  --ip-orange-dark:  #c45e0e;
+  --ip-dark:         #1a1a2e;
+  --ip-gray:         #6c757d;
+  --ip-light:        #f8f9fa;
+  --ip-white:        #ffffff;
+  --ip-border:       #dee2e6;
+  --ip-shadow:       0 4px 20px rgba(0,0,0,0.08);
+  --ip-radius:       12px;
+  --ip-radius-sm:    8px;
+  --ip-transition:   all 0.25s ease;
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #2d2d2d;
+  background-color: #f5f7fa;
+  line-height: 1.6;
+}
+
+a { color: var(--ip-green); text-decoration: none; transition: var(--ip-transition); }
+a:hover { color: var(--ip-orange); }
+
+/* ============================================
+   NAVBAR
+   ============================================ */
+.ip-navbar {
+  background: var(--ip-dark) !important;
+  border-bottom: 3px solid var(--ip-orange);
+  padding: 0.6rem 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+
+.ip-navbar .navbar-brand {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.ip-navbar .navbar-brand .brand-ivoir {
+  color: var(--ip-white);
+}
+
+.ip-navbar .navbar-brand .brand-pass {
+  color: var(--ip-orange);
+}
+
+.ip-navbar .nav-link {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 500;
+  padding: 0.5rem 1rem !important;
+  border-radius: var(--ip-radius-sm);
+  transition: var(--ip-transition);
+}
+
+.ip-navbar .nav-link:hover,
+.ip-navbar .nav-link.active {
+  color: var(--ip-orange) !important;
+  background: rgba(255,255,255,0.08);
+}
+
+/* --- Boutons Navbar --- */
+.btn-ip-primary {
+  background: var(--ip-orange);
+  color: var(--ip-white);
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  padding: 0.45rem 1.2rem;
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-ip-primary:hover {
+  background: var(--ip-orange-dark);
+  color: var(--ip-white);
+  transform: translateY(-1px);
+}
+
+.btn-ip-outline {
+  background: transparent;
+  color: var(--ip-white);
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: var(--ip-radius-sm);
+  padding: 0.4rem 1.2rem;
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-ip-outline:hover {
+  border-color: var(--ip-orange);
+  color: var(--ip-orange);
+}
+
+/* ============================================
+   CAROUSEL HERO — Version immersive 🆕
+   ============================================ */
+.ip-hero {
+  background: linear-gradient(135deg, var(--ip-dark) 0%, var(--ip-green-dark) 100%);
+  color: white;
+  padding: 120px 0 100px;
+  position: relative;
+  overflow: hidden;
+  min-height: 600px;
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .ip-hero { padding: 80px 0 60px; min-height: 500px; }
+}
+
+.ip-hero::before {
+  content: '';
+  position: absolute;
+  top: -30%;
+  right: -15%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(244,121,32,0.12) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.ip-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(27,122,62,0.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+/* Carousel cards plus grandes */
+.hero-carousel {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  height: 340px;
+  margin: auto;
+}
+
+.hero-card {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 20px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(50px) scale(0.95);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.hero-card.active {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: all;
+}
+
+.hero-card.prev {
+  opacity: 0;
+  transform: translateX(-50px) scale(0.95);
+}
+
+.hero-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.hero-card-no-img {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, rgba(27,122,62,0.4), rgba(244,121,32,0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+}
+
+.hero-card-body {
+  padding: 16px 18px;
+}
+
+.hero-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-card-meta {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.65);
+  display: flex;
+  gap: 12px;
+}
+
+.hero-card-price {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #F47920;
+  margin-top: 8px;
+}
+
+.hero-card-cta {
+  display: inline-block;
+  margin-top: 10px;
+  background: #F47920;
+  color: white;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.carousel-dot.active {
+  background: #F47920;
+  width: 24px;
+  border-radius: 3px;
+}
+
+/* ============================================
+   HERO — TEXTE (complément)
+   ============================================ */
+.ip-hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.ip-hero .highlight { color: var(--ip-orange); }
+
+/* ============================================
+   CARDS
+   ============================================ */
+.ip-card {
+  background: var(--ip-white);
+  border-radius: var(--ip-radius);
+  border: 1px solid var(--ip-border);
+  box-shadow: var(--ip-shadow);
+  transition: var(--ip-transition);
+  overflow: hidden;
+}
+
+.ip-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+}
+
+.ip-card .card-img-top {
+  height: 200px;
+  object-fit: cover;
+}
+
+.ip-card-event .event-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--ip-orange);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   BOUTONS GLOBAUX
+   ============================================ */
+.btn-green {
+  background: var(--ip-green);
+  color: white;
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-green:hover {
+  background: var(--ip-green-dark);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-orange {
+  background: var(--ip-orange);
+  color: white;
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  font-weight: 600;
+  transition: var(--ip-transition);
+}
+
+.btn-orange:hover {
+  background: var(--ip-orange-dark);
+  color: white;
+}
+
+/* ============================================
+   BADGES ET STATUTS
+   ============================================ */
+.badge-organizer {
+  background: linear-gradient(135deg, var(--ip-green), var(--ip-green-light));
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-verified {
+  background: var(--ip-green);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.ip-footer {
+  background: var(--ip-dark);
+  color: rgba(255,255,255,0.75);
+  padding: 60px 0 30px;
+  border-top: 3px solid var(--ip-orange);
+}
+
+.ip-footer h5 {
+  color: var(--ip-orange);
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.ip-footer a {
+  color: rgba(255,255,255,0.65);
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  transition: var(--ip-transition);
+}
+
+.ip-footer a:hover { color: var(--ip-orange); padding-left: 4px; }
+
+.ip-footer-bottom {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin-top: 40px;
+  padding-top: 20px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ============================================
+   ALERTES / MESSAGES
+   ============================================ */
+.ip-alert {
+  border: none;
+  border-radius: var(--ip-radius-sm);
+  border-left: 4px solid;
+  padding: 0.85rem 1.2rem;
+  font-size: 0.92rem;
+}
+
+.ip-alert.alert-success { border-left-color: var(--ip-green); background: #edf7f1; color: #145c2e; }
+.ip-alert.alert-danger  { border-left-color: #dc3545; background: #fdf0f0; color: #8b1a1a; }
+.ip-alert.alert-warning { border-left-color: var(--ip-orange); background: #fff8f0; color: #7a3a00; }
+.ip-alert.alert-info    { border-left-color: #0dcaf0; background: #f0faff; color: #0a5c75; }
+
+/* ============================================
+   UTILITAIRES
+   ============================================ */
+.text-green  { color: var(--ip-green) !important; }
+.text-orange { color: var(--ip-orange) !important; }
+.bg-green    { background: var(--ip-green) !important; }
+.bg-orange   { background: var(--ip-orange) !important; }
+
+.section-title {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 800;
+  color: var(--ip-dark);
+  margin-bottom: 0.5rem;
+}
+
+.section-title span { color: var(--ip-orange); }
+
+.section-divider {
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--ip-green), var(--ip-orange));
+  border-radius: 2px;
+  margin: 0 auto 2rem;
+}
+
+/* Loader */
+.ip-loader {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 768px) {
+  .ip-hero { padding: 60px 0 50px; }
+  .ip-navbar .navbar-brand { font-size: 1.3rem; }
+}
+
+/* Liens dropdown navbar */
+.ip-dropdown-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  color: #374151;
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.ip-dropdown-link:hover {
+  background: #f9fafb;
+  color: #1B7A3E;
+}
+.min-vh-100{
+    min-height:100vh;
+}
+
+.ip-card{
+    width:100%;
+}
+
+/* ============================================
+   RESPONSIVE MOBILE — Corrections complètes
+   ============================================ */
+
+/* Menu hamburger mobile */
+@media (max-width: 991px) {
+
+  /* Navbar collapse */
+  .ip-navbar .navbar-collapse {
+    background: var(--ip-dark);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding: 1rem;
+    margin-top: 0.5rem;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .ip-navbar .nav-link {
+    padding: 0.6rem 0.5rem !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .ip-navbar .d-flex.align-items-center.gap-2 {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .ip-navbar .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Dropdown utilisateur mobile */
+  [x-data] > div[x-show] {
+    position: static !important;
+    box-shadow: none !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: rgba(255,255,255,0.05) !important;
+    border-radius: 8px !important;
+    margin-top: 0.5rem;
+  }
+
+  [x-data] > div[x-show] a,
+  [x-data] > div[x-show] button {
+    color: rgba(255,255,255,0.85) !important;
+  }
+
+  [x-data] > div[x-show] a:hover,
+  [x-data] > div[x-show] button:hover {
+    background: rgba(255,255,255,0.1) !important;
+  }
+}
+
+/* Cartes événements mobile */
+@media (max-width: 576px) {
+  .ip-hero h1 {
+    font-size: 1.8rem;
+  }
+
+  .ip-hero {
+    padding: 40px 0 35px;
+  }
+
+  .section-title {
+    font-size: 1.4rem;
+  }
+
+  .ip-card .card-body {
+    padding: 1rem !important;
+  }
+
+  /* Footer mobile */
+  .ip-footer {
+    padding: 40px 0 20px;
+    text-align: center;
+  }
+
+  .ip-footer .d-flex.gap-3 {
+    justify-content: center;
+  }
+
+  /* Dashboard mobile */
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Tables responsives */
+  .table-responsive {
+    font-size: 0.82rem;
+  }
+
+  /* Boutons côte à côte sur mobile */
+  .d-flex.gap-2 .btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* 320px — très petits écrans */
+@media (max-width: 360px) {
+  .ip-navbar .navbar-brand {
+    font-size: 1.2rem;
+  }
+
+  .container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ip-card {
+    border-radius: 8px;
+  }
+}
+
+/* Correction toggler hamburger */
+.navbar-toggler:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+/* Fix dropdown position sur mobile */
+@media (max-width: 991px) {
+  .position-relative [x-show] {
+    position: static !important;
+    width: 100% !important;
+    margin-top: 0.5rem !important;
+  }
+}
+
+/* ============================================
+   CAROUSEL HERO — ANIMATION SUPPLEMENTAIRE
+   ============================================ */
+.hero-card {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-card.active {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: all;
+}
+
+.hero-card.exit {
+  opacity: 0;
+  transform: translateX(-50px) scale(0.95);
+}
+
+/* Transition en douceur pour les dots */
+.carousel-dot {
+  transition: all 0.3s ease;
+}
+
+.carousel-dot.active {
+  background: var(--ip-orange);
+  width: 24px;
+  border-radius: 3px;
+}
+
+/* Effet de survol sur les cartes du carousel */
+.hero-card:hover {
+  border-color: rgba(244,121,32,0.5);
+  box-shadow: 0 8px 32px rgba(244,121,32,0.15);
+}
+
+/* Badge "À venir" sur le carousel */
+.hero-card-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(244,121,32,0.9);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  backdrop-filter: blur(4px);
+}
+
+/* ============================================
+   FIN DU FICHIER
+   ============================================ */

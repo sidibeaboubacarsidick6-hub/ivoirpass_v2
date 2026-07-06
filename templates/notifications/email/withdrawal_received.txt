@@ -1,0 +1,10 @@
+Demande de reversement IvoirPass reçue
+
+Référence : {{ withdrawal_request.reference }}
+Montant   : {{ withdrawal_request.amount|floatformat:0 }} FCFA
+Méthode   : {{ withdrawal_request.get_payout_method_display }}
+Numéro    : {{ withdrawal_request.payout_phone }}
+
+Traitement sous 24-48h ouvrées.
+
+© {{ year }} IvoirPass

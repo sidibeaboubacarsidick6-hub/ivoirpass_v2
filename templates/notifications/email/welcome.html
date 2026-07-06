@@ -1,0 +1,47 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Bienvenue sur IvoirPass ! 🎉</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ user.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Votre compte IvoirPass a été créé avec succès. Vous faites maintenant
+  partie de la communauté culturelle ivoirienne !
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Email</span>
+    <span class="info-value">{{ user.email }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Rôle</span>
+    <span class="info-value">{{ user.get_role_display }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date d'inscription</span>
+    <span class="info-value">{{ user.date_joined|date:"d/m/Y" }}</span>
+  </div>
+</div>
+
+{% if user.is_organizer %}
+<p class="email-text">
+  En tant qu'<strong>organisateur</strong>, vous pouvez dès maintenant
+  créer vos événements et mettre en vente vos produits culturels.
+</p>
+{% else %}
+<p class="email-text">
+  Découvrez les événements et produits culturels disponibles sur notre plateforme.
+</p>
+{% endif %}
+
+<center>
+  <a href="{{ platform_url }}/evenements/" class="btn-cta">
+    🎟️ Découvrir les événements
+  </a>
+</center>
+
+{% endblock %}

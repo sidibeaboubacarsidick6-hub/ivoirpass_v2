@@ -1,0 +1,556 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ action }} un événement{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'events:my_events' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">
+        {% if action == 'Créer' %}
+          <i class="bi bi-plus-circle me-2 text-orange"></i>Créer un événement
+        {% else %}
+          <i class="bi bi-pencil me-2 text-green"></i>Modifier l'événement
+        {% endif %}
+      </h4>
+    </div>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="row g-4">
+
+      <!-- Colonne principale -->
+      <div class="col-lg-8">
+
+        <!-- Section : Informations de base -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-pencil me-2 text-green"></i>Informations générales
+          </h6>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.title.label }}</label>
+            {{ form.title }}
+            {% if form.title.errors %}
+              {% for error in form.title.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.subtitle.label }}</label>
+            {{ form.subtitle }}
+            {% if form.subtitle.errors %}
+              {% for error in form.subtitle.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.category.label }}</label>
+              {{ form.category }}
+              {% if form.category.errors %}
+                {% for error in form.category.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.event_type.label }}</label>
+              {{ form.event_type }}
+              {% if form.event_type.errors %}
+                {% for error in form.event_type.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.short_description.label }}</label>
+            {{ form.short_description }}
+            <div class="text-muted small mt-1">Affiché sur les cartes d'aperçu</div>
+            {% if form.short_description.errors %}
+              {% for error in form.short_description.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.description.label }}</label>
+            {{ form.description }}
+            {% if form.description.errors %}
+              {% for error in form.description.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">{{ form.tags.label }}</label>
+            {{ form.tags }}
+            {% if form.tags.errors %}
+              {% for error in form.tags.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Section : Dates -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-calendar3 me-2 text-green"></i>Dates et horaires
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.start_date.label }}</label>
+              {{ form.start_date }}
+              {% if form.start_date.errors %}
+                {% for error in form.start_date.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.end_date.label }}</label>
+              {{ form.end_date }}
+              {% if form.end_date.errors %}
+                {% for error in form.end_date.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">{{ form.doors_open.label }}</label>
+              {{ form.doors_open }}
+              {% if form.doors_open.errors %}
+                {% for error in form.doors_open.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">{{ form.sale_start.label }}</label>
+              {{ form.sale_start }}
+              {% if form.sale_start.errors %}
+                {% for error in form.sale_start.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">{{ form.sale_end.label }}</label>
+              {{ form.sale_end }}
+              {% if form.sale_end.errors %}
+                {% for error in form.sale_end.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Section : Lieu -->
+        <div class="ip-card p-4 mb-4" x-data="{ type: '{{ event.event_type|default:'physical' }}' }">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-geo-alt me-2 text-green"></i>Lieu
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.venue_name.label }}</label>
+              {{ form.venue_name }}
+              {% if form.venue_name.errors %}
+                {% for error in form.venue_name.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.venue_city.label }}</label>
+              {{ form.venue_city }}
+              {% if form.venue_city.errors %}
+                {% for error in form.venue_city.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">{{ form.venue_address.label }}</label>
+              {{ form.venue_address }}
+              {% if form.venue_address.errors %}
+                {% for error in form.venue_address.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">{{ form.online_link.label }}</label>
+              {{ form.online_link }}
+              {% if form.online_link.errors %}
+                {% for error in form.online_link.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Section : Médias -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-image me-2 text-green"></i>Médias
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.cover_image.label }}</label>
+              {% if event.cover_image %}
+                <div class="mb-2">
+                  <img src="{{ event.cover_image.url }}" class="rounded-2"
+                       style="max-height:100px;" />
+                </div>
+              {% endif %}
+              {{ form.cover_image }}
+              {% if form.cover_image.errors %}
+                {% for error in form.cover_image.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.thumbnail.label }}</label>
+              {{ form.thumbnail }}
+              {% if form.thumbnail.errors %}
+                {% for error in form.thumbnail.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">{{ form.video_url.label }}</label>
+              {{ form.video_url }}
+              {% if form.video_url.errors %}
+                {% for error in form.video_url.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Section types de tickets améliorée -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-ticket-perforated me-2 text-green"></i>
+            Types de tickets
+            <span class="text-muted fw-normal">(VIP, Standard, Early Bird...)</span>
+          </h6>
+
+          {{ formset.management_form }}
+
+          <div id="ticket-formset">
+            {% for ticket_form in formset %}
+            <div class="ticket-form border rounded-3 p-3 mb-3 bg-light position-relative">
+              {{ ticket_form.id }}
+
+              <!-- En-tête du ticket -->
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="fw-bold small text-green">
+                  <i class="bi bi-ticket me-1"></i>
+                  Ticket {% if forloop.first %}principal{% else %}{{ forloop.counter }}{% endif %}
+                </span>
+                {% if ticket_form.instance.pk %}
+                <div class="form-check form-check-inline">
+                  {{ ticket_form.DELETE }}
+                  <label class="form-check-label text-danger small">Supprimer</label>
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold">Nom du ticket *</label>
+                  {{ ticket_form.name }}
+                  <div class="text-muted" style="font-size:0.72rem;">
+                    Ex: VIP, VVIP, Standard, Early Bird, Étudiant
+                  </div>
+                  {% if ticket_form.name.errors %}
+                    {% for error in ticket_form.name.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Prix (FCFA) *</label>
+                  {{ ticket_form.price }}
+                  {% if ticket_form.price.errors %}
+                    {% for error in ticket_form.price.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Quantité</label>
+                  {{ ticket_form.quantity }}
+                  <div class="text-muted" style="font-size:0.72rem;">0 = illimité</div>
+                  {% if ticket_form.quantity.errors %}
+                    {% for error in ticket_form.quantity.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Max/commande</label>
+                  {{ ticket_form.max_per_order }}
+                  {% if ticket_form.max_per_order.errors %}
+                    {% for error in ticket_form.max_per_order.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Ordre</label>
+                  {{ ticket_form.order }}
+                  {% if ticket_form.order.errors %}
+                    {% for error in ticket_form.order.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-12">
+                  <label class="form-label small fw-semibold">Description</label>
+                  {{ ticket_form.description }}
+                  {% if ticket_form.description.errors %}
+                    {% for error in ticket_form.description.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold">Début vente</label>
+                  {{ ticket_form.sale_start }}
+                  {% if ticket_form.sale_start.errors %}
+                    {% for error in ticket_form.sale_start.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold">Fin vente</label>
+                  {{ ticket_form.sale_end }}
+                  {% if ticket_form.sale_end.errors %}
+                    {% for error in ticket_form.sale_end.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                  <div class="form-check">
+                    {{ ticket_form.is_visible }}
+                    <label class="form-check-label small">Visible publiquement</label>
+                  </div>
+                  {% if ticket_form.is_visible.errors %}
+                    {% for error in ticket_form.is_visible.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Bouton ajouter un ticket -->
+          <button type="button" class="btn btn-outline-success btn-sm mt-2"
+                  onclick="addTicketForm()">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter un type de ticket
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Colonne latérale : statut -->
+      <div class="col-lg-4">
+        <div class="ip-card p-4 sticky-top" style="top:80px;">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-sliders me-2 text-green"></i>Publication
+          </h6>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.status.label }}</label>
+            {{ form.status }}
+            <div class="text-muted small mt-1">
+              💡 Enregistrez en <strong>Brouillon</strong> pour continuer plus tard,
+              ou <strong>Publiez</strong> pour rendre visible.
+            </div>
+            {% if form.status.errors %}
+              {% for error in form.status.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <hr>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.total_capacity.label }}</label>
+            {{ form.total_capacity }}
+            {% if form.total_capacity.errors %}
+              {% for error in form.total_capacity.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <div class="mb-3 form-check">
+            {{ form.is_free }}
+            <label class="form-check-label small fw-semibold">{{ form.is_free.label }}</label>
+            {% if form.is_free.errors %}
+              {% for error in form.is_free.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <hr>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-orange btn-lg">
+              <i class="bi bi-check-lg me-2"></i>
+              {% if action == 'Créer' %}Créer l'événement{% else %}Enregistrer{% endif %}
+            </button>
+            <a href="{% url 'events:my_events' %}"
+               class="btn btn-outline-secondary">
+              Annuler
+            </a>
+          </div>
+
+          <!-- Bloc d'erreurs global amélioré -->
+          {% if form.errors or formset.errors %}
+          <div class="alert ip-alert alert-danger mt-3 mb-0">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Erreurs à corriger :</strong>
+            <ul class="mb-0 mt-1 small">
+              {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li>{{ field|title }} : {{ error }}</li>
+                {% endfor %}
+              {% endfor %}
+              {% for form_errors in formset.errors %}
+                {% for field, errors in form_errors.items %}
+                  {% for error in errors %}
+                  <li>Ticket — {{ field|title }} : {{ error }}</li>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addTicketForm() {
+  const formset   = document.getElementById('ticket-formset');
+  const totalForms = document.getElementById('id_ticket_types-TOTAL_FORMS');
+  const formCount  = parseInt(totalForms.value);
+
+  // Clone le premier formulaire
+  const firstForm  = formset.querySelector('.ticket-form');
+  const newForm    = firstForm.cloneNode(true);
+
+  // Met à jour les indices
+  newForm.innerHTML = newForm.innerHTML.replace(
+    /ticket_types-\d+/g,
+    `ticket_types-${formCount}`
+  );
+
+  // Vide les valeurs
+  newForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(el => {
+    el.value = '';
+  });
+
+  // Supprime le bouton "Supprimer" sur un nouveau formulaire
+  const deleteCheck = newForm.querySelector('[id*="DELETE"]');
+  if (deleteCheck) {
+    deleteCheck.closest('.form-check')?.remove();
+  }
+
+  formset.appendChild(newForm);
+  totalForms.value = formCount + 1;
+}
+</script>
+{% endblock %}

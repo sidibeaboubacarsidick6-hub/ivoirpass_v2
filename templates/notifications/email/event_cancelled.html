@@ -1,0 +1,51 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title" style="color:#dc3545;">
+  Événement annulé 😔
+</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ user.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Nous vous informons que l'événement suivant a été annulé :
+</p>
+
+<div class="info-box" style="background:#fff5f5; border-color:#dc3545;">
+  <div class="info-row">
+    <span class="info-label">Événement</span>
+    <span class="info-value">{{ event.title }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date prévue</span>
+    <span class="info-value">
+      {{ event.start_date|date:"d F Y à H\hi" }}
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Votre billet</span>
+    <span class="info-value">{{ ticket.ticket_number }}</span>
+  </div>
+</div>
+
+<p class="email-text">
+  <strong>Remboursement :</strong> Votre remboursement sera effectué
+  automatiquement dans un délai de <strong>5 à 7 jours ouvrés</strong>
+  sur votre moyen de paiement d'origine.
+</p>
+
+<p class="email-text">
+  Pour toute question, contactez-nous :
+  <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+</p>
+
+<center>
+  <a href="{{ platform_url }}/evenements/"
+     class="btn-cta btn-green">
+    Voir d'autres événements
+  </a>
+</center>
+
+{% endblock %}

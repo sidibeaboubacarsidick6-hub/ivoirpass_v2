@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Créer un espace organisateur{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid p-0">
+    <div class="row g-0 min-vh-100">
+
+        <!-- ===================== -->
+        <!-- PARTIE GAUCHE -->
+        <!-- ===================== -->
+        <div class="col-lg-6 d-none d-lg-flex bg-dark text-white position-relative overflow-hidden align-items-center justify-content-center">
+
+            <div class="position-absolute w-100 h-100 opacity-25">
+                <div class="position-absolute bg-white rounded-circle"
+                     style="width:300px;height:300px;filter:blur(90px);top:10%;left:10%;"></div>
+
+                <div class="position-absolute bg-warning rounded-circle"
+                     style="width:400px;height:400px;filter:blur(120px);bottom:10%;right:10%;"></div>
+            </div>
+
+            <div class="text-center position-relative px-5">
+
+                <h2 class="fw-bold mb-3">Créez votre espace organisateur</h2>
+
+                <p class="text-white-50">
+                    Organisez des événements, vendez des billets et gérez votre communauté.
+                </p>
+
+                <div class="d-flex justify-content-center gap-4 mt-4">
+                    <div class="text-center">
+                        <i class="fas fa-calendar-plus fa-2x"></i>
+                        <div class="small mt-2">Événements</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-chart-line fa-2x"></i>
+                        <div class="small mt-2">Statistiques</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-qrcode fa-2x"></i>
+                        <div class="small mt-2">Scans</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- ===================== -->
+        <!-- PARTIE DROITE -->
+        <!-- ===================== -->
+        <div class="col-lg-6 d-flex align-items-center justify-content-center">
+
+            <div class="w-100 px-4" style="max-width:600px;">
+
+                <div class="ip-card p-4 p-md-5">
+
+                    <!-- En-tête -->
+                    <div class="text-center mb-4">
+                        <div style="font-size:2rem; font-weight:900; margin-bottom:0.5rem;">
+                            <span style="color:#1a1a2e;">Ivoir</span><span style="color:#F47920;">Pass</span>
+                        </div>
+                        <h4 class="fw-bold mb-1">Créer mon espace organisateur</h4>
+                        <p class="text-muted small">Commencez à organiser vos événements</p>
+                    </div>
+
+                    <!-- FORMULAIRE ORGANISATEUR -->
+                    <form method="POST" action="{% url 'account_signup' %}">
+                        {% csrf_token %}
+                        
+                        <!-- Champ caché pour forcer le rôle organisateur -->
+                        <input type="hidden" name="role" value="organizer">
+
+                        <!-- Prénom + Nom -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                              <label class="form-label fw-semibold small">Prénom</label>
+                              <input type="text" name="first_name" class="form-control"
+                                     placeholder="Kouamé"
+                                     value="{{ form.first_name.value|default:'' }}"
+                                     required />
+                              {% if form.first_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.first_name.errors.0 }}</div>
+                              {% endif %}
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label fw-semibold small">Nom</label>
+                              <input type="text" name="last_name" class="form-control"
+                                     placeholder="Diallo"
+                                     value="{{ form.last_name.value|default:'' }}"
+                                     required />
+                              {% if form.last_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.last_name.errors.0 }}</div>
+                              {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="mb-3">
+                          <label class="form-label fw-semibold small">
+                            <i class="bi bi-envelope me-1 text-green"></i>Adresse email professionnelle
+                          </label>
+                          <input type="email" name="email" class="form-control"
+                                 placeholder="vous@exemple.com"
+                                 value="{{ form.email.value|default:'' }}"
+                                 autocomplete="email" required />
+                          {% if form.email.errors %}
+                            <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+                          {% endif %}
+                        </div>
+
+                        <!-- Téléphone -->
+                        <div class="mb-3">
+                          <label class="form-label fw-semibold small">
+                            <i class="bi bi-phone me-1 text-green"></i>Téléphone
+                            <span class="text-muted">(recommandé)</span>
+                          </label>
+                          <input type="tel" name="phone_number" class="form-control"
+                                 placeholder="+225 07 XX XX XX XX"
+                                 value="{{ form.phone_number.value|default:'' }}" />
+                          {% if form.phone_number.errors %}
+                            <div class="text-danger small mt-1">{{ form.phone_number.errors.0 }}</div>
+                          {% endif %}
+                        </div>
+
+                        <!-- Mot de passe -->
+                        <div class="mb-3" x-data="{ show: false }">
+                          <label class="form-label fw-semibold small">
+                            <i class="bi bi-lock me-1 text-green"></i>Mot de passe
+                          </label>
+                          <div class="input-group">
+                            <input :type="show ? 'text' : 'password'"
+                                   name="password1" class="form-control"
+                                   placeholder="Minimum 8 caractères"
+                                   autocomplete="new-password" required />
+                            <button type="button" class="btn btn-outline-secondary"
+                                    @click="show = !show" tabindex="-1">
+                              <i :class="show ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                            </button>
+                          </div>
+                          {% if form.password1.errors %}
+                            <div class="text-danger small mt-1">{{ form.password1.errors.0 }}</div>
+                          {% endif %}
+                        </div>
+
+                        <!-- Confirmation mot de passe -->
+                        <div class="mb-4" x-data="{ show: false }">
+                          <label class="form-label fw-semibold small">
+                            <i class="bi bi-lock-fill me-1 text-green"></i>Confirmer le mot de passe
+                          </label>
+                          <div class="input-group">
+                            <input :type="show ? 'text' : 'password'"
+                                   name="password2" class="form-control"
+                                   placeholder="Répétez votre mot de passe"
+                                   autocomplete="new-password" required />
+                            <button type="button" class="btn btn-outline-secondary"
+                                    @click="show = !show" tabindex="-1">
+                              <i :class="show ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                            </button>
+                          </div>
+                          {% if form.password2.errors %}
+                            <div class="text-danger small mt-1">{{ form.password2.errors.0 }}</div>
+                          {% endif %}
+                        </div>
+
+                        <!-- Erreurs globales -->
+                        {% if form.non_field_errors %}
+                          <div class="alert ip-alert alert-danger mb-3">
+                            {{ form.non_field_errors.0 }}
+                          </div>
+                        {% endif %}
+
+                        <!-- CGU -->
+                        <div class="mb-4 form-check">
+                          <input type="checkbox" class="form-check-input" id="cgu" required />
+                          <label class="form-check-label small text-muted" for="cgu">
+                            J'accepte les
+                            <a href="#" class="text-green">conditions d'utilisation</a>
+                            et la
+                            <a href="#" class="text-green">politique de confidentialité</a>
+                          </label>
+                        </div>
+
+                        <!-- Bouton -->
+                        <button type="submit" class="btn btn-orange btn-lg w-100 mb-3">
+                          <i class="bi bi-person-check me-2"></i>Créer mon espace organisateur
+                        </button>
+
+                    </form>
+
+                    <div class="text-center">
+                      <span class="text-muted small">Déjà un espace organisateur ?</span>
+                      <a href="{% url 'account_login' %}" class="fw-bold text-green ms-1">
+                        Se connecter
+                      </a>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

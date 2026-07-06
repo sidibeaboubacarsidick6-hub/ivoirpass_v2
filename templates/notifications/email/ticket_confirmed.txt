@@ -1,0 +1,16 @@
+Vos billets IvoirPass sont confirmés !
+
+Bonjour {{ order.buyer.get_short_name }},
+
+Commande : {{ order.order_number }}
+Montant  : {{ order.total|floatformat:0 }} FCFA
+
+Vos billets sont joints en PDF à cet email.
+
+{% for ticket in tickets %}
+- {{ ticket.event.title }} | {{ ticket.ticket_type.name }} | {{ ticket.ticket_number }}
+{% endfor %}
+
+Voir vos billets : {{ platform_url }}/billets/mes-billets/
+
+© {{ year }} IvoirPass

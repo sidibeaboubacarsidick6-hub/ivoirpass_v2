@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Commande confirmée — {{ order.order_number }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      {% if order.status == 'paid' %}
+
+      <!-- ✅ Succès -->
+      <div class="text-center mb-4">
+        <div style="width:90px; height:90px; border-radius:50%;
+                    background:linear-gradient(135deg,#1B7A3E,#28a857);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1.5rem; font-size:2.5rem;">
+          ✅
+        </div>
+        <h3 class="fw-bold text-green mb-1">Paiement confirmé !</h3>
+        <p class="text-muted mb-0">Commande <strong>{{ order.order_number }}</strong></p>
+      </div>
+
+      <!-- Email info -->
+      <div class="alert ip-alert alert-success mb-4">
+        <i class="bi bi-envelope-check me-2"></i>
+        Vos billets ont été envoyés à <strong>{{ order.email }}</strong>.
+        Vérifiez votre boîte email et vos spams.
+      </div>
+
+      <!-- Tickets avec téléchargement direct -->
+      {% for ticket in tickets %}
+      <div class="ip-card mb-3 overflow-hidden">
+
+        <!-- Header ticket -->
+        <div style="background:linear-gradient(135deg,#1a1a2e,#1B7A3E);
+                    padding:16px 20px;">
+          <div class="text-white fw-bold">{{ ticket.event.title }}</div>
+          <div style="color:rgba(255,255,255,0.7); font-size:0.82rem;">
+            <i class="bi bi-calendar3 me-1"></i>
+            {{ ticket.event.start_date|date:"d F Y — H\hi" }}
+            &nbsp;·&nbsp;
+            <i class="bi bi-geo-alt me-1"></i>
+            {{ ticket.event.venue_name|default:ticket.event.venue_city }}
+          </div>
+        </div>
+
+        <!-- Corps ticket -->
+        <div class="p-4">
+          <div class="row align-items-center">
+            <div class="col-8">
+              <div class="text-muted small mb-1">Type de billet</div>
+              <div class="fw-bold mb-2">{{ ticket.ticket_type.name }}</div>
+
+              <div class="text-muted small mb-1">Acheteur</div>
+              <div class="fw-semibold small mb-3">{{ order.buyer_name }}</div>
+
+              <div class="text-muted small mb-1" style="font-family:monospace; font-size:0.78rem;">
+                {{ ticket.ticket_number }}
+              </div>
+
+              <!-- Badge statut -->
+              <span class="badge bg-success mt-1 px-3">
+                <i class="bi bi-check-circle me-1"></i>Valide
+              </span>
+            </div>
+
+            <!-- QR Code -->
+            <div class="col-4 text-center">
+              {% if ticket.qr_code_image %}
+                <img src="{{ ticket.qr_code_image.url }}"
+                     width="110" height="110"
+                     class="rounded-3 border border-2 border-success" />
+              {% else %}
+                <div style="width:110px; height:110px; border-radius:12px;
+                            background:#f0f7f3; display:flex; align-items:center;
+                            justify-content:center; border:2px dashed #1B7A3E;">
+                  <i class="bi bi-qr-code" style="font-size:2.5rem; color:#1B7A3E;"></i>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Pied ticket — bouton téléchargement -->
+        <div style="background:#f8f9fa; padding:14px 20px;
+                    border-top:2px dashed #dee2e6;">
+          <a href="{% url 'tickets:guest_download_pdf' ticket.ticket_number %}"
+             class="btn btn-green w-100 py-2"
+             style="font-weight:700;">
+            <i class="bi bi-download me-2"></i>
+            Télécharger mon billet en PDF
+          </a>
+          <p class="text-muted text-center mt-2 mb-0" style="font-size:0.75rem;">
+            <i class="bi bi-phone me-1"></i>
+            Présentez le QR Code à l'entrée — aucune impression nécessaire
+          </p>
+        </div>
+
+      </div>
+      {% endfor %}
+
+      {% else %}
+
+      <!-- ⏳ En attente -->
+      <div class="ip-card p-5 text-center">
+        <div style="font-size:3.5rem; margin-bottom:1rem;">⏳</div>
+        <h4 class="fw-bold mb-2">Paiement en cours de vérification</h4>
+        <p class="text-muted mb-4">
+          Commande <strong>{{ order.order_number }}</strong><br>
+          Si votre paiement a été effectué, vous recevrez vos billets
+          par email dans quelques minutes à
+          <strong>{{ order.email }}</strong>.
+        </p>
+        <p class="text-muted small">
+          Pensez à vérifier vos spams.
+        </p>
+      </div>
+
+      {% endif %}
+
+      <!-- Retour accueil -->
+      <div class="text-center mt-4">
+        <a href="{% url 'events:list' %}" class="btn btn-outline-secondary px-4 me-2">
+          <i class="bi bi-calendar-event me-1"></i>Voir d'autres événements
+        </a>
+        <a href="{% url 'home' %}" class="btn btn-outline-secondary px-4">
+          <i class="bi bi-house me-1"></i>Accueil
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

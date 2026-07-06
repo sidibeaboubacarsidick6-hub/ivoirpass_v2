@@ -1,0 +1,45 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Reversement effectué ! ✅</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ user.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Votre reversement a été effectué avec succès sur votre compte
+  <strong>{{ withdrawal_request.get_payout_method_display }}</strong>.
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Référence</span>
+    <span class="info-value">{{ withdrawal_request.reference }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Montant reversé</span>
+    <span class="info-value amount-big">
+      {{ withdrawal_request.amount|floatformat:0 }} FCFA
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Numéro</span>
+    <span class="info-value">{{ withdrawal_request.payout_phone }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Traité le</span>
+    <span class="info-value">
+      {{ withdrawal_request.processed_at|date:"d/m/Y H:i" }}
+    </span>
+  </div>
+</div>
+
+<center>
+  <a href="{{ platform_url }}/dashboard/wallet/"
+     class="btn-cta btn-green">
+    Voir mon wallet
+  </a>
+</center>
+
+{% endblock %}

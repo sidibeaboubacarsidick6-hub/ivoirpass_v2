@@ -1,0 +1,506 @@
+{% extends 'base.html' %}
+{% block title %}Scanner — {{ event.title }}{% endblock %}
+
+{% block extra_css %}
+<!-- ZXing : bibliothèque de scan QR via caméra -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+
+<style>
+/* Styles spécifiques à la page de scan */
+body { background: #0d0d0d; }
+
+.scan-container {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+#video-preview {
+  width: 100%;
+  border-radius: 16px;
+  border: 3px solid #1B7A3E;
+  background: #000;
+  display: block;
+}
+
+.scan-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+/* Cadre de visée animé */
+.scan-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px; height: 200px;
+}
+
+.scan-frame::before,
+.scan-frame::after,
+.scan-frame-inner::before,
+.scan-frame-inner::after {
+  content: '';
+  position: absolute;
+  width: 30px; height: 30px;
+  border-color: #F47920;
+  border-style: solid;
+}
+.scan-frame::before       { top:0; left:0;  border-width:3px 0 0 3px; }
+.scan-frame::after        { top:0; right:0; border-width:3px 3px 0 0; }
+.scan-frame-inner::before { bottom:0; left:0;  border-width:0 0 3px 3px; }
+.scan-frame-inner::after  { bottom:0; right:0; border-width:0 3px 3px 0; }
+
+/* Ligne de scan animée */
+.scan-line {
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #F47920, transparent);
+  animation: scanLine 2s linear infinite;
+}
+
+@keyframes scanLine {
+  0%   { top: 10%; }
+  100% { top: 90%; }
+}
+
+/* Résultat flash */
+.result-flash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: flashIn 0.2s ease;
+}
+
+@keyframes flashIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Compteurs en temps réel */
+.counter-bar {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header compact -->
+<div style="background:#1a1a2e; padding:12px 0; border-bottom:2px solid #F47920;">
+  <div class="container d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-2">
+      <a href="{% url 'scanner:index' %}" style="color:rgba(255,255,255,0.6);">
+        <i class="bi bi-arrow-left fs-5"></i>
+      </a>
+      <div>
+        <div class="text-white fw-bold small">{{ event.title|truncatechars:30 }}</div>
+        <div style="color:rgba(255,255,255,0.5); font-size:0.75rem;">
+          Contrôle d'accès
+        </div>
+      </div>
+    </div>
+    <a href="{% url 'scanner:history' event.pk %}"
+       style="color:rgba(255,255,255,0.7); font-size:0.85rem;">
+      <i class="bi bi-clock-history me-1"></i>Historique
+    </a>
+  </div>
+</div>
+
+<div style="background:#0d0d0d; min-height:100vh; padding:20px 0;">
+  <div class="container">
+
+    <!-- Compteurs temps réel -->
+    <div class="counter-bar mb-4 d-flex justify-content-between align-items-center">
+      <div class="text-center">
+        <div id="count-total"
+             style="font-size:1.6rem; font-weight:900; color:white;">
+          {{ session.total_scanned }}
+        </div>
+        <div style="font-size:0.72rem; color:rgba(255,255,255,0.5);">
+          Total
+        </div>
+      </div>
+      <div class="text-center">
+        <div id="count-valid"
+             style="font-size:1.6rem; font-weight:900; color:#28a857;">
+          {{ session.total_valid }}
+        </div>
+        <div style="font-size:0.72rem; color:rgba(255,255,255,0.5);">
+          Valides
+        </div>
+      </div>
+      <div class="text-center">
+        <div id="count-rejected"
+             style="font-size:1.6rem; font-weight:900; color:#dc3545;">
+          {{ session.total_rejected }}
+        </div>
+        <div style="font-size:0.72rem; color:rgba(255,255,255,0.5);">
+          Rejetés
+        </div>
+      </div>
+      <div>
+        <button id="toggle-btn" onclick="toggleScanner()"
+                class="btn btn-orange btn-sm">
+          <i class="bi bi-camera-video" id="toggle-icon"></i>
+          <span id="toggle-text">Démarrer</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Zone vidéo -->
+    <div class="scan-container mb-4">
+      <video id="video-preview" autoplay muted playsinline></video>
+      <div class="scan-overlay">
+        <div class="scan-frame">
+          <div class="scan-frame-inner"></div>
+          <div class="scan-line" id="scan-line"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sélection caméra -->
+    <div class="mb-4 text-center">
+      <select id="camera-select"
+              class="form-select form-select-sm"
+              style="background:#1a1a2e; color:white; border-color:#333;
+                     max-width:300px; margin:auto;">
+        <option>Chargement des caméras...</option>
+      </select>
+    </div>
+
+    <!-- Scan manuel (si caméra indisponible) -->
+    <div class="ip-card p-4 mb-4"
+         style="background:#1a1a2e; border-color:#333;">
+      <h6 class="text-white fw-bold mb-3 small">
+        <i class="bi bi-keyboard me-2 text-orange"></i>
+        Saisie manuelle du code
+      </h6>
+      <div class="input-group">
+        <input type="text" id="manual-input"
+               class="form-control"
+               style="background:#111; color:white; border-color:#333;"
+               placeholder="Coller le code QR ici..." />
+        <button class="btn btn-orange" onclick="submitManual()">
+          <i class="bi bi-check-lg"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Derniers scans -->
+    <div style="background:#1a1a2e; border-radius:12px; overflow:hidden;">
+      <div style="padding:12px 16px; border-bottom:1px solid #333;">
+        <span class="text-white fw-bold small">
+          <i class="bi bi-clock-history me-1 text-orange"></i>
+          Derniers scans
+        </span>
+      </div>
+      <div id="recent-scans">
+        {% for log in recent_logs %}
+        <div class="scan-log-item" style="padding:10px 16px; border-bottom:1px solid #1a1a2a;">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              {% if log.ticket %}
+              <div style="color:white; font-size:0.85rem; font-weight:600;">
+                {{ log.ticket.buyer.get_full_name }}
+              </div>
+              <div style="color:rgba(255,255,255,0.4); font-size:0.75rem;">
+                {{ log.ticket.ticket_type.name }} —
+                {{ log.ticket.ticket_number }}
+              </div>
+              {% else %}
+              <div style="color:rgba(255,255,255,0.5); font-size:0.85rem;">
+                QR inconnu
+              </div>
+              {% endif %}
+            </div>
+            <div class="text-end">
+              <span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; font-weight:700;
+                           background:{% if log.result == 'valid' %}#1B7A3E{% else %}#dc3545{% endif %};
+                           color:white;">
+                {% if log.result == 'valid' %}✅{% else %}❌{% endif %}
+              </span>
+              <div style="color:rgba(255,255,255,0.3); font-size:0.7rem; margin-top:2px;">
+                {{ log.scanned_at|date:"H:i:s" }}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div style="padding:20px; text-align:center; color:rgba(255,255,255,0.3); font-size:0.85rem;">
+          Aucun scan pour le moment
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Overlay résultat (affiché après chaque scan) -->
+<div id="result-overlay" class="result-flash" style="display:none;">
+  <div id="result-icon" style="font-size:5rem; margin-bottom:1rem;"></div>
+  <div id="result-message"
+       style="font-size:1.4rem; font-weight:900; color:white;
+              text-align:center; padding:0 2rem;"></div>
+  <div id="result-detail"
+       style="color:rgba(255,255,255,0.7); font-size:0.9rem;
+              text-align:center; margin-top:0.5rem; padding:0 2rem;"></div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const EVENT_ID   = {{ event.pk }};
+const SESSION_ID = {{ session.pk }};
+const CSRF_TOKEN = "{{ csrf_token }}";
+const VALIDATE_URL = "{% url 'scanner:validate_qr' %}";
+
+let codeReader  = null;
+let isScanning  = false;
+let lastScanned = '';
+let lastScanTime = 0;
+
+// ============================================
+// INITIALISATION ZXING
+// ============================================
+async function initScanner() {
+  codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+
+  try {
+    const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+    const select  = document.getElementById('camera-select');
+    select.innerHTML = '';
+
+    devices.forEach((device, i) => {
+      const opt    = document.createElement('option');
+      opt.value    = device.deviceId;
+      opt.text     = device.label || `Caméra ${i + 1}`;
+      // Préfère la caméra arrière
+      if (device.label.toLowerCase().includes('back') ||
+          device.label.toLowerCase().includes('arrière') ||
+          device.label.toLowerCase().includes('rear')) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+
+    if (devices.length === 0) {
+      select.innerHTML = '<option>Aucune caméra détectée</option>';
+    }
+  } catch(e) {
+    console.error('Erreur caméras:', e);
+  }
+}
+
+// ============================================
+// DÉMARRER / ARRÊTER LE SCAN
+// ============================================
+async function toggleScanner() {
+  if (isScanning) {
+    stopScanner();
+  } else {
+    startScanner();
+  }
+}
+
+async function startScanner() {
+  const deviceId = document.getElementById('camera-select').value;
+  const video    = document.getElementById('video-preview');
+
+  try {
+    await codeReader.decodeFromVideoDevice(
+      deviceId || undefined,
+      video,
+      (result, err) => {
+        if (result) {
+          const now  = Date.now();
+          const text = result.getText();
+          // Anti-doublon : ignore le même QR dans les 3 secondes
+          if (text !== lastScanned || (now - lastScanTime) > 3000) {
+            lastScanned  = text;
+            lastScanTime = now;
+            validateQR(text);
+          }
+        }
+      }
+    );
+
+    isScanning = true;
+    document.getElementById('toggle-text').textContent = 'Arrêter';
+    document.getElementById('toggle-icon').className   = 'bi bi-stop-circle';
+    document.getElementById('scan-line').style.display = 'block';
+
+  } catch(e) {
+    console.error('Erreur démarrage scan:', e);
+    showResult('red', '⚠️', 'Impossible d\'accéder à la caméra', e.message);
+  }
+}
+
+function stopScanner() {
+  if (codeReader) {
+    codeReader.reset();
+  }
+  isScanning = false;
+  document.getElementById('toggle-text').textContent = 'Démarrer';
+  document.getElementById('toggle-icon').className   = 'bi bi-camera-video';
+  document.getElementById('scan-line').style.display = 'none';
+}
+
+// ============================================
+// VALIDATION DU QR CODE
+// ============================================
+async function validateQR(qrData) {
+  try {
+    const res = await fetch(VALIDATE_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken':  CSRF_TOKEN,
+      },
+      body: JSON.stringify({
+        qr_data:    qrData,
+        event_id:   EVENT_ID,
+        session_id: SESSION_ID,
+      })
+    });
+
+    const data = await res.json();
+    handleResult(data);
+
+  } catch(e) {
+    showResult('red', '⚠️', 'Erreur réseau', 'Vérifiez votre connexion.');
+  }
+}
+
+// ============================================
+// AFFICHAGE DU RÉSULTAT
+// ============================================
+function handleResult(data) {
+  const colorMap = {
+    'green':  { bg: '#0d3d1a', icon: '✅' },
+    'red':    { bg: '#3d0d0d', icon: '❌' },
+    'orange': { bg: '#3d2500', icon: '⚠️' },
+  };
+
+  const cfg    = colorMap[data.color] || colorMap['red'];
+  const detail = data.ticket_info
+    ? `${data.ticket_info.buyer_name} — ${data.ticket_info.ticket_type}`
+    : '';
+
+  showResult(cfg.bg, cfg.icon, data.message, detail);
+
+  // Met à jour les compteurs
+  if (data.session) {
+    document.getElementById('count-total').textContent    = data.session.total_scanned;
+    document.getElementById('count-valid').textContent    = data.session.total_valid;
+    document.getElementById('count-rejected').textContent = data.session.total_rejected;
+  }
+
+  // Ajoute dans la liste des scans récents
+  addToRecentScans(data);
+
+  // Vibration (mobile)
+  if (navigator.vibrate) {
+    navigator.vibrate(data.color === 'green' ? [100] : [100, 50, 100]);
+  }
+}
+
+function showResult(bgColor, icon, message, detail) {
+  const overlay = document.getElementById('result-overlay');
+
+  overlay.style.background  = bgColor;
+  document.getElementById('result-icon').textContent    = icon;
+  document.getElementById('result-message').textContent = message;
+  document.getElementById('result-detail').textContent  = detail || '';
+
+  overlay.style.display = 'flex';
+
+  // Masque après 2.5 secondes
+  setTimeout(() => {
+    overlay.style.display = 'none';
+  }, 2500);
+}
+
+function addToRecentScans(data) {
+  const container = document.getElementById('recent-scans');
+  const time      = new Date().toLocaleTimeString('fr-FR');
+  const isValid   = data.color === 'green';
+
+  const info = data.ticket_info
+    ? `<div style="color:white;font-size:0.85rem;font-weight:600;">
+         ${data.ticket_info.buyer_name}
+       </div>
+       <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;">
+         ${data.ticket_info.ticket_type}
+       </div>`
+    : `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem;">
+         ${data.message}
+       </div>`;
+
+  const div = document.createElement('div');
+  div.style.cssText = 'padding:10px 16px; border-bottom:1px solid #1a1a2a;';
+  div.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center">
+      <div>${info}</div>
+      <div class="text-end">
+        <span style="font-size:0.75rem;padding:2px 8px;border-radius:12px;
+                     font-weight:700;
+                     background:${isValid ? '#1B7A3E' : '#dc3545'};
+                     color:white;">
+          ${isValid ? '✅' : '❌'}
+        </span>
+        <div style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:2px;">
+          ${time}
+        </div>
+      </div>
+    </div>`;
+
+  // Insère en tête de liste
+  if (container.firstChild) {
+    container.insertBefore(div, container.firstChild);
+  } else {
+    container.appendChild(div);
+  }
+
+  // Garde seulement les 20 derniers
+  while (container.children.length > 20) {
+    container.removeChild(container.lastChild);
+  }
+}
+
+// ============================================
+// SAISIE MANUELLE
+// ============================================
+function submitManual() {
+  const input = document.getElementById('manual-input');
+  const value = input.value.trim();
+  if (value) {
+    validateQR(value);
+    input.value = '';
+  }
+}
+
+document.getElementById('manual-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitManual();
+});
+
+// ============================================
+// DÉMARRAGE
+// ============================================
+initScanner();
+</script>
+{% endblock %}

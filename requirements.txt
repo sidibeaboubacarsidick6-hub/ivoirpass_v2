@@ -1,50 +1,61 @@
-# Framework principal
-Django==4.2.16
-djangorestframework==3.15.2
-
-# Base de données
-psycopg2-binary==2.9.9
-
-# Variables d'environnement
-python-decouple==3.8
-dj-database-url==2.1.0
-
-# Authentification avancée
-djangorestframework-simplejwt==5.3.1
-django-allauth==64.2.1
-
-# QR Code
-qrcode[pil]==7.4.2
-Pillow==10.4.0
-
-# Cache Redis
-django-redis==5.4.0
-redis==5.0.8
-
-# API et utilitaires
-django-cors-headers==4.4.0
-django-filter==24.3
-django-storages==1.14.4
-
-# Formulaires Bootstrap
-django-crispy-forms==2.3
-crispy-bootstrap5==2024.2
-
-# Traitement des images
-Pillow==10.4.0
-
-# Gestion des tâches asynchrones
+amqp==5.3.1
+asgiref==3.11.1
+billiard==4.2.4
 celery==5.4.0
-
-# Sécurité
-django-ratelimit==4.1.0
-
-# Développement
+certifi==2026.6.17
+cffi==2.0.0
+chardet==7.4.3
+charset-normalizer==3.4.7
+click==8.4.1
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.3.0
+coverage==7.14.3
+crispy-bootstrap5==2024.2
+cryptography==49.0.0
+dj-database-url==2.1.0
+Django==4.2.16
+django-allauth==64.2.1
+django-anymail==10.3
+django-cors-headers==4.4.0
+django-crispy-forms==2.3
 django-extensions==3.2.3
-
-# Tests
-pytest-django==4.9.0
-factory-boy==3.3.1
-
-# Exports
+django-filter==24.3
+django-ratelimit==4.1.0
+django-redis==5.4.0
+django-storages==1.14.4
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+et_xmlfile==2.0.0
+factory_boy==3.3.1
+Faker==40.23.0
+idna==3.18
+iniconfig==2.3.0
+kombu==5.6.2
+oauthlib==3.3.1
 openpyxl==3.1.5
+packaging==26.2
+pillow==10.4.0
+pluggy==1.6.0
+prompt_toolkit==3.0.52
+psycopg2-binary==2.9.9
+pycparser==3.0
+Pygments==2.20.0
+PyJWT==2.13.0
+pypng==0.20220715.0
+pytest==9.1.1
+pytest-django==4.9.0
+python-dateutil==2.9.0.post0
+python-decouple==3.8
+qrcode==7.4.2
+redis==5.0.8
+reportlab==4.2.2
+requests==2.34.2
+requests-oauthlib==2.0.0
+six==1.17.0
+sqlparse==0.5.5
+typing_extensions==4.15.0
+tzdata==2026.2
+urllib3==2.7.0
+vine==5.1.0
+wcwidth==0.8.1

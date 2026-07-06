@@ -1,0 +1,98 @@
+{% extends 'dashboard/base_dashboard.html' %}
+{% load static %}
+{% block title %}Livraisons à faire — IvoirPass{% endblock %}
+
+{% block dashboard_content %}
+<div style="padding:2rem;">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">
+      <i class="bi bi-truck me-2 text-orange"></i>Commandes physiques à traiter
+    </h4>
+    <a href="{% url 'store:my_products' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Retour
+    </a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#F47920;">{{ stats.pending }}</div>
+        <div class="text-muted small">À préparer</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#0dcaf0;">{{ stats.shipped }}</div>
+        <div class="text-muted small">Expédiées</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">{{ stats.delivered }}</div>
+        <div class="text-muted small">Livrées</div>
+      </div>
+    </div>
+  </div>
+
+  {% if all_orders %}
+    {% for item in all_orders %}
+    <div class="ip-card p-4 mb-3">
+      <div class="row align-items-center">
+        <div class="col-md-3">
+          <div class="fw-bold">{{ item.order.product.name|truncatechars:30 }}</div>
+          <div class="text-muted small">{{ item.order.order_number }}</div>
+          {% if item.type == 'guest' %}
+            <span class="badge bg-secondary" style="font-size:0.68rem;">Sans compte</span>
+          {% endif %}
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted small">Client</div>
+          <div class="fw-semibold small">{{ item.buyer_name }}</div>
+          <div class="text-muted small">{{ item.buyer_phone|default:"—" }}</div>
+        </div>
+        <div class="col-md-2">
+          {% if item.order.status == 'paid' %}
+            <span class="badge bg-warning text-dark">À préparer</span>
+          {% elif item.order.status == 'shipped' %}
+            <span class="badge bg-info">Expédiée</span>
+            {% if item.order.tracking_number %}
+            <div class="text-muted small mt-1">{{ item.order.tracking_number }}</div>
+            {% endif %}
+          {% elif item.order.status == 'delivered' %}
+            <span class="badge bg-success">Livrée</span>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          {% if item.order.status == 'paid' %}
+          <form method="POST"
+                action="{% url 'dashboard:mark_shipped' item.type item.order.pk %}"
+                class="d-flex gap-2">
+            {% csrf_token %}
+            <input type="text" name="tracking_number"
+                   class="form-control form-control-sm"
+                   placeholder="N° de suivi (optionnel)" />
+            <button type="submit" class="btn btn-green btn-sm">
+              <i class="bi bi-truck me-1"></i>Expédier
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-2 pt-2 border-top text-muted small">
+        <i class="bi bi-geo-alt me-1"></i>
+        {{ item.order.delivery_address|default:"—" }}, {{ item.order.delivery_city|default:"—" }}
+        {% if item.order.delivery_commune %}, {{ item.order.delivery_commune }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-check-circle" style="font-size:4rem; color:#1B7A3E;"></i>
+    <h5 class="mt-3">Aucune livraison à effectuer</h5>
+    <p class="text-muted">Toutes vos commandes physiques ont été livrées.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

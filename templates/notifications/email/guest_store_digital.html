@@ -1,0 +1,24 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+<h1 class="email-title">Vos téléchargements sont prêts ! 💾</h1>
+<p class="email-text">Bonjour <strong>{{ order.buyer_name }}</strong>,</p>
+<div class="info-box">
+  <div class="info-row"><span class="info-label">Commande</span><span class="info-value">{{ order.order_number }}</span></div>
+  <div class="info-row"><span class="info-label">Produit</span><span class="info-value">{{ order.product.name }}</span></div>
+  <div class="info-row"><span class="info-label">Total</span><span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span></div>
+</div>
+{% for item in links_with_urls %}
+<div style="margin-bottom:14px;">
+  <a href="{{ item.url }}" class="btn-cta btn-green" style="display:inline-block;">
+    ⬇️ Télécharger ({{ item.link.downloads_remaining }} fois restantes)
+  </a>
+  <div style="font-size:11px; color:#6c757d; margin-top:6px;">
+    Expire le {{ item.link.expires_at|date:"d/m/Y à H:i" }}
+  </div>
+</div>
+{% endfor %}
+<p class="email-text" style="font-size:13px; color:#6c757d;">
+  💡 Vous pouvez racheter ce produit autant de fois que vous le souhaitez —
+  chaque commande génère ses propres liens de téléchargement.
+</p>
+{% endblock %}

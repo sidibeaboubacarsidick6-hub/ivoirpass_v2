@@ -1,7 +1,25 @@
+"""
+IvoirPass V2 — URLs du Scanner
+"""
 from django.urls import path
+from . import views
 
 app_name = 'scanner'
 
 urlpatterns = [
-    # URLs de l'app scanner - à compléter dans les phases suivantes
+    # Accueil scanner
+    path('',
+         views.scanner_index, name='index'),
+
+    # Interface de scan d'un événement
+    path('evenement/<int:event_id>/',
+         views.scan_event, name='scan_event'),
+
+    # API de validation QR (appelée par le JS)
+    path('valider/',
+         views.validate_qr, name='validate_qr'),
+
+    # Historique des scans
+    path('evenement/<int:event_id>/historique/',
+         views.scan_history, name='history'),
 ]

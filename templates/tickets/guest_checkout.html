@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Acheter — {{ event.title }}{% endblock %}
+
+{% block content %}
+
+<!-- Hero événement -->
+<div style="background:{% if event.cover_image %}url('{{ event.cover_image.url }}') center/cover{% else %}linear-gradient(135deg,#1a1a2e,#1B7A3E){% endif %};
+            height:280px; position:relative;">
+  <div style="position:absolute; inset:0; background:rgba(0,0,0,0.6);"></div>
+  <div class="container h-100 d-flex align-items-end pb-4" style="position:relative;">
+    <div class="text-white">
+      <h2 class="fw-bold mb-1">{{ event.title }}</h2>
+      <div style="color:rgba(255,255,255,0.8); font-size:0.9rem;">
+        <i class="bi bi-calendar3 me-2 text-orange"></i>{{ event.start_date|date:"d F Y — H\hi" }}
+        <span class="mx-2">·</span>
+        <i class="bi bi-geo-alt me-1 text-orange"></i>{{ event.venue_name|default:event.venue_city }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container py-5">
+  <div class="row g-4 justify-content-center">
+
+    <!-- Formulaire achat -->
+    <div class="col-lg-7">
+      <form method="POST" action="{% url 'tickets:guest_checkout' event.slug %}">
+        {% csrf_token %}
+
+        <!-- Infos acheteur -->
+        <div class="ip-card p-4 mb-4">
+          <h5 class="fw-bold mb-4">
+            <i class="bi bi-person me-2 text-green"></i>Vos informations
+          </h5>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Prénom *</label>
+              <input type="text" name="first_name"
+                     class="form-control form-control-lg"
+                     placeholder="Kouamé" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Nom *</label>
+              <input type="text" name="last_name"
+                     class="form-control form-control-lg"
+                     placeholder="Diallo" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Email *</label>
+              <input type="email" name="email"
+                     class="form-control form-control-lg"
+                     placeholder="vous@exemple.com" required />
+              <div class="text-muted small mt-1">
+                <i class="bi bi-info-circle me-1"></i>
+                Vos billets seront envoyés à cette adresse
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">
+                Téléphone <span class="text-muted">(optionnel)</span>
+              </label>
+              <input type="tel" name="phone"
+                     class="form-control form-control-lg"
+                     placeholder="+225 07 XX XX XX XX" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Sélection tickets -->
+        <div class="ip-card p-4 mb-4">
+          <h5 class="fw-bold mb-4">
+            <i class="bi bi-ticket-perforated me-2 text-orange"></i>
+            Choisissez vos billets
+          </h5>
+
+          {% for tt in ticket_types %}
+          <div class="border rounded-3 p-3 mb-3
+                      {% if tt.is_sold_out %}opacity-50{% endif %}">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <div class="fw-bold">{{ tt.name }}</div>
+                {% if tt.description %}
+                  <div class="text-muted small mb-1">{{ tt.description }}</div>
+                {% endif %}
+                {% if tt.remaining is not None %}
+                  <div class="small">
+                    {% if tt.is_sold_out %}
+                      <span class="text-danger">Épuisé</span>
+                    {% else %}
+                      <span class="text-muted">{{ tt.remaining }} place{{ tt.remaining|pluralize }} restante{{ tt.remaining|pluralize }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="text-end ms-3">
+                <div class="fw-bold text-green fs-6 mb-2">
+                  {% if tt.is_free %}Gratuit{% else %}{{ tt.price|floatformat:0 }} FCFA{% endif %}
+                </div>
+                {% if not tt.is_sold_out %}
+                <select name="quantity_{{ tt.pk }}"
+                        class="form-select form-select-sm"
+                        style="width:80px;">
+                  <option value="0">0</option>
+                  {% for i in "12345" %}
+                    {% if forloop.counter <= tt.max_per_order %}
+                    <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="text-muted">Aucun billet disponible pour le moment.</p>
+          {% endfor %}
+        </div>
+
+        <!-- Bouton payer -->
+        <button type="submit" class="btn btn-orange btn-lg w-100 py-3"
+                style="font-size:1.1rem; font-weight:700;">
+          <i class="bi bi-lock me-2"></i>
+          Procéder au paiement via PayDunya
+        </button>
+
+        <p class="text-muted small text-center mt-3">
+          <i class="bi bi-shield-check me-1 text-green"></i>
+          Paiement 100% sécurisé — Wave, Orange Money, MTN MoMo, Carte Bancaire
+          <br>
+          <i class="bi bi-envelope me-1"></i>
+          Vos billets vous seront envoyés par email immédiatement après paiement.
+          <strong>Aucun compte requis.</strong>
+        </p>
+
+      </form>
+    </div>
+
+    <!-- Sidebar résumé -->
+    <div class="col-lg-4">
+      <div class="ip-card p-4 sticky-top" style="top:80px;">
+        <h6 class="fw-bold mb-3 small text-uppercase text-muted">Récapitulatif</h6>
+        {% if event.cover_image %}
+          <img src="{{ event.cover_image.url }}" class="rounded-3 w-100 mb-3"
+               style="height:120px; object-fit:cover;" />
+        {% endif %}
+        <div class="fw-bold mb-1">{{ event.title }}</div>
+        <div class="text-orange small mb-1">
+          <i class="bi bi-calendar3 me-1"></i>{{ event.start_date|date:"d M Y" }}
+        </div>
+        <div class="text-muted small mb-3">
+          <i class="bi bi-geo-alt me-1"></i>{{ event.venue_name|default:event.venue_city }}
+        </div>
+        <hr>
+        <div class="text-muted small text-center">
+          Le total sera calculé selon votre sélection de billets.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

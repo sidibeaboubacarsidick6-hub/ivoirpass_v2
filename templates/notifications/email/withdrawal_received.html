@@ -1,0 +1,61 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Demande de reversement reçue 💸</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ user.get_short_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Nous avons bien reçu votre demande de reversement.
+  Elle sera traitée dans un délai de <strong>24 à 48 heures ouvrées</strong>.
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Référence</span>
+    <span class="info-value">{{ withdrawal_request.reference }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Montant demandé</span>
+    <span class="info-value amount-big">
+      {{ withdrawal_request.amount|floatformat:0 }} FCFA
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Méthode</span>
+    <span class="info-value">
+      {{ withdrawal_request.get_payout_method_display }}
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Numéro</span>
+    <span class="info-value">{{ withdrawal_request.payout_phone }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Bénéficiaire</span>
+    <span class="info-value">{{ withdrawal_request.payout_name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date de demande</span>
+    <span class="info-value">
+      {{ withdrawal_request.created_at|date:"d/m/Y H:i" }}
+    </span>
+  </div>
+</div>
+
+<p class="email-text" style="color:#6c757d; font-size:13px;">
+  En cas de problème, contactez-nous à
+  <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+  en mentionnant votre référence.
+</p>
+
+<center>
+  <a href="{{ platform_url }}/dashboard/wallet/"
+     class="btn-cta btn-green">
+    Voir mon wallet
+  </a>
+</center>
+
+{% endblock %}

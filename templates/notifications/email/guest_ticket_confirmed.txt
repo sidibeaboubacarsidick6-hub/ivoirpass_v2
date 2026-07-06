@@ -1,0 +1,16 @@
+Vos billets IvoirPass
+
+Bonjour {{ buyer_name }},
+
+Commande : {{ order.order_number }}
+Total    : {{ order.total|floatformat:0 }} FCFA
+
+Vos billets :
+{% for ticket in tickets %}
+- {{ ticket.event.title }} | {{ ticket.ticket_type.name }} | {{ ticket.ticket_number }}
+{% endfor %}
+
+Vos billets PDF sont joints à cet email.
+Présentez le QR Code à l'entrée.
+
+© {{ year }} IvoirPass

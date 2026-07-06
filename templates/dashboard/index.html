@@ -1,0 +1,415 @@
+{% extends 'dashboard/base_dashboard.html' %}
+{% load static %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="padding:2rem;">
+
+  <!-- En-tête -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h4 class="fw-bold mb-0">Bonjour, {{ user.display_name }} 👋</h4>
+      <p class="text-muted small mb-0">
+        Voici un aperçu de votre activité sur IvoirPass
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'events:create' %}" class="btn btn-orange">
+        <i class="bi bi-plus-lg me-1"></i>Nouvel événement
+      </a>
+      <a href="{% url 'store:product_create' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-bag-plus me-1"></i>Nouveau produit
+      </a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-6 col-xl-3">
+      <div class="ip-card p-4 h-100"
+           style="border-top:4px solid #1B7A3E;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small">Solde disponible</span>
+          <div style="width:38px; height:38px; border-radius:10px;
+                      background:#edf7f1; display:flex; align-items:center;
+                      justify-content:center; font-size:1.2rem;">💰</div>
+        </div>
+        <div style="font-size:1.7rem; font-weight:900; color:#1B7A3E; line-height:1.1;">
+          {{ wallet.balance_available|floatformat:0 }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;">FCFA disponible</div>
+        <a href="{% url 'dashboard:wallet' %}"
+           class="btn btn-green btn-sm w-100 mt-3">
+          Voir le wallet
+        </a>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="ip-card p-4 h-100"
+           style="border-top:4px solid #F47920;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small">Événements</span>
+          <div style="width:38px; height:38px; border-radius:10px;
+                      background:#fff8f0; display:flex; align-items:center;
+                      justify-content:center; font-size:1.2rem;">🎪</div>
+        </div>
+        <div style="font-size:1.7rem; font-weight:900; color:#F47920; line-height:1.1;">
+          {{ total_events }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;">
+          {{ published_events }} publié{{ published_events|pluralize }}
+        </div>
+        <a href="{% url 'events:my_events' %}"
+           class="btn btn-outline-secondary btn-sm w-100 mt-3">
+          Gérer
+        </a>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="ip-card p-4 h-100"
+           style="border-top:4px solid #1B7A3E;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small">Tickets vendus</span>
+          <div style="width:38px; height:38px; border-radius:10px;
+                      background:#edf7f1; display:flex; align-items:center;
+                      justify-content:center; font-size:1.2rem;">🎟️</div>
+        </div>
+        <div style="font-size:1.7rem; font-weight:900; color:#1B7A3E; line-height:1.1;">
+          {{ total_tickets }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;">+{{ tickets_30d }} ce mois</div>
+        <div class="progress mt-3" style="height:4px;">
+          <div class="progress-bar bg-success" style="width:{{ avg_fill_rate }}%"></div>
+        </div>
+        <div class="text-muted" style="font-size:0.72rem;">{{ avg_fill_rate }}% remplissage moyen</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="ip-card p-4 h-100"
+           style="border-top:4px solid #F47920;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small">Revenus bruts (30j)</span>
+          <div style="width:38px; height:38px; border-radius:10px;
+                      background:#fff8f0; display:flex; align-items:center;
+                      justify-content:center; font-size:1.2rem;">📈</div>
+        </div>
+        <div style="font-size:1.4rem; font-weight:900; color:#F47920; line-height:1.1;">
+          {{ revenue_30d|floatformat:0 }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;">FCFA ce mois</div>
+        <div class="text-green small mt-2 fw-semibold">
+          Net : {{ tickets_net|floatformat:0 }} FCFA
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Graphique + prochain événement -->
+  <div class="row g-4 mb-4">
+
+    <div class="col-lg-8">
+      <div class="ip-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">
+            <i class="bi bi-graph-up me-2 text-green"></i>
+            Ventes — 30 derniers jours
+          </h6>
+          <span class="badge bg-success px-3">
+            {{ revenue_30d|floatformat:0 }} FCFA
+          </span>
+        </div>
+        <canvas id="salesChart" height="90"></canvas>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+
+      <!-- Revenus brut/net -->
+      <div class="ip-card p-4 mb-3">
+        <h6 class="fw-bold mb-3 small">
+          <i class="bi bi-pie-chart me-2 text-orange"></i>
+          Revenus consolidés
+        </h6>
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small">
+            <span class="text-muted">Billetterie brut</span>
+            <span class="fw-semibold">{{ tickets_gross|floatformat:0 }} FCFA</span>
+          </div>
+          <div class="d-flex justify-content-between small text-green">
+            <span>→ Net organisateur</span>
+            <span class="fw-bold">{{ tickets_net|floatformat:0 }} FCFA</span>
+          </div>
+        </div>
+        <hr class="my-2">
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small">
+            <span class="text-muted">Boutique brut</span>
+            <span class="fw-semibold">{{ store_gross|floatformat:0 }} FCFA</span>
+          </div>
+          <div class="d-flex justify-content-between small text-green">
+            <span>→ Net organisateur</span>
+            <span class="fw-bold">{{ store_net|floatformat:0 }} FCFA</span>
+          </div>
+        </div>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between fw-bold">
+          <span>Total net</span>
+          <span class="text-green">{{ total_net|floatformat:0 }} FCFA</span>
+        </div>
+        <div class="text-muted" style="font-size:0.72rem; margin-top:4px;">
+          Commission IvoirPass : {{ total_commission|floatformat:0 }} FCFA
+        </div>
+      </div>
+
+      <!-- Prochain événement -->
+      {% if next_event %}
+      <div class="ip-card p-3"
+           style="border-left:4px solid #F47920;">
+        <div class="text-muted small mb-1 fw-semibold text-uppercase"
+             style="font-size:0.68rem; letter-spacing:0.05em;">
+          Prochain événement
+        </div>
+        <div class="fw-bold small mb-1">{{ next_event.title|truncatechars:35 }}</div>
+        <div class="text-orange" style="font-size:0.78rem;">
+          <i class="bi bi-calendar3 me-1"></i>
+          {{ next_event.start_date|date:"d M Y — H\hi" }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem; margin-top:4px;">
+          <i class="bi bi-ticket me-1"></i>
+          {{ next_event.tickets_sold }} vendu{{ next_event.tickets_sold|pluralize }}
+          {% if next_event.total_capacity > 0 %}/ {{ next_event.total_capacity }}{% endif %}
+        </div>
+        {% if next_event.total_capacity > 0 %}
+        <div class="progress mt-2" style="height:5px;">
+          <div class="progress-bar bg-success"
+               style="width:{{ next_event.occupancy_rate }}%"></div>
+        </div>
+        {% endif %}
+        <a href="{% url 'dashboard:event_stats' next_event.slug %}"
+           class="btn btn-green btn-sm w-100 mt-2">
+          Voir les stats
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- Mes événements récents -->
+  <div class="ip-card mb-4">
+    <div class="d-flex justify-content-between align-items-center p-4 border-bottom">
+      <h6 class="fw-bold mb-0">
+        <i class="bi bi-calendar-event me-2 text-green"></i>
+        Mes événements
+      </h6>
+      <a href="{% url 'events:my_events' %}"
+         class="btn btn-outline-secondary btn-sm">Voir tout</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Événement</th>
+            <th>Statut</th>
+            <th>Tickets</th>
+            <th>Revenus nets</th>
+            <th class="pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in recent_events %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold small">{{ event.title|truncatechars:35 }}</div>
+              <div class="text-muted" style="font-size:0.75rem;">
+                {{ event.start_date|date:"d M Y" }}
+              </div>
+            </td>
+            <td>
+              {% if event.status == 'published' %}
+                <span class="badge bg-success">Publié</span>
+              {% elif event.status == 'draft' %}
+                <span class="badge bg-secondary">Brouillon</span>
+              {% elif event.status == 'cancelled' %}
+                <span class="badge bg-danger">Annulé</span>
+              {% else %}
+                <span class="badge bg-info">{{ event.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="fw-semibold">{{ event.tickets_sold }}</div>
+              {% if event.total_capacity > 0 %}
+              <div class="progress mt-1" style="height:3px; width:60px;">
+                <div class="progress-bar bg-success"
+                     style="width:{{ event.occupancy_rate }}%"></div>
+              </div>
+              {% endif %}
+            </td>
+            <td class="text-green fw-semibold small">
+              {{ event.min_price|floatformat:0 }} FCFA / ticket
+            </td>
+            <td class="pe-4">
+              <div class="d-flex gap-1">
+                <a href="{% url 'dashboard:event_stats' event.slug %}"
+                   class="btn btn-outline-success btn-sm" title="Stats">
+                  <i class="bi bi-bar-chart"></i>
+                </a>
+                <a href="{% url 'dashboard:participants' event.slug %}"
+                   class="btn btn-outline-primary btn-sm" title="Participants">
+                  <i class="bi bi-people"></i>
+                </a>
+                <a href="{% url 'events:edit' event.slug %}"
+                   class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center py-4 text-muted">
+              Aucun événement.
+              <a href="{% url 'events:create' %}">Créer maintenant</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Mes produits boutique -->
+  <div class="ip-card">
+    <div class="d-flex justify-content-between align-items-center p-4 border-bottom">
+      <h6 class="fw-bold mb-0">
+        <i class="bi bi-bag me-2 text-orange"></i>Mes produits boutique
+      </h6>
+      <div class="d-flex gap-2">
+        <a href="{% url 'store:product_create' %}" class="btn btn-orange btn-sm">
+          <i class="bi bi-plus-lg me-1"></i>Ajouter
+        </a>
+        <a href="{% url 'store:my_products' %}"
+           class="btn btn-outline-secondary btn-sm">Voir tout</a>
+      </div>
+    </div>
+    {% with products=request.user.products.all|slice:":5" %}
+    {% if products %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Produit</th>
+            <th>Type</th>
+            <th>Prix</th>
+            <th>Vendus</th>
+            <th>Statut</th>
+            <th class="pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+          <tr>
+            <td class="ps-4">
+              <div class="d-flex align-items-center gap-2">
+                {% if product.cover_image %}
+                  <img src="{{ product.cover_image.url }}" width="36" height="36"
+                       class="rounded-2" style="object-fit:cover;" />
+                {% endif %}
+                <div class="fw-semibold small">{{ product.name|truncatechars:25 }}</div>
+              </div>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border small">
+                {{ product.get_product_type_display }}
+              </span>
+            </td>
+            <td class="fw-semibold small">{{ product.price|floatformat:0 }} FCFA</td>
+            <td class="fw-semibold">{{ product.sold_count }}</td>
+            <td>
+              {% if product.status == 'published' %}
+                <span class="badge bg-success">Publié</span>
+              {% elif product.status == 'draft' %}
+                <span class="badge bg-secondary">Brouillon</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Archivé</span>
+              {% endif %}
+            </td>
+            <td class="pe-4">
+              <a href="{% url 'store:product_edit' product.slug %}"
+                 class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-muted">
+      Aucun produit.
+      <a href="{% url 'store:product_create' %}">Ajouter maintenant</a>
+    </div>
+    {% endif %}
+    {% endwith %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+new Chart(document.getElementById('salesChart'), {
+  type: 'line',
+  data: {
+    labels: [{% for d in sales_by_day %}"{{ d.date }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+    datasets: [{
+      label: 'Revenus (FCFA)',
+      data:  [{% for d in sales_by_day %}{{ d.amount }}{% if not forloop.last %},{% endif %}{% endfor %}],
+      borderColor:     '#1B7A3E',
+      backgroundColor: 'rgba(27,122,62,0.08)',
+      borderWidth:     2.5,
+      pointRadius:     3,
+      pointBackgroundColor: '#1B7A3E',
+      fill: true,
+      tension: 0.4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.raw.toLocaleString('fr-FR') + ' FCFA'
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: v => v.toLocaleString('fr-FR'),
+          font: { size: 10 }
+        },
+        grid: { color: '#f0f0f0' }
+      },
+      x: {
+        ticks: { font: { size: 10 } },
+        grid:  { display: false }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}

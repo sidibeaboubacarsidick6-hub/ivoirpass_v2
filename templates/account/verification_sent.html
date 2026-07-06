@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Vérifiez votre email{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="ip-card p-5 text-center">
+
+        <div style="width:80px; height:80px; border-radius:50%;
+                    background:linear-gradient(135deg,#F47920,#f9a15a);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1.5rem; font-size:2.5rem;">
+          📧
+        </div>
+
+        <h4 class="fw-bold mb-2">Vérifiez votre email</h4>
+
+        <p class="text-muted mb-3">
+          Un email de confirmation a été envoyé à votre adresse.
+          Cliquez sur le lien dans l'email pour activer votre compte.
+        </p>
+
+        <div class="alert ip-alert alert-warning mb-4">
+          <i class="bi bi-clock me-2"></i>
+          Le lien est valable <strong>3 jours</strong>.
+          Vérifiez aussi vos <strong>spams</strong>.
+        </div>
+
+        <!-- Renvoyer l'email -->
+        <div class="border-top pt-4">
+          <p class="text-muted small mb-3">
+            Vous n'avez pas reçu l'email ?
+          </p>
+          <a href="{% url 'account_email_verification_sent' %}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-repeat me-1"></i>
+            Renvoyer l'email de confirmation
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

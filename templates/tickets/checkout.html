@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% block title %}Finaliser la commande{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+
+      <h4 class="fw-bold mb-4">
+        <i class="bi bi-{% if all_free %}gift{% else %}credit-card{% endif %} me-2 text-green"></i>
+        {% if all_free %}Confirmer l'inscription{% else %}Finaliser la commande{% endif %}
+      </h4>
+
+      <!-- Récap billets -->
+      <div class="ip-card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-uppercase text-muted small border-bottom pb-2">
+          Vos billets
+        </h6>
+        {% for item in items %}
+        <div class="d-flex justify-content-between py-2 border-bottom">
+          <div>
+            <div class="fw-semibold">{{ item.event_title }}</div>
+            <div class="text-muted small">
+              {{ item.ticket_name }} × {{ item.quantity }}
+            </div>
+          </div>
+          <div class="fw-bold {% if item.subtotal == 0 %}text-success{% else %}text-green{% endif %}">
+            {% if item.subtotal == 0 %}
+              Gratuit
+            {% else %}
+              {{ item.subtotal|floatformat:0 }} FCFA
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-between fw-bold fs-5 mt-3">
+          <span>Total</span>
+          <span class="text-green">
+            {% if total == 0 %}Gratuit{% else %}{{ total|floatformat:0 }} FCFA{% endif %}
+          </span>
+        </div>
+
+      </div>
+
+      {% if all_free %}
+      <!-- ============================================ -->
+      <!-- Événement GRATUIT — confirmation directe      -->
+      <!-- ============================================ -->
+      <div class="ip-card p-4 mb-4"
+           style="border-left:4px solid #1B7A3E; background:#edf7f1;">
+        <h6 class="fw-bold mb-2 text-green">
+          <i class="bi bi-gift me-2"></i>Événement gratuit
+        </h6>
+        <p class="text-muted small mb-0">
+          Aucun paiement requis. Vos billets seront générés immédiatement
+          après confirmation.
+        </p>
+      </div>
+
+      <form method="POST">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-green btn-lg w-100">
+          <i class="bi bi-check-circle me-2"></i>
+          Confirmer mon inscription gratuite
+        </button>
+      </form>
+
+      {% else %}
+      <!-- ============================================ -->
+      <!-- Événement PAYANT — redirection directe        -->
+      <!-- PayDunya gère tout                           -->
+      <!-- ============================================ -->
+      <div class="ip-card p-4 mb-4"
+           style="border-left:4px solid #1B7A3E; background:#edf7f1;">
+        <h6 class="fw-bold mb-2 text-green">
+          <i class="bi bi-shield-check me-2"></i>Paiement sécurisé
+        </h6>
+        <p class="text-muted small mb-3">
+          Vous serez redirigé vers PayDunya pour choisir votre moyen de paiement :
+          Wave, Orange Money, MTN MoMo, Moov Money, Djamo, Carte Bancaire.
+        </p>
+        <div class="d-flex gap-2 flex-wrap mb-0">
+          <span class="badge bg-light text-dark border px-3 py-2">💙 Wave</span>
+          <span class="badge bg-light text-dark border px-3 py-2">🟠 Orange Money</span>
+          <span class="badge bg-light text-dark border px-3 py-2">🟡 MTN MoMo</span>
+          <span class="badge bg-light text-dark border px-3 py-2">🔵 Moov</span>
+          <span class="badge bg-light text-dark border px-3 py-2">💜 Djamo</span>
+          <span class="badge bg-light text-dark border px-3 py-2">💳 Carte</span>
+        </div>
+      </div>
+
+      <form method="POST">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-orange btn-lg w-100 py-3"
+                style="font-size:1.05rem; font-weight:700;">
+          <i class="bi bi-lock me-2"></i>
+          Payer {{ total|floatformat:0 }} FCFA via PayDunya
+        </button>
+      </form>
+
+      <p class="text-muted small text-center mt-3">
+        <i class="bi bi-shield-check me-1 text-green"></i>
+        Paiement 100% sécurisé — Tous les moyens de paiement disponibles
+      </p>
+      {% endif %}
+
+      <!-- Lien retour -->
+      <div class="text-center mt-4">
+        <a href="{% url 'tickets:cart' %}" class="text-muted small">
+          <i class="bi bi-arrow-left me-1"></i>Retour au panier
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

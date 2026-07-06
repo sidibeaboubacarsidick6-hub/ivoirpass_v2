@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Politique de confidentialité - IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+          <li class="breadcrumb-item active">Politique de confidentialité</li>
+        </ol>
+      </nav>
+
+      <h1 class="fw-bold mb-4">Politique de confidentialité</h1>
+      <div class="section-divider mb-4"></div>
+      
+      <p class="text-muted">Dernière mise à jour : {% now "d F Y" %}</p>
+
+      <div class="mt-4">
+        <h5 class="fw-bold mt-4">1. Collecte des données</h5>
+        <p class="text-muted">Nous collectons les informations que vous nous fournissez lors de la création de votre compte : nom, email, numéro de téléphone.</p>
+
+        <h5 class="fw-bold mt-4">2. Utilisation des données</h5>
+        <p class="text-muted">Vos données sont utilisées pour :<br>
+          - Créer et gérer votre compte<br>
+          - Traiter vos commandes<br>
+          - Vous envoyer des confirmations et notifications<br>
+          - Améliorer nos services
+        </p>
+
+        <h5 class="fw-bold mt-4">3. Protection des données</h5>
+        <p class="text-muted">Nous mettons en œuvre des mesures de sécurité pour protéger vos données personnelles contre tout accès non autorisé.</p>
+
+        <h5 class="fw-bold mt-4">4. Partage des données</h5>
+        <p class="text-muted">Vos données ne sont partagées qu'avec :<br>
+          - Les organisateurs pour la réservation de vos billets<br>
+          - Nos partenaires de paiement pour traiter vos transactions
+        </p>
+
+        <h5 class="fw-bold mt-4">5. Cookies</h5>
+        <p class="text-muted">Nous utilisons des cookies pour améliorer votre expérience sur notre site. Vous pouvez les désactiver dans les paramètres de votre navigateur.</p>
+
+        <h5 class="fw-bold mt-4">6. Vos droits</h5>
+        <p class="text-muted">Vous avez le droit d'accéder, modifier ou supprimer vos données personnelles. Contactez-nous pour toute demande.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">Commande confirmée ! 📦</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ order.buyer.get_short_name }}</strong>,
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Commande</span>
+    <span class="info-value">{{ order.order_number }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Produit</span>
+    <span class="info-value">{{ order.product.name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Quantité</span>
+    <span class="info-value">{{ order.quantity }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Total</span>
+    <span class="info-value amount-big">{{ order.total|floatformat:0 }} FCFA</span>
+  </div>
+  {% if order.delivery_name %}
+  <div class="info-row">
+    <span class="info-label">Livraison à</span>
+    <span class="info-value">{{ order.delivery_name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Adresse</span>
+    <span class="info-value">{{ order.delivery_address }}, {{ order.delivery_city }}</span>
+  </div>
+  {% endif %}
+</div>
+
+<p class="email-text">
+  🚚 Votre commande sera expédiée sous <strong>3-5 jours ouvrés</strong>.
+  Vous recevrez un email avec le numéro de suivi dès l'expédition.
+</p>
+
+<center>
+  <a href="{{ platform_url }}/boutique/mes-commandes/"
+     class="btn-cta btn-green">
+    Suivre ma commande
+  </a>
+</center>
+
+{% endblock %}

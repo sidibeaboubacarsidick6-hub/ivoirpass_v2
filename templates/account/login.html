@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Connexion{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid p-0">
+    <div class="row g-0 min-vh-100">
+
+        <!-- ===================== -->
+        <!-- PARTIE GAUCHE -->
+        <!-- ===================== -->
+        <div class="col-lg-6 d-none d-lg-flex bg-dark text-white position-relative overflow-hidden align-items-center justify-content-center">
+
+            <!-- effets background -->
+            <div class="position-absolute top-0 start-0 w-100 h-100 opacity-25">
+                <div class="position-absolute bg-white rounded-circle"
+                     style="width:300px;height:300px;filter:blur(90px);top:10%;left:10%;"></div>
+
+                <div class="position-absolute bg-warning rounded-circle"
+                     style="width:400px;height:400px;filter:blur(120px);bottom:10%;right:10%;"></div>
+            </div>
+
+            <div class="text-center position-relative px-5">
+
+                <!-- Tickets simples -->
+                <div class="mb-5" style="height:240px; position:relative;">
+
+                    <div class="position-absolute" style="left:0;top:0;transform:rotate(-10deg);">
+                        <div class="bg-white text-dark p-3 rounded shadow" style="width:220px;">
+                            <div class="bg-primary mb-2" style="height:6px;"></div>
+                            <div class="bg-light mb-2" style="height:6px;"></div>
+                            <div class="bg-light" style="height:6px;width:60%;"></div>
+                            <span class="badge bg-primary mt-2">VIP</span>
+                        </div>
+                    </div>
+
+                    <div class="position-absolute" style="right:20px;top:40px;transform:rotate(8deg);">
+                        <div class="bg-white text-dark p-3 rounded shadow" style="width:220px;">
+                            <div class="bg-warning mb-2" style="height:6px;"></div>
+                            <div class="bg-light mb-2" style="height:6px;"></div>
+                            <div class="bg-light" style="height:6px;width:60%;"></div>
+                            <span class="badge bg-warning text-dark mt-2">VVIP</span>
+                        </div>
+                    </div>
+
+                    <div class="position-absolute" style="left:60px;top:120px;transform:rotate(-5deg);">
+                        <div class="bg-white text-dark p-3 rounded shadow" style="width:220px;">
+                            <div class="bg-success mb-2" style="height:6px;"></div>
+                            <div class="bg-light mb-2" style="height:6px;"></div>
+                            <div class="bg-light" style="height:6px;width:60%;"></div>
+                            <span class="badge bg-success mt-2">STANDARD</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <h2 class="fw-bold mb-3">Bienvenue sur IvoirPass</h2>
+                <p class="text-white-50">
+                    Vos événements préférés à portée de clic.
+                    Connectez-vous pour continuer.
+                </p>
+
+                <div class="d-flex justify-content-center gap-4 mt-4">
+                    <div class="text-center">
+                        <i class="fas fa-shield-alt fa-2x"></i>
+                        <div class="small mt-2">Sécurisé</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-bolt fa-2x"></i>
+                        <div class="small mt-2">Rapide</div>
+                    </div>
+                    <div class="text-center">
+                        <i class="fas fa-mobile-alt fa-2x"></i>
+                        <div class="small mt-2">Mobile</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ===================== -->
+        <!-- PARTIE DROITE -->
+        <!-- ===================== -->
+        <div class="col-lg-6 d-flex align-items-center justify-content-center">
+
+            <div class="w-100 px-4" style="max-width:500px;">
+
+                <!-- CARD -->
+                <div class="ip-card p-4 p-md-5">
+
+                    <!-- Header -->
+                    <div class="text-center mb-4">
+                        <div style="font-size:2rem;font-weight:900;">
+                            <span style="color:#1a1a2e;">Ivoir</span>
+                            <span style="color:#F47920;">Pass</span>
+                        </div>
+                        <h4 class="fw-bold mt-2">Bon retour !</h4>
+                        <p class="text-muted small">Connectez-vous à votre compte</p>
+                    </div>
+
+                    <!-- FORM -->
+                    <form method="POST" action="{% url 'account_login' %}">
+                        {% csrf_token %}
+
+                        <!-- Email -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">
+                                <i class="bi bi-envelope me-1 text-green"></i>Email
+                            </label>
+                            <input type="email" name="login" class="form-control form-control-lg"
+                                   placeholder="vous@exemple.com"
+                                   value="{{ form.login.value|default:'' }}"
+                                   required>
+                        </div>
+
+                        <!-- Password -->
+                        <div class="mb-3" x-data="{ show:false }">
+                            <label class="form-label small fw-semibold">
+                                <i class="bi bi-lock me-1 text-green"></i>Mot de passe
+                            </label>
+                            <div class="input-group">
+                                <input :type="show ? 'text' : 'password'"
+                                       name="password"
+                                       class="form-control form-control-lg"
+                                       placeholder="••••••••"
+                                       required>
+
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        @click="show = !show">
+                                    👁
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Remember -->
+                        <div class="form-check mb-3">
+                            <input type="checkbox" name="remember"
+                                   class="form-check-input" id="remember">
+                            <label class="form-check-label small" for="remember">
+                                Se souvenir de moi
+                            </label>
+                        </div>
+
+                        <!-- Error -->
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger small">
+                            {{ form.non_field_errors.0 }}
+                        </div>
+                        {% endif %}
+
+                        <!-- ========================================== -->
+                        <!-- BLOC AJOUTÉ POUR LE COMPTE BLOQUÉ -->
+                        <!-- ========================================== -->
+                        {% if not user.is_authenticated %}
+                            {% if account_locked %}
+                            <div class="alert ip-alert alert-danger mb-3">
+                                <i class="bi bi-lock me-2"></i>
+                                Compte temporairement bloqué. Réessayez dans quelques minutes.
+                            </div>
+                            {% endif %}
+                        {% endif %}
+
+                        <!-- Submit -->
+                        <button class="btn btn-green w-100 btn-lg">
+                            Se connecter
+                        </button>
+
+                    </form>
+
+                    <!-- Message contextualisé pour les organisateurs -->
+                    <div class="text-center mt-3">
+                        <span class="text-muted small">
+                            Vous êtes organisateur et n'avez pas encore de compte ?
+                        </span>
+                        <a href="{% url 'account_signup' %}" class="fw-bold text-green ms-1">
+                            Créer un espace organisateur
+                        </a>
+                    </div>
+
+                    <!-- Mot de passe oublié -->
+                    <div class="text-center mt-2">
+                        <a href="{% url 'account_reset_password' %}"
+                           class="small text-muted">
+                            Mot de passe oublié ?
+                        </a>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

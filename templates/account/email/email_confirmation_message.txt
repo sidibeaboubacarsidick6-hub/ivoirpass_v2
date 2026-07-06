@@ -1,0 +1,15 @@
+Bonjour,
+
+Merci de vous être inscrit sur IvoirPass !
+
+Pour activer votre compte, cliquez sur le lien ci-dessous :
+
+{{ activate_url }}
+
+Ce lien est valable 3 jours.
+
+Si vous n'avez pas créé de compte sur IvoirPass, ignorez cet email.
+
+---
+IvoirPass — La plateforme culturelle ivoirienne
+MKS Soft Technologies | infos@mks-soft-technologies.com

@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}Commande confirmée{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      {% if order.status == 'paid' %}
+      <div class="text-center mb-4">
+        <div style="width:90px; height:90px; border-radius:50%;
+                    background:linear-gradient(135deg,#1B7A3E,#28a857);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1.5rem; font-size:2.5rem;">✅</div>
+        <h3 class="fw-bold text-green mb-1">Commande confirmée !</h3>
+        <p class="text-muted">{{ order.order_number }}</p>
+      </div>
+
+      <div class="alert ip-alert alert-success mb-4">
+        <i class="bi bi-envelope-check me-2"></i>
+        Confirmation envoyée à <strong>{{ order.email }}</strong>
+      </div>
+
+      <div class="ip-card p-4 mb-4">
+        <div class="d-flex gap-3 align-items-center mb-3">
+          {% if order.product.cover_image %}
+            <img src="{{ order.product.cover_image.url }}" width="70" height="70"
+                 class="rounded-3" style="object-fit:cover;" />
+          {% endif %}
+          <div>
+            <div class="fw-bold">{{ order.product.name }}</div>
+            <div class="text-muted small">Quantité : {{ order.quantity }}</div>
+            <div class="text-green fw-bold">{{ order.total|floatformat:0 }} FCFA</div>
+          </div>
+        </div>
+      </div>
+
+      {% if download_links %}
+      <div class="ip-card p-4 mb-4" style="border-left:4px solid #1B7A3E;">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-download me-2 text-green"></i>Vos téléchargements
+        </h6>
+        {% for link in download_links %}
+        <div class="mb-2">
+          <a href="{% url 'store:guest_download' link.token %}"
+             class="btn btn-green w-100">
+            <i class="bi bi-download me-2"></i>
+            Télécharger ({{ link.downloads_remaining }} fois restantes)
+          </a>
+          <div class="text-muted text-center mt-1" style="font-size:0.75rem;">
+            Expire le {{ link.expires_at|date:"d/m/Y à H:i" }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="alert ip-alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        <strong>Vous pouvez racheter ce produit autant de fois que vous voulez</strong> —
+        chaque achat génère ses propres liens de téléchargement indépendants.
+      </div>
+      {% else %}
+      <div class="ip-card p-4" style="border-left:4px solid #F47920;">
+        <h6 class="fw-bold mb-2">
+          <i class="bi bi-truck me-2 text-orange"></i>Livraison en cours de préparation
+        </h6>
+        <p class="text-muted small mb-0">
+          Votre commande sera expédiée sous 3-5 jours ouvrés à l'adresse indiquée.
+        </p>
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="ip-card p-5 text-center">
+        <div style="font-size:3rem; margin-bottom:1rem;">⏳</div>
+        <h4 class="fw-bold mb-2">Paiement en cours de vérification</h4>
+        <p class="text-muted">
+          Commande {{ order.order_number }}<br>
+          Confirmation par email à {{ order.email }}.
+        </p>
+      </div>
+      {% endif %}
+
+      <div class="text-center mt-4">
+        <a href="{% url 'store:list' %}" class="btn btn-outline-secondary px-4">
+          <i class="bi bi-shop me-1"></i>Voir d'autres produits
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

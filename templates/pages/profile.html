@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mon Profil{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row g-4">
+
+    <!-- Colonne gauche : carte profil -->
+    <div class="col-lg-4">
+      <div class="ip-card p-4 text-center">
+
+        <!-- Avatar -->
+        <div class="position-relative d-inline-block mb-3">
+          {% if user.avatar %}
+            <img src="{{ user.avatar.url }}" width="100" height="100"
+                 class="rounded-circle object-fit-cover border border-3 border-white shadow" />
+          {% else %}
+            <div style="width:100px; height:100px; border-radius:50%;
+                        background:linear-gradient(135deg,#1B7A3E,#F47920);
+                        display:flex; align-items:center; justify-content:center;
+                        margin:auto; font-size:2.5rem; color:white; font-weight:900;">
+              {{ user.get_short_name|first|upper }}
+            </div>
+          {% endif %}
+        </div>
+
+        <h5 class="fw-bold mb-0">{{ user.get_full_name }}</h5>
+        <p class="text-muted small mb-2">{{ user.email }}</p>
+
+        <!-- Badge rôle -->
+        <span class="badge px-3 py-2 mb-3"
+              style="background:{% if user.is_organizer %}#1B7A3E{% else %}#F47920{% endif %};
+                     font-size:0.8rem; border-radius:20px;">
+          {% if user.is_organizer %}🎪{% else %}🎟️{% endif %}
+          {{ user.get_role_display }}
+        </span>
+
+        {% if user.is_organizer and user.is_organizer_verified %}
+          <div>
+            <span class="badge bg-success px-3 py-2" style="font-size:0.75rem;">
+              <i class="bi bi-patch-check-fill me-1"></i>Organisateur certifié
+            </span>
+          </div>
+        {% endif %}
+
+        <!-- Infos rapides -->
+        <hr class="my-3">
+        <div class="text-start small">
+          {% if user.phone_number %}
+          <div class="mb-2">
+            <i class="bi bi-telephone text-green me-2"></i>{{ user.phone_number }}
+          </div>
+          {% endif %}
+          <div class="mb-2">
+            <i class="bi bi-geo-alt text-green me-2"></i>{{ user.city|default:"Abidjan" }}
+          </div>
+          <div class="text-muted">
+            <i class="bi bi-calendar3 me-2"></i>
+            Membre depuis {{ user.date_joined|date:"F Y" }}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="mt-4 d-grid gap-2">
+          <a href="{% url 'accounts:profile_edit' %}" class="btn btn-green">
+            <i class="bi bi-pencil me-2"></i>Modifier le profil
+          </a>
+          <a href="{% url 'accounts:change_password' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-lock me-2"></i>Changer le mot de passe
+          </a>
+        </div>
+
+      </div><!-- /.ip-card -->
+    </div><!-- /.col -->
+
+    <!-- Colonne droite : onglets -->
+    <div class="col-lg-8">
+      <div class="ip-card">
+
+        <!-- Onglets -->
+        <ul class="nav nav-tabs border-0 px-4 pt-3" id="profileTabs">
+          <li class="nav-item">
+            <button class="nav-link active fw-semibold" data-bs-toggle="tab"
+                    data-bs-target="#tab-info">
+              <i class="bi bi-person me-1"></i>Informations
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab"
+                    data-bs-target="#tab-addresses">
+              <i class="bi bi-geo-alt me-1"></i>Adresses
+            </button>
+          </li>
+          {% if user.is_organizer %}
+          <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab"
+                    data-bs-target="#tab-organizer">
+              <i class="bi bi-building me-1"></i>Organisation
+            </button>
+          </li>
+          {% endif %}
+          <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab"
+                    data-bs-target="#tab-notifs">
+              <i class="bi bi-bell me-1"></i>Notifications
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content p-4">
+
+          <!-- Onglet : Informations -->
+          <div class="tab-pane fade show active" id="tab-info">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Prénom</div>
+                <div class="fw-semibold">{{ user.first_name|default:"—" }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Nom</div>
+                <div class="fw-semibold">{{ user.last_name|default:"—" }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Email</div>
+                <div class="fw-semibold">{{ user.email }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Téléphone</div>
+                <div class="fw-semibold">{{ user.phone_number|default:"—" }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Ville</div>
+                <div class="fw-semibold">{{ user.city|default:"—" }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small mb-1">Langue</div>
+                <div class="fw-semibold">{{ user.get_preferred_language_display }}</div>
+              </div>
+              {% if user.bio %}
+              <div class="col-12">
+                <div class="text-muted small mb-1">Biographie</div>
+                <div>{{ user.bio }}</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Onglet : Adresses -->
+          <div class="tab-pane fade" id="tab-addresses">
+            {% if addresses %}
+              <div class="row g-3 mb-3">
+                {% for addr in addresses %}
+                <div class="col-md-6">
+                  <div class="border rounded-3 p-3 position-relative
+                              {% if addr.is_default %}border-success{% endif %}">
+                    {% if addr.is_default %}
+                      <span class="badge bg-success position-absolute top-0 end-0 m-2"
+                            style="font-size:0.7rem;">Par défaut</span>
+                    {% endif %}
+                    <div class="fw-bold mb-1">{{ addr.label }}</div>
+                    <div class="small text-muted">{{ addr.full_name }}</div>
+                    <div class="small">{{ addr.address_line1 }}</div>
+                    {% if addr.address_line2 %}
+                      <div class="small">{{ addr.address_line2 }}</div>
+                    {% endif %}
+                    <div class="small">{{ addr.city }}</div>
+                    <div class="small text-muted mt-1">
+                      <i class="bi bi-truck me-1"></i>
+                      Livraison : {{ addr.shipping_cost|floatformat:0 }} FCFA
+                    </div>
+                    <form method="POST"
+                          action="{% url 'accounts:address_delete' addr.pk %}"
+                          class="mt-2">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-outline-danger btn-sm"
+                              data-confirm="Supprimer cette adresse ?">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="text-muted">Aucune adresse enregistrée.</p>
+            {% endif %}
+            <a href="{% url 'accounts:addresses' %}" class="btn btn-green btn-sm">
+              <i class="bi bi-plus me-1"></i>Gérer mes adresses
+            </a>
+          </div>
+
+          <!-- Onglet : Organisation (organisateurs) -->
+          {% if user.is_organizer %}
+          <div class="tab-pane fade" id="tab-organizer">
+            {% if user.organization_name %}
+            <div class="row g-3">
+              {% if user.organization_logo %}
+              <div class="col-12">
+                <img src="{{ user.organization_logo.url }}" height="60"
+                     class="rounded-3 border" />
+              </div>
+              {% endif %}
+              <div class="col-12">
+                <div class="text-muted small mb-1">Nom de l'organisation</div>
+                <div class="fw-bold fs-5">{{ user.organization_name }}</div>
+              </div>
+              {% if user.organization_description %}
+              <div class="col-12">
+                <div class="text-muted small mb-1">Description</div>
+                <div>{{ user.organization_description }}</div>
+              </div>
+              {% endif %}
+              {% if user.organization_website %}
+              <div class="col-12">
+                <div class="text-muted small mb-1">Site web</div>
+                <a href="{{ user.organization_website }}" target="_blank">
+                  {{ user.organization_website }}
+                </a>
+              </div>
+              {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted">Informations de votre organisation non renseignées.</p>
+            <a href="{% url 'accounts:profile_edit' %}" class="btn btn-green btn-sm">
+              <i class="bi bi-pencil me-1"></i>Compléter mon profil organisateur
+            </a>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <!-- Onglet : Notifications -->
+          <div class="tab-pane fade" id="tab-notifs">
+            <div class="list-group list-group-flush">
+              <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <div>
+                  <i class="bi bi-envelope text-green me-2"></i>
+                  <span class="fw-semibold">Notifications email</span>
+                </div>
+                <span class="badge {% if user.notify_email %}bg-success{% else %}bg-secondary{% endif %} px-3">
+                  {% if user.notify_email %}Activé{% else %}Désactivé{% endif %}
+                </span>
+              </div>
+              <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <div>
+                  <i class="bi bi-chat-text text-green me-2"></i>
+                  <span class="fw-semibold">Notifications SMS</span>
+                </div>
+                <span class="badge {% if user.notify_sms %}bg-success{% else %}bg-secondary{% endif %} px-3">
+                  {% if user.notify_sms %}Activé{% else %}Désactivé{% endif %}
+                </span>
+              </div>
+              <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <div>
+                  <i class="bi bi-bell text-green me-2"></i>
+                  <span class="fw-semibold">Notifications push</span>
+                </div>
+                <span class="badge {% if user.notify_push %}bg-success{% else %}bg-secondary{% endif %} px-3">
+                  {% if user.notify_push %}Activé{% else %}Désactivé{% endif %}
+                </span>
+              </div>
+            </div>
+            <a href="{% url 'accounts:profile_edit' %}" class="btn btn-green btn-sm mt-3">
+              <i class="bi bi-pencil me-1"></i>Modifier les préférences
+            </a>
+          </div>
+
+        </div><!-- /.tab-content -->
+      </div><!-- /.ip-card -->
+    </div><!-- /.col -->
+
+  </div><!-- /.row -->
+</div>
+{% endblock %}

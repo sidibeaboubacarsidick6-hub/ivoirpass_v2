@@ -1,0 +1,9 @@
+Commande IvoirPass confirmée !
+
+Commande : {{ order.order_number }}
+Produit  : {{ order.product.name }}
+Total    : {{ order.total|floatformat:0 }} FCFA
+
+Votre commande sera expédiée sous 3-5 jours ouvrés.
+
+© {{ year }} IvoirPass

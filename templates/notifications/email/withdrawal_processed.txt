@@ -1,0 +1,8 @@
+Reversement IvoirPass effectué !
+
+Référence : {{ withdrawal_request.reference }}
+Montant   : {{ withdrawal_request.amount|floatformat:0 }} FCFA
+Numéro    : {{ withdrawal_request.payout_phone }}
+Date      : {{ withdrawal_request.processed_at|date:"d/m/Y" }}
+
+© {{ year }} IvoirPass

@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Signaler un problème - IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+          <li class="breadcrumb-item active">Signaler un problème</li>
+        </ol>
+      </nav>
+
+      <h1 class="fw-bold mb-4">Signaler un problème</h1>
+      <div class="section-divider mb-4"></div>
+      
+      <p class="text-muted lead mb-4">
+        Vous rencontrez un problème ? Signalez-le nous, nous le traitons rapidement.
+      </p>
+
+      <!-- Messages de succès/erreur -->
+      {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      <!-- Grille des types de problèmes -->
+      <div class="row g-3 mb-4">
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px;">
+            <div class="display-6 mb-2">💰</div>
+            <h6 class="fw-bold small">Paiement</h6>
+            <p class="text-muted small">Problème avec un paiement</p>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px; border-left:3px solid #F47920;">
+            <div class="display-6 mb-2">🎫</div>
+            <h6 class="fw-bold small">Billet</h6>
+            <p class="text-muted small">Problème avec mon billet</p>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px;">
+            <div class="display-6 mb-2">📱</div>
+            <h6 class="fw-bold small">QR Code</h6>
+            <p class="text-muted small">QR Code non reçu</p>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px;">
+            <div class="display-6 mb-2">🎪</div>
+            <h6 class="fw-bold small">Événement</h6>
+            <p class="text-muted small">Problème avec un événement</p>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px; border-left:3px solid #F47920;">
+            <div class="display-6 mb-2">👤</div>
+            <h6 class="fw-bold small">Compte</h6>
+            <p class="text-muted small">Problème avec mon compte</p>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px;">
+            <div class="display-6 mb-2">⚙️</div>
+            <h6 class="fw-bold small">Technique</h6>
+            <p class="text-muted small">Problème technique</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulaire -->
+      <div class="p-4" style="background:#f8f9fa; border-radius:12px;">
+        <form method="POST" class="needs-validation" novalidate>
+          {% csrf_token %}
+          
+          <div class="mb-3">
+            <label for="problem_type" class="form-label fw-semibold">
+              <i class="bi bi-tag me-1 text-orange"></i>Type de problème
+            </label>
+            <select class="form-select" id="problem_type" name="problem_type" required>
+              <option value="">Choisissez un type</option>
+              <option value="paiement">💰 Problème de paiement</option>
+              <option value="billet">🎫 Problème avec mon billet</option>
+              <option value="qr-code">📱 QR Code non reçu</option>
+              <option value="evenement">🎪 Problème avec un événement</option>
+              <option value="compte">👤 Problème avec mon compte</option>
+              <option value="technique">⚙️ Problème technique</option>
+              <option value="remboursement">↩️ Demande de remboursement</option>
+              <option value="autre">❓ Autre problème</option>
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label for="email" class="form-label fw-semibold">
+              <i class="bi bi-envelope me-1 text-orange"></i>Votre email
+            </label>
+            {% if user.is_authenticated %}
+            <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" readonly>
+            {% else %}
+            <input type="email" class="form-control" id="email" name="email" placeholder="jean@exemple.com" required>
+            {% endif %}
+          </div>
+          
+          <div class="mb-3">
+            <label for="order_number" class="form-label fw-semibold">
+              <i class="bi bi-receipt me-1 text-orange"></i>Numéro de commande
+              <span class="text-muted fw-normal small">(optionnel)</span>
+            </label>
+            <input type="text" class="form-control" id="order_number" name="order_number" placeholder="Ex: IVP-2024-0123">
+            <div class="form-text">Indiquez votre numéro de commande pour un traitement plus rapide.</div>
+          </div>
+          
+          <div class="mb-3">
+            <label for="message" class="form-label fw-semibold">
+              <i class="bi bi-chat-dots me-1 text-orange"></i>Description du problème
+            </label>
+            <textarea class="form-control" id="message" name="message" rows="5" placeholder="Décrivez précisément le problème rencontré..." required></textarea>
+          </div>
+          
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="agreement" required>
+              <label class="form-check-label small" for="agreement">
+                Je confirme que les informations fournies sont exactes
+              </label>
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-orange w-100">
+            <i class="bi bi-send me-2"></i>Envoyer le signalement
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

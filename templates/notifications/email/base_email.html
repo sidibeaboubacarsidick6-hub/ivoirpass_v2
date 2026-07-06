@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background: #f5f7fa;
+      color: #2d2d2d;
+      line-height: 1.6;
+    }
+    .email-wrapper {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .email-header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #1B7A3E 100%);
+      padding: 32px 40px;
+      border-bottom: 4px solid #F47920;
+    }
+    .email-logo {
+      font-size: 28px;
+      font-weight: 900;
+      color: white;
+    }
+    .email-logo span { color: #F47920; }
+    .email-body {
+      padding: 40px;
+    }
+    .email-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #1a1a2e;
+      margin-bottom: 16px;
+    }
+    .email-text {
+      color: #555;
+      margin-bottom: 16px;
+      font-size: 15px;
+    }
+    .info-box {
+      background: #f0f7f3;
+      border-left: 4px solid #1B7A3E;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 20px 0;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e8f4ef;
+      font-size: 14px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { color: #6c757d; }
+    .info-value { font-weight: 700; color: #1a1a2e; }
+    .btn-cta {
+      display: inline-block;
+      background: #F47920;
+      color: white !important;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      margin: 20px 0;
+    }
+    .btn-green {
+      background: #1B7A3E;
+    }
+    .ticket-badge {
+      display: inline-block;
+      background: #1B7A3E;
+      color: white;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin: 4px 2px;
+    }
+    .email-footer {
+      background: #1a1a2e;
+      padding: 24px 40px;
+      border-top: 3px solid #F47920;
+      text-align: center;
+    }
+    .email-footer p {
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      margin: 4px 0;
+    }
+    .email-footer a { color: #F47920; text-decoration: none; }
+    .divider {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 24px 0;
+    }
+    .amount-big {
+      font-size: 28px;
+      font-weight: 900;
+      color: #1B7A3E;
+    }
+  </style>
+</head>
+<body>
+<div style="padding: 20px; background: #f5f7fa;">
+  <div class="email-wrapper">
+
+    <!-- Header -->
+    <div class="email-header">
+      <div class="email-logo">Ivoir<span>Pass</span></div>
+      <div style="color:rgba(255,255,255,0.6); font-size:13px; margin-top:4px;">
+        Votre plateforme culturelle ivoirienne
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="email-body">
+      {% block email_content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <div class="email-footer">
+      <p>
+        © {{ year }} IvoirPass —
+        Développé par <strong style="color:rgba(255,255,255,0.7);">
+          MKS Soft Technologies
+        </strong>
+      </p>
+      <p>
+        <a href="{{ platform_url }}">www.ivoirpass.com</a> ·
+        <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+      </p>
+      <p style="margin-top:8px; font-size:11px;">
+        Vous recevez cet email car vous avez un compte IvoirPass.
+      </p>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
