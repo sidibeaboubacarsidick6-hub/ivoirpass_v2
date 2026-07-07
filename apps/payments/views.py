@@ -182,6 +182,10 @@ def payment_webhook(request):
     logger.info(f"Body brut: {request.body}")
     logger.info(f"POST dict: {request.POST}")
     logger.info("=" * 50)
+        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+    if not PayDunyaService.verify_webhook_signature(request):
+        logger.error("Webhook rejeté : signature PayDunya invalide")
+        return HttpResponse('FORBIDDEN', status=403)
     """
     Webhook PayDunya — appelé automatiquement par PayDunya
     après confirmation du paiement côté opérateur.

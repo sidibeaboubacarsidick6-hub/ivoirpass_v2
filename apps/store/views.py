@@ -694,6 +694,12 @@ def store_webhook(request):
     if not request.body:
         logger.warning("Store webhook: body vide")
         return HttpResponse('OK', status=200)
+
+        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+    from apps.payments.paydunya import PayDunyaService
+    if not PayDunyaService.verify_webhook_signature(request):
+        logger.error("Store webhook rejeté : signature PayDunya invalide")
+        return HttpResponse('FORBIDDEN', status=403)
     
     try:
         # PayDunya peut envoyer soit directement le JSON, soit dans data
@@ -981,6 +987,11 @@ def guest_store_webhook(request):
     
     if not request.body:
         return HttpResponse('EMPTY', status=200)
+        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+    from apps.payments.paydunya import PayDunyaService
+    if not PayDunyaService.verify_webhook_signature(request):
+        logger.error("Guest store webhook rejeté : signature PayDunya invalide")
+        return HttpResponse('FORBIDDEN', status=403)
 
     try:
         data = json.loads(request.body)
