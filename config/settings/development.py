@@ -15,15 +15,20 @@ CSRF_TRUSTED_ORIGINS = [
     "https://*.ngrok-free.dev",
 ]
 
+# CORS - uniquement les origines autorisées (dev local + ngrok)
 CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "https://revengeless-unfervent-deandrea.ngrok-free.dev",
     "https://*.ngrok-free.dev",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
-SECURE_SSL_REDIRECT = False  # Pour ngrok
-SESSION_COOKIE_SECURE = False  # Pour ngrok
-CSRF_COOKIE_SECURE = False  # Pour ngrok
+CORS_ALLOW_ALL_ORIGINS = False
+
+# Désactivé pour ngrok en développement — sera activé en production
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
 # Base de données locale
 DATABASES = {
     'default': {
