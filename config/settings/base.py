@@ -273,6 +273,19 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes max
 CELERY_TASK_SOFT_TIME_LIMIT = 60  # 1 minute soft limit
 
+
+# ============================================
+# CELERY BEAT — Tâches planifiées
+# ============================================
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'check-pending-withdrawals': {
+        'task': 'apps.dashboard.tasks.check_pending_withdrawals',
+        'schedule': crontab(hour='8,14,20', minute=0),
+    },
+}
+
 # ============================================
 # MODÈLE UTILISATEUR PERSONNALISÉ
 # ============================================
