@@ -1,67 +1,79 @@
 """
-IvoirPass V2 — Signaux de notifications
-Déclenchement automatique après chaque événement clé
+IvoirPass V2 — Signaux pour les notifications
 """
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-import logging
-
-logger = logging.getLogger(__name__)
-
-@receiver(post_save, sender='tickets.Order')
-def on_order_paid(sender, instance, **kwargs):
-    """Envoie les billets par email quand une commande est payée."""
-    if instance.status == 'paid':
-        # Vérifie qu'on n'a pas déjà envoyé
-        if not hasattr(instance, '_notification_sent'):
-            instance._notification_sent = True
-            try:
-                from .service import NotificationService
-                NotificationService.ticket_confirmed(instance)
-            except Exception as e:
-                logger.error(f"Notification tickets erreur: {e}")
+from apps.events.models import Event
+from apps.store.models import Product
+from apps.dashboard.models import WithdrawalRequest
+from .tasks import notify_admins_async
 
 
-@receiver(post_save, sender='store.ProductOrder')
-def on_store_order_paid(sender, instance, **kwargs):
-    """Notifie après confirmation commande boutique."""
-    if instance.status != 'paid':
-        return
-    if hasattr(instance, '_notification_sent'):
-        return
-    instance._notification_sent = True
-
-    # Attend que les liens soient générés avant d'envoyer l'email
-    from apps.store.models import DownloadLink
-    from django.utils import timezone
-    import time
-
-    # Petit délai pour s'assurer que les liens sont en base
-    max_attempts = 3
-    for attempt in range(max_attempts):
-        links_count = DownloadLink.objects.filter(order=instance).count()
-        if links_count > 0 or not instance.product.is_digital:
-            break
-        time.sleep(0.5)
-
-    try:
-        from .service import NotificationService
-        NotificationService.store_order_confirmed(instance)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(
-            f"Notification store erreur: {e}"
+@receiver(post_save, sender=Event)
+def notify_new_event(sender, instance, created, **kwargs):
+    """Notifie les admins quand un événement est publié."""
+    if created and instance.status == Event.Status.PUBLISHED:
+        notify_admins_async.delay(
+            notification_type='new_event',
+            title=f'Nouvel événement publié',
+            message=(
+                f"L'organisateur {instance.organizer.get_full_name()} "
+                f"a publié l'événement « {instance.title} ».\n"
+                f"Date : {instance.start_date.strftime('%d/%m/%Y')}\n"
+                f"Lieu : {instance.venue_name}, {instance.venue_city}"
+            ),
+            reference=instance.slug,
         )
+    elif not created and instance.status == Event.Status.PUBLISHED:
+        # Événement passé de brouillon à publié
+        old_status = instance.tracker.previous('status') if hasattr(instance, 'tracker') else None
+        if old_status and old_status != Event.Status.PUBLISHED:
+            notify_admins_async.delay(
+                notification_type='new_event',
+                title=f'Événement publié',
+                message=(
+                    f"L'événement « {instance.title} » "
+                    f"vient d'être publié par {instance.organizer.get_full_name()}."
+                ),
+                reference=instance.slug,
+            )
 
 
-@receiver(post_save, sender='dashboard.WithdrawalRequest')
-def on_withdrawal_request(sender, instance, created, **kwargs):
-    """Notifie l'organisateur de l'état de son reversement."""
-    try:
-        from .service import NotificationService
-        if created:
-            NotificationService.withdrawal_received(instance)
-        elif instance.status == 'processed':
-            NotificationService.withdrawal_processed(instance)
-    except Exception as e:
-        logger.error(f"Notification withdrawal erreur: {e}")
+@receiver(post_save, sender=Product)
+def notify_new_product(sender, instance, created, **kwargs):
+    """Notifie les admins quand un produit est publié."""
+    if instance.status == Product.Status.PUBLISHED:
+        is_new = created
+        is_just_published = not created and instance.tracker.previous('status') != Product.Status.PUBLISHED if hasattr(instance, 'tracker') else False
+
+        if is_new or is_just_published:
+            notify_admins_async.delay(
+                notification_type='new_product',
+                title=f'Nouveau produit en boutique',
+                message=(
+                    f"Le vendeur {instance.seller.get_full_name()} "
+                    f"a publié le produit « {instance.name} ».\n"
+                    f"Prix : {instance.price} FCFA\n"
+                    f"Type : {instance.get_product_type_display()}"
+                ),
+                reference=instance.slug,
+            )
+
+
+@receiver(post_save, sender=WithdrawalRequest)
+def notify_withdrawal_request(sender, instance, created, **kwargs):
+    """Notifie les admins d'une nouvelle demande de reversement."""
+    if created:
+        notify_admins_async.delay(
+            notification_type='withdrawal',
+            title=f'Demande de reversement',
+            message=(
+                f"L'organisateur {instance.wallet.organizer.get_full_name()} "
+                f"demande un reversement de {instance.amount} FCFA.\n"
+                f"Référence : {instance.reference}\n"
+                f"Méthode : {instance.get_payout_method_display()}\n"
+                f"Téléphone : {instance.payout_phone}\n"
+                f"Bénéficiaire : {instance.payout_name}"
+            ),
+            reference=instance.reference,
+        )

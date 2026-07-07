@@ -100,3 +100,45 @@ def generate_qr_codes_async(self, ticket_uuids):
     except Exception as exc:
         logger.error(f"Erreur génération QR codes: {exc}")
         raise self.retry(exc=exc)
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_admins_async(self, notification_type, title, message, reference=''):
+    """
+    Notifie tous les administrateurs par email.
+    """
+    from apps.accounts.models import CustomUser
+    from apps.notifications.models import AdminNotification
+    from django.core.mail import send_mail
+    from django.conf import settings
+
+    try:
+        # Créer la notification en base
+        AdminNotification.objects.create(
+            type=notification_type,
+            title=title,
+            message=message,
+            reference=reference,
+        )
+
+        # Envoyer l'email à tous les admins
+        admins = CustomUser.objects.filter(
+            role=CustomUser.Role.ADMIN,
+            is_active=True,
+            notify_email=True,
+        )
+
+        if admins.exists():
+            recipient_list = list(admins.values_list('email', flat=True))
+            send_mail(
+                subject=f'[IvoirPass Admin] {title}',
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_list,
+                fail_silently=True,
+            )
+            logger.info(f"Notification admin envoyée à {len(recipient_list)} admin(s)")
+
+        return f"Admins notified: {title}"
+
+    except Exception as exc:
+        logger.error(f"Erreur notification admin: {exc}")
+        raise self.retry(exc=exc)
