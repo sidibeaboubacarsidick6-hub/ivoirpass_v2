@@ -21,7 +21,7 @@ from datetime import timedelta
 
 from apps.events.models import Event
 from apps.tickets.models import Order, OrderItem, Ticket
-from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP
+from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP, AuditLog, Dispute
 
 
 
@@ -728,5 +728,22 @@ def submit_dispute(request):
             "Nous vous contacterons sous 48h."
         )
         return redirect('home')
+
+                # Notifier les admins
+        from apps.notifications.tasks import notify_admins_async
+        notify_admins_async.delay(
+            notification_type='fraud_alert',
+            title=f'Nouveau litige : {dispute.get_type_display()}',
+            message=(
+                f"Un nouveau litige a été ouvert.\n"
+                f"Référence : {dispute.reference}\n"
+                f"Type : {dispute.get_type_display()}\n"
+                f"Sujet : {dispute.subject}\n"
+                f"Email : {dispute.email}\n"
+                f"Commande : {dispute.order_number or 'N/A'}\n\n"
+                f"Description : {dispute.description[:200]}"
+            ),
+            reference=dispute.reference,
+        )
 
     return render(request, 'pages/report_problem.html')
