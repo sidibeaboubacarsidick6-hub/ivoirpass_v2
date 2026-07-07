@@ -381,7 +381,8 @@ def store_payment_status(request, order_number):
                 # ✅ Envoyer l'email avec les liens
                 try:
                     from .utils import send_download_link_email
-                    send_download_link_email(order)
+                    from apps.notifications.tasks import send_download_link_email_async
+                    send_download_link_email_async.delay(str(order.uuid))
                 except Exception as e:
                     logger.error(f"[STATUS] Erreur envoi email: {e}")
         
@@ -469,8 +470,8 @@ def store_payment_return(request, order_number):
                 order._generate_download_links()
                 logger.info(f"[RETOUR] Liens générés")
                 try:
-                    from .utils import send_download_link_email
-                    send_download_link_email(order)
+                    from apps.notifications.tasks import send_download_link_email_async
+                    send_download_link_email_async.delay(str(order.uuid))
                 except Exception as e:
                     logger.error(f"[RETOUR] Erreur envoi email: {e}")
         
@@ -766,8 +767,8 @@ def store_webhook(request):
                         order._generate_download_links()
                         # ✅ Envoyer l'email avec les liens
                         try:
-                            from .utils import send_download_link_email
-                            send_download_link_email(order)
+                            from apps.notifications.tasks import send_download_link_email_async
+                            send_download_link_email_async.delay(str(order.uuid))
                         except Exception as e:
                             logger.error(f"Store webhook: erreur envoi email: {e}")
                 
