@@ -27,15 +27,23 @@
       </a>
       <a href="{% url 'dashboard:audit_log' %}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-journal-text me-1"></i>Journal d'audit
-       </a>
-       <div class="ip-card p-4 mb-4">
-         <h6 class="fw-bold mb-3"><i class="bi bi-download me-2 text-green"></i>Exporter mes données</h6>
-         <div class="d-flex gap-2 flex-wrap">
-         <a href="{% url 'dashboard:export_csv' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-csv me-1"></i>CSV</a>
-         <a href="{% url 'dashboard:export_excel' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-xlsx me-1"></i>Excel</a>
-         <a href="{% url 'dashboard:export_pdf' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-pdf me-1"></i>PDF</a>
+      </a>
+    </div>
   </div>
-</div>
+
+  <!-- Export des données -->
+  <div class="ip-card p-4 mb-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-download me-2 text-green"></i>Exporter mes données</h6>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{% url 'dashboard:export_csv' %}" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-filetype-csv me-1"></i>CSV
+      </a>
+      <a href="{% url 'dashboard:export_excel' %}" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-filetype-xlsx me-1"></i>Excel
+      </a>
+      <a href="{% url 'dashboard:export_pdf' %}" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-filetype-pdf me-1"></i>PDF
+      </a>
     </div>
   </div>
 
@@ -142,46 +150,6 @@
         <canvas id="salesChart" height="90"></canvas>
       </div>
     </div>
-
-    <div class="col-lg-4">
-
-      <!-- Revenus brut/net -->
-      <div class="ip-card p-4 mb-3">
-        <h6 class="fw-bold mb-3 small">
-          <i class="bi bi-pie-chart me-2 text-orange"></i>
-          Revenus consolidés
-        </h6>
-        <div class="mb-2">
-          <div class="d-flex justify-content-between small">
-            <span class="text-muted">Billetterie brut</span>
-            <span class="fw-semibold">{{ tickets_gross|floatformat:0 }} FCFA</span>
-          </div>
-          <div class="d-flex justify-content-between small text-green">
-            <span>→ Net organisateur</span>
-            <span class="fw-bold">{{ tickets_net|floatformat:0 }} FCFA</span>
-          </div>
-        </div>
-        <hr class="my-2">
-        <div class="mb-2">
-          <div class="d-flex justify-content-between small">
-            <span class="text-muted">Boutique brut</span>
-            <span class="fw-semibold">{{ store_gross|floatformat:0 }} FCFA</span>
-          </div>
-          <div class="d-flex justify-content-between small text-green">
-            <span>→ Net organisateur</span>
-            <span class="fw-bold">{{ store_net|floatformat:0 }} FCFA</span>
-          </div>
-        </div>
-        <hr class="my-2">
-        <div class="d-flex justify-content-between fw-bold">
-          <span>Total net</span>
-          <span class="text-green">{{ total_net|floatformat:0 }} FCFA</span>
-        </div>
-        <div class="text-muted" style="font-size:0.72rem; margin-top:4px;">
-          Commission IvoirPass : {{ total_commission|floatformat:0 }} FCFA
-        </div>
-      </div>
-
       <!-- Prochain événement -->
       {% if next_event %}
       <div class="ip-card p-3"
