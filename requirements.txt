@@ -19,6 +19,7 @@ django-allauth==64.2.1
 django-anymail==10.3
 django-cors-headers==4.4.0
 django-crispy-forms==2.3
+django-csp==4.0
 django-extensions==3.2.3
 django-filter==24.3
 django-ratelimit==4.1.0

@@ -42,4 +42,4 @@ htmlcov/
 .pytest_cache/
 
 # Migrations (optionnel - certains projets les committent)
-# apps/*/migrations/
+# apps/*/migrations/backups/

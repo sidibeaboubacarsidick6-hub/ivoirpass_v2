@@ -69,6 +69,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # ============================================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'csp.middleware.CSPMiddleware',  
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -259,6 +260,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # ============================================
+# CELERY — Tâches asynchrones
+# ============================================
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Africa/Abidjan'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes max
+CELERY_TASK_SOFT_TIME_LIMIT = 60  # 1 minute soft limit
+
+# ============================================
 # MODÈLE UTILISATEUR PERSONNALISÉ
 # ============================================
 AUTH_USER_MODEL = 'accounts.CustomUser'
@@ -294,3 +308,38 @@ ORANGE_SMS_SENDER_NAME   = config('ORANGE_SMS_SENDER_NAME',   default='IvoirPass
 TWILIO_ACCOUNT_SID  = config('TWILIO_ACCOUNT_SID',  default='')
 TWILIO_AUTH_TOKEN   = config('TWILIO_AUTH_TOKEN',    default='')
 TWILIO_FROM_NUMBER  = config('TWILIO_FROM_NUMBER',   default='')
+
+
+# ============================================
+# CONTENT SECURITY POLICY (CSP)
+# ============================================
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "'unsafe-inline'",
+)
+CSP_STYLE_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "'unsafe-inline'",
+)
+CSP_IMG_SRC = (
+    "'self'",
+    "data:",
+    "https:",
+)
+CSP_FONT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_CONNECT_SRC = (
+    "'self'",
+    "https://app.paydunya.com",
+)
+CSP_FRAME_SRC = (
+    "'self'",
+    "https://app.paydunya.com",
+)
