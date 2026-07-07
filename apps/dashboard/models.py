@@ -360,3 +360,122 @@ class ReversalOTP(models.Model):
             code=code,
             expires_at=expires_at
         )
+
+class AuditLog(models.Model):
+    class Action(models.TextChoices):
+        CREATE = 'create', _('Création')
+        UPDATE = 'update', _('Modification')
+        DELETE = 'delete', _('Suppression')
+        PUBLISH = 'publish', _('Publication')
+        UNPUBLISH = 'unpublish', _('Dépublier')
+        LOGIN = 'login', _('Connexion')
+        LOGOUT = 'logout', _('Déconnexion')
+        PAYOUT = 'payout', _('Reversement')
+        EXPORT = 'export', _('Export données')
+        SCAN = 'scan', _('Scan QR')
+        OTHER = 'other', _('Autre')
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='audit_logs', verbose_name=_('utilisateur'))
+    action = models.CharField(_('action'), max_length=20, choices=Action.choices)
+    model_name = models.CharField(_('modèle'), max_length=100, blank=True)
+    object_id = models.CharField(_('ID objet'), max_length=100, blank=True)
+    description = models.TextField(_('description'))
+    ip_address = models.GenericIPAddressField(_('adresse IP'), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('entrée d\'audit')
+        verbose_name_plural = _('journal d\'audit')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['action']),
+            models.Index(fields=['-created_at']),
+        ]
+
+    def __str__(self):
+        return f'[{self.created_at:%d/%m/%Y %H:%M}] {self.user} — {self.get_action_display()}'
+
+
+
+class Dispute(models.Model):
+    """
+    Gestion des litiges et réclamations.
+    """
+    class Type(models.TextChoices):
+        REFUND      = 'refund',      _('Remboursement')
+        NON_DELIVERY = 'non_delivery', _('Non-livraison')
+        QR_ISSUE    = 'qr_issue',    _('Problème QR code')
+        WRONG_ITEM  = 'wrong_item',  _('Mauvais produit')
+        OTHER       = 'other',       _('Autre')
+
+    class Status(models.TextChoices):
+        OPEN       = 'open',        _('Ouvert')
+        INVESTIGATING = 'investigating', _('En cours')
+        RESOLVED   = 'resolved',    _('Résolu')
+        CLOSED     = 'closed',      _('Fermé')
+        REJECTED   = 'rejected',    _('Rejeté')
+
+    reference = models.CharField(_('référence'), max_length=30, unique=True, blank=True)
+    type = models.CharField(_('type'), max_length=20, choices=Type.choices)
+    status = models.CharField(_('statut'), max_length=20, choices=Status.choices, default=Status.OPEN)
+
+    # Plaignant
+    reported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='disputes',
+        verbose_name=_('signalé par')
+    )
+    email = models.EmailField(_('email contact'), blank=True)
+    phone = models.CharField(_('téléphone'), max_length=20, blank=True)
+
+    # Éléments concernés
+    order_number = models.CharField(_('numéro de commande'), max_length=30, blank=True)
+    ticket_number = models.CharField(_('numéro de ticket'), max_length=30, blank=True)
+    subject = models.CharField(_('sujet'), max_length=200)
+    description = models.TextField(_('description'))
+
+    # Résolution
+    resolution = models.TextField(_('résolution'), blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='resolved_disputes',
+        verbose_name=_('résolu par')
+    )
+
+    # Dates
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('litige')
+        verbose_name_plural = _('litiges')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['type']),
+            models.Index(fields=['reference']),
+        ]
+
+    def __str__(self):
+        return f"Litige {self.reference} — {self.get_type_display()}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            import random, string
+            suffix = ''.join(random.choices(string.digits, k=8))
+            self.reference = f"LIT-{suffix}"
+        super().save(*args, **kwargs)
+
+    def resolve(self, admin_user, resolution=''):
+        from django.utils import timezone
+        self.status = self.Status.RESOLVED
+        self.resolution = resolution
+        self.resolved_by = admin_user
+        self.resolved_at = timezone.now()
+        self.save()

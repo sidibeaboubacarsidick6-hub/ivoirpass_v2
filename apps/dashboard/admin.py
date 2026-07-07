@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Administration du dashboard et wallet
 """
+from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, AuditLog, ReversalOTP, Dispute
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
@@ -99,3 +100,38 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             wr.reject(admin_user=request.user, note="Rejeté via admin")
             count += 1
         self.message_user(request, f"{count} demande(s) rejetée(s).")
+@admin.register(Dispute)
+class DisputeAdmin(admin.ModelAdmin):
+    list_display = ('reference', 'type', 'subject', 'reported_by', 'status_badge', 'created_at')
+    list_filter = ('status', 'type')
+    search_fields = ('reference', 'subject', 'reported_by__email', 'order_number')
+    readonly_fields = ('reference', 'created_at', 'updated_at', 'resolved_at')
+
+    def status_badge(self, obj):
+        colors = {'open': '#F47920', 'investigating': '#0dcaf0', 'resolved': '#1B7A3E', 'closed': '#6c757d', 'rejected': '#dc3545'}
+        color = colors.get(obj.status, '#6c757d')
+        from django.utils.html import format_html
+        return format_html('<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;">{}</span>', color, obj.get_status_display())
+    status_badge.short_description = "Statut"
+
+    actions = ['mark_investigating', 'mark_resolved', 'mark_closed']
+
+    @admin.action(description="🔍 En cours d'investigation")
+    def mark_investigating(self, request, queryset):
+        queryset.filter(status=Dispute.Status.OPEN).update(status=Dispute.Status.INVESTIGATING)
+        self.message_user(request, "Litiges passés en investigation.")
+
+    @admin.action(description="✅ Marquer comme résolus")
+    def mark_resolved(self, request, queryset):
+        from django.utils import timezone
+        queryset.exclude(status=Dispute.Status.CLOSED).update(
+            status=Dispute.Status.RESOLVED,
+            resolved_by=request.user,
+            resolved_at=timezone.now()
+        )
+        self.message_user(request, "Litiges résolus.")
+
+    @admin.action(description="🔒 Fermer")
+    def mark_closed(self, request, queryset):
+        queryset.update(status=Dispute.Status.CLOSED)
+        self.message_user(request, "Litiges fermés.")

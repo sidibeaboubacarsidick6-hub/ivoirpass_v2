@@ -28,4 +28,6 @@ urlpatterns = [
    path('export/csv/', views.export_sales_csv, name='export_csv'),
    path('export/excel/', views.export_sales_excel, name='export_excel'),
    path('export/pdf/', views.export_sales_pdf, name='export_pdf'),
+   
+   path('reclamation/', views.submit_dispute, name='submit_dispute'),
 ]

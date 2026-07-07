@@ -708,3 +708,25 @@ def export_sales_pdf(request):
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="ventes_ivoirpass.pdf"'
     return response
+
+def submit_dispute(request):
+    """Page publique pour soumettre un litige."""
+    if request.method == 'POST':
+        dispute = Dispute.objects.create(
+            type=request.POST.get('type', 'other'),
+            reported_by=request.user if request.user.is_authenticated else None,
+            email=request.POST.get('email', ''),
+            phone=request.POST.get('phone', ''),
+            order_number=request.POST.get('order_number', ''),
+            ticket_number=request.POST.get('ticket_number', ''),
+            subject=request.POST.get('subject', ''),
+            description=request.POST.get('description', ''),
+        )
+        messages.success(
+            request,
+            f"Votre réclamation {dispute.reference} a été enregistrée. "
+            "Nous vous contacterons sous 48h."
+        )
+        return redirect('home')
+
+    return render(request, 'pages/report_problem.html')
