@@ -490,9 +490,22 @@ class ProductOrder(models.Model):
 
         # Met à jour le stock si produit physique
         if self.product.is_physical:
-            self.product.stock -= self.quantity
-            self.product.sold_count += self.quantity
-            self.product.save(update_fields=['stock', 'sold_count'])
+            from django.db import transaction
+            from django.db.models import F
+            
+            with transaction.atomic():
+                # Verrouille et décrémente de manière atomique
+                updated = Product.objects.select_for_update().filter(
+                    pk=self.product.pk,
+                    stock__gte=self.quantity
+                ).update(
+                    stock=F('stock') - self.quantity,
+                    sold_count=F('sold_count') + self.quantity
+                )
+                
+                if not updated:
+                    logger.error(f"Stock insuffisant pour {self.order_number}")
+                    raise ValueError("Stock insuffisant")
 
             # ✅ Notifie le vendeur qu'il doit préparer une livraison
             try:
@@ -844,9 +857,21 @@ class GuestProductOrder(models.Model):
 
         # Met à jour le stock si produit physique
         if self.product.is_physical:
-            self.product.stock = max(0, self.product.stock - self.quantity)
-            self.product.sold_count += self.quantity
-            self.product.save(update_fields=['stock', 'sold_count'])
+            from django.db import transaction
+            from django.db.models import F
+            
+            with transaction.atomic():
+                updated = Product.objects.select_for_update().filter(
+                    pk=self.product.pk,
+                    stock__gte=self.quantity
+                ).update(
+                    stock=F('stock') - self.quantity,
+                    sold_count=F('sold_count') + self.quantity
+                )
+                
+                if not updated:
+                    logger.error(f"Stock insuffisant pour guest {self.order_number}")
+                    raise ValueError("Stock insuffisant")
 
             # ✅ Notifie le vendeur qu'il doit préparer une livraison
             try:

@@ -153,17 +153,32 @@ def buy_product(request, slug):
         # (commission prélevée sur le vendeur au reversement)
         total = subtotal
 
-        order = ProductOrder.objects.create(
-            buyer           = request.user,
-            product         = product,
-            quantity        = quantity,
-            unit_price      = unit_price,
-            subtotal        = subtotal,
-            commission      = commission,
-            total           = total,
-            delivery_method = delivery_method,
-            status          = ProductOrder.Status.PENDING,
-        )
+        # 🔒 Verrouillage du stock pour éviter les race conditions
+        from django.db import transaction
+        
+        with transaction.atomic():
+            # Re-vérifier le stock dans la transaction verrouillée
+            product_locked = Product.objects.select_for_update().get(pk=product.pk)
+            
+            if product_locked.is_physical and product_locked.stock < quantity:
+                messages.error(request, "Stock insuffisant. Réessayez.")
+                addresses = request.user.addresses.all() if product.is_physical else []
+                return render(request, 'store/checkout.html', {
+                    'product': product,
+                    'addresses': addresses,
+                })
+            
+            order = ProductOrder.objects.create(
+                buyer           = request.user,
+                product         = product_locked,
+                quantity        = quantity,
+                unit_price      = unit_price,
+                subtotal        = subtotal,
+                commission      = commission,
+                total           = total,
+                delivery_method = delivery_method,
+                status          = ProductOrder.Status.PENDING,
+            )
 
         # ============================================
         # Sauvegarde adresse de livraison si produit physique
@@ -832,19 +847,29 @@ def guest_buy_product(request, slug):
         subtotal   = unit_price * quantity
         total      = subtotal  # Commission prélevée sur le vendeur, pas sur l'acheteur
 
-        order = GuestProductOrder.objects.create(
-            first_name = first_name,
-            last_name  = last_name,
-            email      = email,
-            phone      = phone,
-            product    = product,
-            quantity   = quantity,
-            unit_price = unit_price,
-            subtotal   = subtotal,
-            total      = total,
-            delivery_method = delivery_method,
-            status = GuestProductOrder.Status.PENDING,
-        )
+        # 🔒 Verrouillage du stock pour éviter les race conditions
+        from django.db import transaction
+        
+        with transaction.atomic():
+            product_locked = Product.objects.select_for_update().get(pk=product.pk)
+            
+            if product_locked.is_physical and product_locked.stock < quantity:
+                messages.error(request, "Stock insuffisant. Réessayez.")
+                return render(request, 'store/guest_checkout.html', {'product': product})
+            
+            order = GuestProductOrder.objects.create(
+                first_name = first_name,
+                last_name  = last_name,
+                email      = email,
+                phone      = phone,
+                product    = product_locked,
+                quantity   = quantity,
+                unit_price = unit_price,
+                subtotal   = subtotal,
+                total      = total,
+                delivery_method = delivery_method,
+                status = GuestProductOrder.Status.PENDING,
+            )
 
         if delivery_method == 'delivery':
             order.delivery_name         = request.POST.get('delivery_name', '').strip()
