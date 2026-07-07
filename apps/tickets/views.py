@@ -169,17 +169,32 @@ def order_confirmation(request, order_number):
 
 @login_required
 def my_tickets(request):
-    tickets = Ticket.objects.filter(order_item__order__buyer=request.user, order_item__order__status=Order.Status.PAID)
+    tickets = Ticket.objects.filter(
+        order_item__order__buyer=request.user,
+        order_item__order__status=Order.Status.PAID
+    ).select_related(
+        'order_item__ticket_type__event',
+        'order_item__order__buyer'
+    )
     now = timezone.now()
     upcoming = [t for t in tickets if t.event.start_date >= now]
     past = [t for t in tickets if t.event.start_date < now]
-    return render(request, 'tickets/my_tickets.html', {'upcoming': upcoming, 'past': past})
+    return render(request, 'tickets/my_tickets.html', {
+        'upcoming': upcoming,
+        'past': past
+    })
 
 
 @login_required
 def ticket_detail(request, ticket_number):
-    ticket = get_object_or_404(Ticket, ticket_number=ticket_number, order_item__order__buyer=request.user)
-    return render(request, 'tickets/ticket_detail.html', {'ticket': ticket})
+    ticket = get_object_or_404(
+        Ticket.objects.select_related(
+            'order_item__ticket_type__event',
+            'order_item__order__buyer'
+        ),
+        ticket_number=ticket_number,
+        order_item__order__buyer=request.user
+    )
 
 
 @login_required
@@ -243,6 +258,14 @@ def guest_checkout(request, slug):
             tt.save(update_fields=['quantity_sold'])
             tt.event.save(update_fields=['tickets_sold'])
 
+        if total == 0:
+            order.mark_as_paid(payment_method='free', payment_reference=f'FREE-{order.order_number}')
+            try:
+                from apps.notifications.service import NotificationService
+                NotificationService.guest_tickets_confirmed(order)
+            except Exception:
+                pass
+            return redirect('tickets:guest_confirmation', order_number=order.order_number)
         return redirect('tickets:guest_payment', order_number=order.order_number)
 
     return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})
@@ -264,7 +287,7 @@ def guest_payment_initiate(request, order_number):
     webhook_url = f"{base_url}/billets/guest/webhook/"
 
     invoice_items = {}
-    for i, item in enumerate(order.guest_items.all(), 1):
+    for i, item in enumerate(order.guest_items.select_related('ticket_type__event'), 1):
         invoice_items[f"item_{i}"] = {
             "name": item.ticket_type.name,
             "quantity": item.quantity,
