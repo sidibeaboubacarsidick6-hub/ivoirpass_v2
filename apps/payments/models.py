@@ -91,6 +91,7 @@ class Payment(models.Model):
         indexes = [
             models.Index(fields=['paydunya_token']),
             models.Index(fields=['order', 'status']),
+            models.Index(fields=['status']),
         ]
 
     def __str__(self):

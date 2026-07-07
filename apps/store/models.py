@@ -449,6 +449,13 @@ class ProductOrder(models.Model):
         verbose_name = _('commande produit')
         verbose_name_plural = _('commandes produits')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['buyer', 'status']),
+            models.Index(fields=['product', 'status']),
+            models.Index(fields=['order_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['-created_at']),
+        ]
 
     def __str__(self):
         return (
@@ -631,6 +638,10 @@ class DownloadLink(models.Model):
     class Meta:
         verbose_name = _('lien de téléchargement')
         verbose_name_plural = _('liens de téléchargement')
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['expires_at']),
+        ]
 
     def __str__(self):
         return f"Lien {self.token} — {self.product.name}"
@@ -816,6 +827,8 @@ class GuestProductOrder(models.Model):
             models.Index(fields=['email', 'status']),
             models.Index(fields=['product', 'status']),
             models.Index(fields=['order_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['-created_at']),
         ]
 
     def __str__(self):
@@ -1018,6 +1031,10 @@ class GuestDownloadLink(models.Model):
     class Meta:
         verbose_name = _('lien téléchargement invité')
         verbose_name_plural = _('liens téléchargement invités')
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['expires_at']),
+        ]
 
     def __str__(self):
         return f"Lien {self.token} — {self.product.name}"

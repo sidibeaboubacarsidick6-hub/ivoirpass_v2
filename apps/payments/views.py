@@ -315,12 +315,9 @@ def _confirm_order(order, token, raw_data):
     )
 
     # ✅ AJOUT UNIQUEMENT — Envoyer l'email avec les billets
-    try:
-        from apps.tickets.utils import send_ticket_email
-        send_ticket_email(order)
-    except Exception:
-        # Silencieux — ne jamais bloquer la confirmation
-        pass
+    # Envoi asynchrone des billets par email
+    from apps.notifications.tasks import send_ticket_email_async
+    send_ticket_email_async.delay(str(order.uuid))
 
 @login_required
 def payment_status(request, order_number):

@@ -270,6 +270,10 @@ class WithdrawalRequest(models.Model):
         verbose_name = _('demande de reversement')
         verbose_name_plural = _('demandes de reversement')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['wallet', 'status']),
+            models.Index(fields=['status']),
+        ]
 
     def __str__(self):
         return (

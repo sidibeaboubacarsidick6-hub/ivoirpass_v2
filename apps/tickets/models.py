@@ -95,6 +95,7 @@ class Order(models.Model):
         indexes = [
             models.Index(fields=['order_number']),
             models.Index(fields=['buyer', 'status']),
+            models.Index(fields=['status']),
         ]
 
     def __str__(self):
@@ -372,6 +373,11 @@ class GuestOrder(models.Model):
         verbose_name = _('commande invité')
         verbose_name_plural = _('commandes invités')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['order_number']),
+            models.Index(fields=['email', 'status']),
+            models.Index(fields=['status']),
+        ]
 
     def __str__(self):
         return f"Commande {self.order_number} — {self.email}"
