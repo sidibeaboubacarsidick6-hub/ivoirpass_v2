@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues du compte utilisateur
 """
+from django.core.cache import cache
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -20,25 +21,33 @@ def home(request):
 
     now = timezone.now()
 
-    featured_events = Event.objects.filter(
-        status='published',
-        start_date__gte=now,
-    ).select_related('category').order_by('start_date')[:6]
+    # 🔥 Cache : événements mis en avant (5 minutes)
+    cache_key_featured = 'home_featured_events'
+    featured_events = cache.get(cache_key_featured)
+    if featured_events is None:
+        featured_events = list(Event.objects.filter(
+            status='published',
+            start_date__gte=now,
+        ).select_related('category').order_by('start_date')[:6])
+        cache.set(cache_key_featured, featured_events, 300)
 
-    upcoming_qs = Event.objects.filter(
-        status='published',
-        start_date__gte=now,
-    ).select_related('category', 'organizer').order_by('start_date')
-
-    paginator   = Paginator(upcoming_qs, 6)
+    # 🔥 Pagination : cache par page (5 minutes)
     page_number = request.GET.get('page', 1)
-    upcoming_events = paginator.get_page(page_number)
+    cache_key_upcoming = f'home_upcoming_events_page_{page_number}'
+    upcoming_events = cache.get(cache_key_upcoming)
+    if upcoming_events is None:
+        upcoming_qs = Event.objects.filter(
+            status='published',
+            start_date__gte=now,
+        ).select_related('category', 'organizer').order_by('start_date')
+        paginator = Paginator(upcoming_qs, 6)
+        upcoming_events = paginator.get_page(page_number)
+        cache.set(cache_key_upcoming, upcoming_events, 300)
 
     return render(request, 'pages/home.html', {
         'featured_events': featured_events,
         'upcoming_events': upcoming_events,
     })
-
 @login_required
 def profile(request):
     """Page profil — vue en lecture."""

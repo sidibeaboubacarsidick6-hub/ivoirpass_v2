@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues des événements
 """
+from django.core.cache import cache
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -17,12 +18,25 @@ from .forms import EventForm, TicketTypeFormSet
 
 def event_list(request):
     """Liste publique des événements publiés."""
+    from django.utils import timezone
+
+    # 🔥 Cache par query string (5 minutes)
+    query = request.GET.get('q', '')
+    category_slug = request.GET.get('category', '')
+    city = request.GET.get('city', '')
+    upcoming_only = request.GET.get('upcoming', '')
+    page_number = request.GET.get('page', 1)
+    
+    cache_key = f'event_list_{query}_{category_slug}_{city}_{upcoming_only}_page_{page_number}'
+    cached_data = cache.get(cache_key)
+    
+    if cached_data is not None:
+        return render(request, 'events/list.html', cached_data)
+
     events = Event.objects.filter(
         status=Event.Status.PUBLISHED
     ).select_related('category', 'organizer')
 
-    # Recherche
-    query = request.GET.get('q', '')
     if query:
         events = events.filter(
             Q(title__icontains=query) |
@@ -31,36 +45,31 @@ def event_list(request):
             Q(tags__icontains=query)
         )
 
-    # Filtre par catégorie
-    category_slug = request.GET.get('category', '')
     if category_slug:
         events = events.filter(category__slug=category_slug)
 
-    # Filtre par ville
-    city = request.GET.get('city', '')
     if city:
         events = events.filter(venue_city__icontains=city)
 
-    # Filtre : à venir uniquement
-    upcoming_only = request.GET.get('upcoming', '')
     if upcoming_only:
         events = events.filter(start_date__gte=timezone.now())
 
-    # Pagination
     paginator = Paginator(events, 12)
-    page_number = request.GET.get('page', 1)
-    page_obj    = paginator.get_page(page_number)
+    page_obj = paginator.get_page(page_number)
 
     categories = Category.objects.filter(is_active=True)
 
-    return render(request, 'events/list.html', {
+    context = {
         'page_obj':      page_obj,
         'categories':    categories,
         'query':         query,
         'category_slug': category_slug,
         'city':          city,
         'total':         paginator.count,
-    })
+    }
+    
+    cache.set(cache_key, context, 300)
+    return render(request, 'events/list.html', context)
 
 
 def event_detail(request, slug):

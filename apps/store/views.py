@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues de la boutique culturelle
 """
+from django.core.cache import cache
 from django_ratelimit.decorators import ratelimit
 import os
 import json
@@ -27,12 +28,23 @@ logger = logging.getLogger(__name__)
 
 def store_list(request):
     """Boutique publique — liste de tous les produits."""
+    # 🔥 Cache par query string (5 minutes)
+    query = request.GET.get('q', '')
+    category_slug = request.GET.get('category', '')
+    product_type = request.GET.get('type', '')
+    sort = request.GET.get('sort', '-created_at')
+    page_number = request.GET.get('page', 1)
+    
+    cache_key = f'store_list_{query}_{category_slug}_{product_type}_{sort}_page_{page_number}'
+    cached_data = cache.get(cache_key)
+    
+    if cached_data is not None:
+        return render(request, 'store/list.html', cached_data)
+
     products = Product.objects.filter(
         status=Product.Status.PUBLISHED
     ).select_related('category', 'seller')
 
-    # Recherche
-    query = request.GET.get('q', '')
     if query:
         products = products.filter(
             Q(name__icontains=query)         |
@@ -41,28 +53,21 @@ def store_list(request):
             Q(tags__icontains=query)
         )
 
-    # Filtres
-    category_slug = request.GET.get('category', '')
     if category_slug:
         products = products.filter(category__slug=category_slug)
 
-    product_type = request.GET.get('type', '')
     if product_type:
         products = products.filter(product_type=product_type)
 
-    # Tri
-    sort = request.GET.get('sort', '-created_at')
     if sort in ['-created_at', 'price', '-price', '-sold_count']:
         products = products.order_by(sort)
 
-    # Pagination
     paginator   = Paginator(products, 12)
-    page_number = request.GET.get('page', 1)
     page_obj    = paginator.get_page(page_number)
 
     categories = ProductCategory.objects.filter(is_active=True)
 
-    return render(request, 'store/list.html', {
+    context = {
         'page_obj':     page_obj,
         'categories':   categories,
         'query':        query,
@@ -71,7 +76,10 @@ def store_list(request):
         'sort':         sort,
         'total':        paginator.count,
         'product_types': Product.ProductType.choices,
-    })
+    }
+    
+    cache.set(cache_key, context, 300)
+    return render(request, 'store/list.html', context)
 
 
 def store_detail(request, slug):
