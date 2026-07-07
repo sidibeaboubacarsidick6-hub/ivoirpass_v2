@@ -283,15 +283,17 @@ class Ticket(models.Model):
     def _generate_qr_data(self):
         """
         Génère la donnée signée HMAC-SHA256 du QR Code.
-        Format : uuid:ticket_number:HMAC
-        Impossible à falsifier sans la SECRET_KEY Django.
+        Format : uuid:ticket_number:order_id:timestamp:HMAC
         """
-        payload = f"{self.uuid}:{self.ticket_number}"
+        from django.utils import timezone
+        timestamp = timezone.now().isoformat()
+        order_id = self.order_item.order.order_number
+        payload = f"{self.uuid}:{self.ticket_number}:{order_id}:{timestamp}"
         signature = hmac.new(
             settings.SECRET_KEY.encode('utf-8'),
             payload.encode('utf-8'),
             hashlib.sha256
-        ).hexdigest()[:16]  # 16 premiers caractères suffisent
+        ).hexdigest()[:16]
         return f"{payload}:{signature}"
 
     def _generate_qr_image(self):
@@ -496,7 +498,10 @@ class GuestTicket(models.Model):
             self._generate_qr_image()
 
     def _generate_qr_data(self):
-        payload = f"{self.uuid}:{self.ticket_number}"
+        from django.utils import timezone
+        timestamp = timezone.now().isoformat()
+        order_id = self.order_item.order.order_number
+        payload = f"{self.uuid}:{self.ticket_number}:{order_id}:{timestamp}"
         signature = hmac.new(
             settings.SECRET_KEY.encode(),
             payload.encode(),

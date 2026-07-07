@@ -172,7 +172,7 @@ def validate_qr(request):
 
     # 1. Format du QR : uuid:ticket_number:signature
     parts = qr_data.split(':')
-    if len(parts) != 3:
+    if len(parts) < 4:
         result  = ScanLog.Result.INVALID_QR
         message = "QR Code invalide — format incorrect."
         color   = 'red'
