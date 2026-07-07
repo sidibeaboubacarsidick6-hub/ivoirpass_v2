@@ -123,6 +123,7 @@ class OrganizerProfileForm(forms.ModelForm):
         fields = [
             'organization_name', 'organization_description',
             'organization_logo', 'organization_website',
+            'kyc_identity_doc', 'kyc_proof_of_address', 'kyc_business_doc',
         ]
         widgets = {
             'organization_name': forms.TextInput(attrs={

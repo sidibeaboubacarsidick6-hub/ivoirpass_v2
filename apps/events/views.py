@@ -20,7 +20,7 @@ def event_list(request):
     """Liste publique des événements publiés."""
     from django.utils import timezone
 
-    # 🔥 Cache par query string (5 minutes)
+    # Cache par query string (5 minutes)
     query = request.GET.get('q', '')
     category_slug = request.GET.get('category', '')
     city = request.GET.get('city', '')
@@ -81,7 +81,6 @@ def event_detail(request, slug):
     )
     ticket_types = event.ticket_types.filter(is_visible=True).order_by('order', 'price')
 
-    # Événements similaires
     similar_events = Event.objects.filter(
         status=Event.Status.PUBLISHED,
         category=event.category
@@ -103,10 +102,7 @@ def organizer_required(view_func):
     @login_required
     def wrapper(request, *args, **kwargs):
         if not (request.user.is_organizer or request.user.is_platform_admin):
-            messages.error(
-                request,
-                "Cette section est réservée aux organisateurs."
-            )
+            messages.error(request, "Cette section est réservée aux organisateurs.")
             return redirect('accounts:profile')
         return view_func(request, *args, **kwargs)
     return wrapper
@@ -115,11 +111,8 @@ def organizer_required(view_func):
 @organizer_required
 def my_events(request):
     """Tableau de bord événements de l'organisateur."""
-    events = Event.objects.filter(
-        organizer=request.user
-    ).order_by('-created_at')
+    events = Event.objects.filter(organizer=request.user).order_by('-created_at')
 
-    # Statistiques rapides
     stats = {
         'total':     events.count(),
         'published': events.filter(status=Event.Status.PUBLISHED).count(),
@@ -136,32 +129,54 @@ def my_events(request):
 @organizer_required
 def event_create(request):
     """Créer un nouvel événement."""
-    form       = EventForm()
-    formset    = TicketTypeFormSet()
+    form    = EventForm()
+    formset = TicketTypeFormSet()
 
     if request.method == 'POST':
         form    = EventForm(request.POST, request.FILES)
         formset = TicketTypeFormSet(request.POST)
 
         if form.is_valid() and formset.is_valid():
+            # ============================================
+            # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
+            # ============================================
+            event_status = form.cleaned_data.get('status')
+            if event_status == Event.Status.PUBLISHED:
+                # Vérifier si l'événement a des tickets payants
+                has_paid_tickets = False
+                for tt_form in formset:
+                    if tt_form.cleaned_data and not tt_form.cleaned_data.get('DELETE', False):
+                        if tt_form.cleaned_data.get('price', 0) > 0:
+                            has_paid_tickets = True
+                            break
+
+                if has_paid_tickets and not request.user.is_organizer_verified:
+                    messages.error(
+                        request,
+                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
+                        "Veuillez soumettre vos documents KYC (pièce d'identité, "
+                        "justificatif de domicile, document professionnel) dans "
+                        "votre profil avant de publier un événement payant."
+                    )
+                    return render(request, 'events/create.html', {
+                        'form':    form,
+                        'formset': formset,
+                        'action':  'Créer',
+                    })
+
             event = form.save(commit=False)
             event.organizer = request.user
             event.save()
 
-            # Sauvegarde les types de tickets
             formset.instance = event
             formset.save()
 
-            # Met à jour le prix minimum
             prices = event.ticket_types.values_list('price', flat=True)
             if prices:
                 event.min_price = min(prices)
                 event.save(update_fields=['min_price'])
 
-            messages.success(
-                request,
-                f"Événement « {event.title} » créé avec succès !"
-            )
+            messages.success(request, f"Événement « {event.title} » créé avec succès !")
             return redirect('events:my_events')
         else:
             messages.error(request, "Veuillez corriger les erreurs.")
@@ -185,6 +200,32 @@ def event_edit(request, slug):
         formset = TicketTypeFormSet(request.POST, instance=event)
 
         if form.is_valid() and formset.is_valid():
+            # ============================================
+            # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
+            # ============================================
+            event_status = form.cleaned_data.get('status')
+            if event_status == Event.Status.PUBLISHED:
+                has_paid_tickets = False
+                for tt_form in formset:
+                    if tt_form.cleaned_data and not tt_form.cleaned_data.get('DELETE', False):
+                        if tt_form.cleaned_data.get('price', 0) > 0:
+                            has_paid_tickets = True
+                            break
+
+                if has_paid_tickets and not request.user.is_organizer_verified:
+                    messages.error(
+                        request,
+                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
+                        "Veuillez soumettre vos documents KYC dans votre profil "
+                        "avant de publier un événement payant."
+                    )
+                    return render(request, 'events/create.html', {
+                        'form':    form,
+                        'formset': formset,
+                        'event':   event,
+                        'action':  'Modifier',
+                    })
+
             event = form.save()
             formset.save()
 
@@ -214,7 +255,6 @@ def event_delete(request, slug):
             event.status = Event.Status.CANCELLED
             event.save()
 
-            # Notifie tous les acheteurs et déclenche remboursement
             from apps.tickets.models import Ticket
             from apps.notifications.service import NotificationService
 

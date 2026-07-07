@@ -149,6 +149,39 @@
           </div>
           {% endif %}
         </div>
+
+        <!-- Section : Vérification KYC -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold mb-3">
+            <i class="bi bi-shield-check me-2 text-orange"></i>Vérification KYC
+          </h6>
+          {% if user.is_organizer_verified %}
+          <div class="alert alert-success small mb-3">
+            ✅ Compte vérifié le {{ user.kyc_verified_at|date:"d/m/Y" }}
+          </div>
+          {% else %}
+          <div class="alert alert-warning small mb-3">
+            ⚠️ Votre compte n'est pas encore vérifié. Publier un événement payant nécessite la vérification.
+          </div>
+          {% endif %}
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label small">Pièce d'identité</label>
+              {{ organizer_form.kyc_identity_doc }}
+              {% if user.kyc_identity_doc %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Justificatif de domicile</label>
+              {{ organizer_form.kyc_proof_of_address }}
+              {% if user.kyc_proof_of_address %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Document professionnel</label>
+              {{ organizer_form.kyc_business_doc }}
+              {% if user.kyc_business_doc %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
+            </div>
+          </div>
+        </div>
         {% endif %}
 
         <!-- Boutons -->

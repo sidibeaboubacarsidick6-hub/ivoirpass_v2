@@ -120,6 +120,48 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         blank=True,
     )
 
+        # ============================================
+    # KYC — DOCUMENTS
+    # ============================================
+    kyc_identity_doc = models.FileField(
+        _('pièce d\'identité'),
+        upload_to='kyc/identity/%Y/%m/',
+        null=True, blank=True,
+        help_text="Carte d'identité, passeport ou carte consulaire"
+    )
+    kyc_proof_of_address = models.FileField(
+        _('justificatif de domicile'),
+        upload_to='kyc/address/%Y/%m/',
+        null=True, blank=True,
+        help_text="Facture électricité, eau, ou attestation de domicile"
+    )
+    kyc_business_doc = models.FileField(
+        _('document professionnel'),
+        upload_to='kyc/business/%Y/%m/',
+        null=True, blank=True,
+        help_text="RCCM, attestation fiscale, ou déclaration d'activité"
+    )
+    kyc_submitted_at = models.DateTimeField(
+        _('KYC soumis le'),
+        null=True, blank=True
+    )
+    kyc_verified_at = models.DateTimeField(
+        _('KYC vérifié le'),
+        null=True, blank=True
+    )
+    kyc_verified_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='kyc_verified_users',
+        verbose_name=_('KYC vérifié par')
+    )
+    kyc_notes = models.TextField(
+        _('notes KYC'),
+        blank=True,
+        help_text="Notes internes de l'admin sur la vérification KYC"
+    )
+
     # ============================================
     # PRÉFÉRENCES ET LOCALISATION
     # ============================================
@@ -266,6 +308,22 @@ class UserAddress(models.Model):
         max_length=255,
         blank=True,
         help_text="Complément d'adresse, bâtiment, appartement"
+    )
+    latitude = models.DecimalField(
+        _('latitude'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Coordonnée GPS automatique"
+    )
+    longitude = models.DecimalField(
+        _('longitude'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Coordonnée GPS automatique"
     )
     city = models.CharField(
         _('ville'),
