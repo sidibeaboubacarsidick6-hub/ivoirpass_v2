@@ -1,6 +1,14 @@
 """
 IvoirPass V2 — Vues du Dashboard Organisateur
 """
+import csv
+import openpyxl
+from django.http import HttpResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from io import BytesIO
+
 from django.shortcuts import render, redirect, get_object_or_404  # ✅ Correction : enlever la virgule finale
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -521,3 +529,182 @@ def audit_log(request):
     return render(request, 'dashboard/audit_log.html', {
         'page_obj': page_obj,
     })
+
+@organizer_required
+def export_sales_csv(request):
+    """Export CSV des ventes de l'organisateur."""
+    from apps.tickets.models import OrderItem
+    from apps.store.models import ProductOrder
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="ventes_ivoirpass.csv"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut', 'Commission', 'Net'])
+
+    # Ventes billetterie
+    items = OrderItem.objects.filter(
+        ticket_type__event__organizer=request.user,
+        order__status='paid'
+    ).select_related('ticket_type__event', 'order')
+
+    for item in items:
+        rate = float(item.ticket_type.event.commission_rate) / 100
+        net = int(float(item.subtotal) * (1 - rate))
+        writer.writerow([
+            'Billet', item.order.order_number,
+            item.order.paid_at.strftime('%d/%m/%Y') if item.order.paid_at else '',
+            item.ticket_type.event.title, item.quantity,
+            int(item.subtotal), int(float(item.subtotal) * rate), net
+        ])
+
+    # Ventes boutique
+    store_orders = ProductOrder.objects.filter(
+        product__seller=request.user, status='paid'
+    ).select_related('product')
+
+    for order in store_orders:
+        rate = float(order.product.commission_rate) / 100
+        net = int(float(order.subtotal) * (1 - rate))
+        writer.writerow([
+            'Boutique', order.order_number,
+            order.paid_at.strftime('%d/%m/%Y') if order.paid_at else '',
+            order.product.name, order.quantity,
+            int(order.subtotal), int(float(order.subtotal) * rate), net
+        ])
+
+    return response
+
+
+@organizer_required
+def export_sales_excel(request):
+    """Export Excel des ventes."""
+    from apps.tickets.models import OrderItem
+    from apps.store.models import ProductOrder
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Ventes"
+    ws.append(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut (FCFA)', 'Commission', 'Net (FCFA)'])
+
+    items = OrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
+
+    for item in items:
+        rate = float(item.ticket_type.event.commission_rate) / 100
+        ws.append([
+            'Billet', item.order.order_number,
+            item.order.paid_at.strftime('%d/%m/%Y') if item.order.paid_at else '',
+            item.ticket_type.event.title, item.quantity,
+            int(item.subtotal), int(float(item.subtotal) * rate),
+            int(float(item.subtotal) * (1 - rate))
+        ])
+
+    store_orders = ProductOrder.objects.filter(
+        product__seller=request.user, status='paid'
+    ).select_related('product')
+
+    for order in store_orders:
+        rate = float(order.product.commission_rate) / 100
+        ws.append([
+            'Boutique', order.order_number,
+            order.paid_at.strftime('%d/%m/%Y') if order.paid_at else '',
+            order.product.name, order.quantity,
+            int(order.subtotal), int(float(order.subtotal) * rate),
+            int(float(order.subtotal) * (1 - rate))
+        ])
+
+    # Ajuster les colonnes
+    for col in ws.columns:
+        max_length = max(len(str(cell.value or '')) for cell in col)
+        ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 50)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="ventes_ivoirpass.xlsx"'
+    wb.save(response)
+    return response
+
+
+@organizer_required
+def export_sales_pdf(request):
+    """Export PDF des ventes."""
+    from apps.tickets.models import OrderItem
+    from apps.store.models import ProductOrder
+
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(20*mm, height - 20*mm, "Rapport des ventes - IvoirPass")
+    p.setFont("Helvetica", 10)
+    p.drawString(20*mm, height - 28*mm, f"Organisateur : {request.user.get_full_name()}")
+    p.drawString(20*mm, height - 34*mm, f"Généré le : {timezone.now().strftime('%d/%m/%Y à %H:%M')}")
+
+    y = height - 45*mm
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(20*mm, y, "Type")
+    p.drawString(50*mm, y, "Référence")
+    p.drawString(90*mm, y, "Date")
+    p.drawString(120*mm, y, "Produit")
+    p.drawString(170*mm, y, "Net (FCFA)")
+    y -= 5*mm
+    p.line(20*mm, y, width - 20*mm, y)
+    y -= 7*mm
+
+    p.setFont("Helvetica", 8)
+    total_net = 0
+
+    items = OrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
+
+    for item in items:
+        if y < 30*mm:
+            p.showPage()
+            y = height - 20*mm
+        rate = float(item.ticket_type.event.commission_rate) / 100
+        net = int(float(item.subtotal) * (1 - rate))
+        total_net += net
+        p.drawString(20*mm, y, "Billet")
+        p.drawString(50*mm, y, item.order.order_number)
+        p.drawString(90*mm, y, item.order.paid_at.strftime('%d/%m/%Y') if item.order.paid_at else '')
+        p.drawString(120*mm, y, item.ticket_type.event.title[:25])
+        p.drawString(170*mm, y, f"{net:,} FCFA")
+        y -= 5*mm
+
+    store_orders = ProductOrder.objects.filter(
+        product__seller=request.user, status='paid'
+    ).select_related('product')
+
+    for order in store_orders:
+        if y < 30*mm:
+            p.showPage()
+            y = height - 20*mm
+        rate = float(order.product.commission_rate) / 100
+        net = int(float(order.subtotal) * (1 - rate))
+        total_net += net
+        p.drawString(20*mm, y, "Boutique")
+        p.drawString(50*mm, y, order.order_number)
+        p.drawString(90*mm, y, order.paid_at.strftime('%d/%m/%Y') if order.paid_at else '')
+        p.drawString(120*mm, y, order.product.name[:25])
+        p.drawString(170*mm, y, f"{net:,} FCFA")
+        y -= 5*mm
+
+    y -= 5*mm
+    p.line(20*mm, y, width - 20*mm, y)
+    y -= 8*mm
+    p.setFont("Helvetica-Bold", 11)
+    p.drawString(120*mm, y, f"Total net : {total_net:,} FCFA")
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="ventes_ivoirpass.pdf"'
+    return response

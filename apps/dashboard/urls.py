@@ -25,4 +25,7 @@ urlpatterns = [
          views.verify_otp, name='verify_otp'),
     path('audit/',
          views.audit_log, name='audit_log'),
+   path('export/csv/', views.export_sales_csv, name='export_csv'),
+   path('export/excel/', views.export_sales_excel, name='export_excel'),
+   path('export/pdf/', views.export_sales_pdf, name='export_pdf'),
 ]
