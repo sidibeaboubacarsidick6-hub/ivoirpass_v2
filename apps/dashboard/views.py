@@ -13,7 +13,8 @@ from datetime import timedelta
 
 from apps.events.models import Event
 from apps.tickets.models import Order, OrderItem, Ticket
-from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest
+from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP
+
 
 
 def organizer_required(view_func):
@@ -293,11 +294,33 @@ def withdraw_request(request):
                 payout_phone  = phone,
                 payout_name   = name,
             )
-            messages.success(
-                request,
-                f"Demande {wr.reference} soumise. Traitement sous 24-48h."
+            # Générer l'OTP
+            otp = ReversalOTP.generate(wr)
+
+            # Envoyer OTP par email
+            from django.core.mail import send_mail
+            send_mail(
+                subject='[IvoirPass] Code de validation — Reversement',
+                message=f'Votre code de validation : {otp.code}\nValable 10 minutes.',
+                from_email=None,
+                recipient_list=[request.user.email],
+                fail_silently=True,
             )
-            return redirect('dashboard:wallet')
+
+            # Envoyer OTP par SMS (si activé)
+            from django.conf import settings
+            if settings.SMS_ENABLED and request.user.phone_number:
+                try:
+                    from apps.notifications.sms import send_sms
+                    send_sms(
+                        to=request.user.phone_number,
+                        message=f'IvoirPass - Code reversement : {otp.code}'
+                    )
+                except Exception:
+                    pass
+
+            # Rediriger vers la page de validation OTP
+            return redirect('dashboard:verify_otp', reference=wr.reference)
 
     return render(request, 'dashboard/withdraw.html', {
         'wallet':     wallet,
@@ -431,3 +454,42 @@ def mark_order_shipped(request, order_type, order_id):
         messages.success(request, f"Commande {order.order_number} marquée comme expédiée.")
 
     return redirect('dashboard:physical_orders')
+
+@organizer_required
+def verify_otp(request, reference):
+    """Page de validation du code OTP pour reversement."""
+    withdrawal = get_object_or_404(
+        WithdrawalRequest,
+        reference=reference,
+        wallet__organizer=request.user,
+        status=WithdrawalRequest.Status.PENDING
+    )
+
+    try:
+        otp = withdrawal.otp
+    except ReversalOTP.DoesNotExist:
+        messages.error(request, "Aucun code OTP trouvé. Refaites votre demande.")
+        return redirect('dashboard:wallet')
+
+    if request.method == 'POST':
+        code = request.POST.get('otp_code', '').strip()
+
+        if not otp.is_valid:
+            messages.error(request, "Code expiré. Refaites votre demande.")
+            return redirect('dashboard:wallet')
+
+        if code == otp.code:
+            otp.is_used = True
+            otp.save()
+            messages.success(
+                request,
+                f"✅ Demande {withdrawal.reference} validée ! Traitement sous 24-48h."
+            )
+            return redirect('dashboard:wallet')
+        else:
+            messages.error(request, "Code incorrect. Veuillez réessayer.")
+
+    return render(request, 'dashboard/verify_otp.html', {
+        'withdrawal': withdrawal,
+        'expires_at': otp.expires_at,
+    })

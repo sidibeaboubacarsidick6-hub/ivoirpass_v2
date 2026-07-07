@@ -21,4 +21,6 @@ urlpatterns = [
          name='physical_orders'),
     path('commandes-physiques/<str:order_type>/<int:order_id>/shipped/',
          views.mark_order_shipped, name='mark_shipped'),
+    path('reversement/valider/<str:reference>/',
+     views.verify_otp, name='verify_otp'),
 ]

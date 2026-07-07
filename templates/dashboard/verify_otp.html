@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}Valider le reversement{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-5">
+      <div class="ip-card p-4 text-center">
+
+        <div class="mb-4">
+          <span style="font-size:3rem;">🔐</span>
+          <h5 class="fw-bold mt-2">Validation du reversement</h5>
+          <p class="text-muted small">
+            Un code à 6 chiffres a été envoyé à votre email<br>
+            <strong>{{ request.user.email }}</strong>
+            {% if request.user.phone_number %}
+            et par SMS au <strong>{{ request.user.phone_number }}</strong>
+            {% endif %}
+          </p>
+        </div>
+
+        <form method="POST">
+          {% csrf_token %}
+          <div class="mb-3">
+            <input type="text" name="otp_code" class="form-control form-control-lg text-center"
+                   placeholder="______" maxlength="6" pattern="[0-9]{6}" required
+                   style="font-size:1.5rem; letter-spacing:8px;" autofocus />
+          </div>
+
+          <button type="submit" class="btn btn-orange btn-lg w-100 mb-3">
+            <i class="bi bi-check-lg me-2"></i>Valider
+          </button>
+        </form>
+
+        <p class="text-muted small">
+          Code valable jusqu'à {{ expires_at|date:"H:i" }}<br>
+          <a href="{% url 'dashboard:wallet' %}">← Annuler</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

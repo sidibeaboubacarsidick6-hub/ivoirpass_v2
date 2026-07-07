@@ -321,3 +321,42 @@ class WithdrawalRequest(models.Model):
         self.processed_by = admin_user
         self.processed_at = timezone.now()
         self.save()
+class ReversalOTP(models.Model):
+    """
+    Code OTP pour valider une demande de reversement.
+    Envoyé par email ET SMS. Valable 10 minutes.
+    """
+    withdrawal = models.OneToOneField(
+        WithdrawalRequest,
+        on_delete=models.CASCADE,
+        related_name='otp',
+        verbose_name=_('demande de reversement')
+    )
+    code = models.CharField(_('code OTP'), max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _('OTP reversement')
+        verbose_name_plural = _('OTP reversements')
+
+    def __str__(self):
+        return f"OTP {self.code} — {self.withdrawal.reference}"
+
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+        return not self.is_used and timezone.now() < self.expires_at
+
+    @classmethod
+    def generate(cls, withdrawal):
+        import random
+        from django.utils import timezone
+        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        expires_at = timezone.now() + timezone.timedelta(minutes=10)
+        return cls.objects.create(
+            withdrawal=withdrawal,
+            code=code,
+            expires_at=expires_at
+        )
