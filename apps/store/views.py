@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues de la boutique culturelle
 """
+from django_ratelimit.decorators import ratelimit
 import os
 import json
 import logging
@@ -686,6 +687,7 @@ def product_delete(request, slug):
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='30/m', block=True)
 def store_webhook(request):
     """Webhook PayDunya pour les commandes boutique."""
     
@@ -973,6 +975,7 @@ def guest_store_confirmation(request, order_number):
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='30/m', block=True)
 def guest_store_webhook(request):
     """Webhook PayDunya boutique invité."""
     

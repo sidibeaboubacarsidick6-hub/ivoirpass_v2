@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues de paiement PayDunya
 """
+from django_ratelimit.decorators import ratelimit
 import json
 import logging
 from django.shortcuts import render, redirect, get_object_or_404
@@ -169,6 +170,7 @@ def payment_cancel(request, order_number):
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='30/m', block=True)
 def payment_webhook(request):
         # 🔥 DEBUG: Afficher TOUT ce que PayDunya envoie
     import logging

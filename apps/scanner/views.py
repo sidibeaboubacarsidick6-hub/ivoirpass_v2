@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — Vues du Scanner QR Code
 """
+from django_ratelimit.decorators import ratelimit
 import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
@@ -119,6 +120,7 @@ def scan_event(request, event_id):
 
 @login_required
 @require_POST
+@ratelimit(key='user', rate='60/m', block=True)
 def validate_qr(request):
     """
     API endpoint — Valide un QR Code scanné.
