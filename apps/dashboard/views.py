@@ -294,6 +294,18 @@ def withdraw_request(request):
                 payout_phone  = phone,
                 payout_name   = name,
             )
+
+            # Audit log — création de la demande de reversement
+            from .models import AuditLog
+            AuditLog.objects.create(
+                user=request.user,
+                action=AuditLog.Action.PAYOUT,
+                model_name='WithdrawalRequest',
+                object_id=wr.reference,
+                description=f"Demande reversement {wr.amount} FCFA via {wr.get_payout_method_display()}",
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+            )
+
             # Générer l'OTP
             otp = ReversalOTP.generate(wr)
 
@@ -332,7 +344,6 @@ def withdraw_request(request):
             ('moov',         'Moov Money'),
         ],
     })
-
 
 import csv
 from django.http import HttpResponse
@@ -492,4 +503,21 @@ def verify_otp(request, reference):
     return render(request, 'dashboard/verify_otp.html', {
         'withdrawal': withdrawal,
         'expires_at': otp.expires_at,
+    })
+
+@organizer_required
+def audit_log(request):
+    """Journal d'audit de l'organisateur."""
+    from django.core.paginator import Paginator
+
+    logs = AuditLog.objects.filter(
+        user=request.user
+    ).order_by('-created_at')
+
+    paginator = Paginator(logs, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'dashboard/audit_log.html', {
+        'page_obj': page_obj,
     })
