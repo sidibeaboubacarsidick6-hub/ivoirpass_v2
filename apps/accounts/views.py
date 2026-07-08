@@ -61,7 +61,6 @@ def profile(request):
 def profile_edit(request):
     """Modification du profil utilisateur."""
     user = request.user
-
     profile_form   = ProfileEditForm(instance=user)
     organizer_form = OrganizerProfileForm(instance=user)
 
@@ -72,7 +71,6 @@ def profile_edit(request):
         organizer_form = OrganizerProfileForm(
             request.POST, request.FILES, instance=user
         )
-
         profile_ok   = profile_form.is_valid()
         organizer_ok = organizer_form.is_valid() if user.is_organizer else True
 
@@ -81,24 +79,20 @@ def profile_edit(request):
             if user.is_organizer:
                 organizer_form.save()
 
-            # 🔔 Notifier les admins si des documents KYC viennent d'être uploadés
+            # 🔔 Notifier les admins si l'organisateur a des documents KYC
             if user.is_organizer and not user.is_organizer_verified:
-                has_new_kyc = (
-                    request.FILES.get('kyc_identity_doc') or
-                    request.FILES.get('kyc_proof_of_address') or
-                    request.FILES.get('kyc_business_doc')
-                )
-                if has_new_kyc:
+                user.refresh_from_db()
+                if user.kyc_identity_doc or user.kyc_proof_of_address or user.kyc_business_doc:
                     from apps.notifications.tasks import notify_admins_async
                     notify_admins_async.delay(
                         notification_type='fraud_alert',
                         title='📋 KYC en attente de vérification',
                         message=(
                             f"L'organisateur {user.get_full_name()} ({user.email}) "
-                            f"vient de soumettre ses documents KYC.\n\n"
-                            f"Pièce d'identité : {'✅' if request.FILES.get('kyc_identity_doc') else '❌'}\n"
-                            f"Justificatif domicile : {'✅' if request.FILES.get('kyc_proof_of_address') else '❌'}\n"
-                            f"Document pro : {'✅' if request.FILES.get('kyc_business_doc') else '❌'}\n\n"
+                            f"a soumis ses documents KYC.\n\n"
+                            f"Pièce d'identité : {'✅' if user.kyc_identity_doc else '❌'}\n"
+                            f"Justificatif domicile : {'✅' if user.kyc_proof_of_address else '❌'}\n"
+                            f"Document pro : {'✅' if user.kyc_business_doc else '❌'}\n\n"
                             f"Vérifiez dans le back-office : /admin/accounts/customuser/{user.pk}/change/"
                         ),
                         reference=f'kyc-{user.pk}',
@@ -113,7 +107,6 @@ def profile_edit(request):
         'profile_form':   profile_form,
         'organizer_form': organizer_form,
     })
-
 
 @login_required
 def change_password(request):
