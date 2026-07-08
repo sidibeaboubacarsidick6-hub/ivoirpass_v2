@@ -83,9 +83,9 @@ def profile_edit(request):
             if user.is_organizer and not user.is_organizer_verified:
                 user.refresh_from_db()
                 if user.kyc_identity_doc or user.kyc_proof_of_address or user.kyc_business_doc:
-                    from apps.notifications.tasks import notify_admins_async
-                    notify_admins_async.delay(
-                        notification_type='fraud_alert',
+                    from apps.notifications.models import AdminNotification
+                    AdminNotification.objects.create(
+                        type='fraud_alert',
                         title='📋 KYC en attente de vérification',
                         message=(
                             f"L'organisateur {user.get_full_name()} ({user.email}) "
@@ -97,6 +97,8 @@ def profile_edit(request):
                         ),
                         reference=f'kyc-{user.pk}',
                     )
+                    messages.success(request, "Votre profil a été mis à jour. Votre demande de vérification a été envoyée aux administrateurs.")
+                    return redirect('accounts:profile')
 
             messages.success(request, "Votre profil a été mis à jour avec succès.")
             return redirect('accounts:profile')
