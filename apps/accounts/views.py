@@ -153,3 +153,82 @@ def post_login_redirect(request):
         return redirect('scanner:index')
     else:
         return redirect('home')
+
+@login_required
+def my_orders_history(request):
+    """Espace confiance acheteur — historique complet."""
+    from apps.tickets.models import Order, Ticket
+    from apps.store.models import ProductOrder
+
+    # Commandes billetterie
+    ticket_orders = Order.objects.filter(
+        buyer=request.user
+    ).prefetch_related('items__ticket_type__event', 'items__tickets').order_by('-created_at')
+
+    # Commandes boutique
+    product_orders = ProductOrder.objects.filter(
+        buyer=request.user
+    ).select_related('product').order_by('-created_at')
+
+    return render(request, 'pages/my_orders_history.html', {
+        'ticket_orders': ticket_orders,
+        'product_orders': product_orders,
+    })
+
+
+@login_required
+def download_invoice_pdf(request, order_type, order_number):
+    """Génère une facture PDF pour une commande."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import mm
+    from io import BytesIO
+    from django.http import HttpResponse
+
+    if order_type == 'ticket':
+        from apps.tickets.models import Order
+        order = get_object_or_404(Order, order_number=order_number, buyer=request.user)
+        items = order.items.select_related('ticket_type__event')
+        product_name = ", ".join(f"{i.ticket_type.event.title} — {i.ticket_type.name} x{i.quantity}" for i in items)
+    else:
+        from apps.store.models import ProductOrder
+        order = get_object_or_404(ProductOrder, order_number=order_number, buyer=request.user)
+        product_name = f"{order.product.name} x{order.quantity}"
+
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    p.setFont("Helvetica-Bold", 18)
+    p.drawString(20*mm, height - 20*mm, "FACTURE")
+    p.setFont("Helvetica", 10)
+    p.drawString(20*mm, height - 30*mm, f"N° {order.order_number}")
+    p.drawString(20*mm, height - 36*mm, f"Date : {order.created_at.strftime('%d/%m/%Y')}")
+    p.drawString(20*mm, height - 42*mm, f"Client : {request.user.get_full_name()}")
+    p.drawString(20*mm, height - 48*mm, f"Email : {request.user.email}")
+
+    p.line(20*mm, height - 54*mm, width - 20*mm, height - 54*mm)
+
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(20*mm, height - 62*mm, "Produit")
+    p.drawString(120*mm, height - 62*mm, "Total (FCFA)")
+
+    p.setFont("Helvetica", 10)
+    p.drawString(20*mm, height - 70*mm, product_name[:60])
+    p.drawString(120*mm, height - 70*mm, f"{int(order.total):,}")
+
+    p.line(20*mm, height - 76*mm, width - 20*mm, height - 76*mm)
+
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(120*mm, height - 84*mm, f"TOTAL : {int(order.total):,} FCFA")
+
+    p.setFont("Helvetica", 8)
+    p.drawString(20*mm, 20*mm, "IvoirPass — MKS Soft Technologies — Abidjan, Côte d'Ivoire")
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="facture_{order.order_number}.pdf"'
+    return response

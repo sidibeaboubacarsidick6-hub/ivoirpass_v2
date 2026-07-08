@@ -18,4 +18,6 @@ urlpatterns = [
     # Adresses
     path('profil/adresses/',           views.address_list,   name='addresses'),
     path('profil/adresses/<int:pk>/supprimer/', views.address_delete, name='address_delete'),
+    path('mes-commandes/', views.my_orders_history, name='my_orders_history'),
+    path('facture/<str:order_type>/<str:order_number>/', views.download_invoice_pdf, name='download_invoice'),
 ]

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mon espace — Historique{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <h4 class="fw-bold mb-4"><i class="bi bi-clock-history me-2 text-green"></i>Mon espace de confiance</h4>
+
+  <!-- Billetterie -->
+  <div class="ip-card p-4 mb-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-ticket-perforated me-2 text-orange"></i>Mes billets</h6>
+    {% if ticket_orders %}
+    <div class="table-responsive">
+      <table class="table table-hover small">
+        <thead><tr><th>Commande</th><th>Événement</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          {% for order in ticket_orders %}
+          <tr>
+            <td>{{ order.order_number }}</td>
+            <td>{{ order.items.first.ticket_type.event.title|truncatechars:30 }}</td>
+            <td>{{ order.created_at|date:"d/m/Y" }}</td>
+            <td>{{ order.total|floatformat:0 }} FCFA</td>
+            <td><span class="badge {% if order.status == 'paid' %}bg-success{% elif order.status == 'cancelled' %}bg-danger{% else %}bg-warning{% endif %}">{{ order.get_status_display }}</span></td>
+            <td><a href="{% url 'accounts:download_invoice' 'ticket' order.order_number %}" class="btn btn-sm btn-outline-success"><i class="bi bi-download me-1"></i>Facture PDF</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Aucune commande de billet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Boutique -->
+  <div class="ip-card p-4 mb-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-bag me-2 text-orange"></i>Mes achats boutique</h6>
+    {% if product_orders %}
+    <div class="table-responsive">
+      <table class="table table-hover small">
+        <thead><tr><th>Commande</th><th>Produit</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          {% for order in product_orders %}
+          <tr>
+            <td>{{ order.order_number }}</td>
+            <td>{{ order.product.name|truncatechars:30 }}</td>
+            <td>{{ order.created_at|date:"d/m/Y" }}</td>
+            <td>{{ order.total|floatformat:0 }} FCFA</td>
+            <td>
+              <span class="badge {% if order.status == 'paid' %}bg-info{% elif order.status == 'shipped' %}bg-primary{% elif order.status == 'delivered' %}bg-success{% elif order.status == 'cancelled' %}bg-danger{% else %}bg-warning{% endif %}">{{ order.get_status_display }}</span>
+              {% if order.tracking_number %}<br><small class="text-muted">Suivi : {{ order.tracking_number }}</small>{% endif %}
+            </td>
+            <td>
+              <a href="{% url 'accounts:download_invoice' 'store' order.order_number %}" class="btn btn-sm btn-outline-success"><i class="bi bi-download me-1"></i>Facture</a>
+              {% if order.product.is_digital and order.status == 'paid' %}
+                {% for link in order.download_links.all %}
+                  {% if link.is_valid %}
+                  <a href="{% url 'store:download' link.token %}" class="btn btn-sm btn-outline-primary mt-1"><i class="bi bi-cloud-download me-1"></i>Télécharger</a>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Aucune commande boutique.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
