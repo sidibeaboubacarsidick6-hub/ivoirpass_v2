@@ -120,7 +120,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         blank=True,
     )
 
-        # ============================================
+    # ============================================
     # KYC — DOCUMENTS
     # ============================================
     kyc_identity_doc = models.FileField(
@@ -222,7 +222,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     # L'email remplace le username comme identifiant
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []  # Aucun autre champ requis pour createsuperuser
+    REQUIRED_FIELDS = []
 
     class Meta:
         verbose_name = _('utilisateur')
@@ -237,16 +237,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.get_full_name()} <{self.email}>"
 
-    # ============================================
-    # MÉTHODES UTILITAIRES
-    # ============================================
     def get_full_name(self):
-        """Retourne prénom + nom, ou email si non renseigné."""
         full_name = f"{self.first_name} {self.last_name}".strip()
         return full_name if full_name else self.email
 
     def get_short_name(self):
-        """Retourne le prénom."""
         return self.first_name or self.email.split('@')[0]
 
     @property
@@ -267,84 +262,34 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def display_name(self):
-        """Nom d'affichage public : prénom ou nom d'organisation."""
         if self.is_organizer and self.organization_name:
             return self.organization_name
         return self.get_short_name()
 
 
 class UserAddress(models.Model):
-    """
-    Adresses de livraison des utilisateurs.
-    Un utilisateur peut avoir plusieurs adresses.
-    Utilisé pour la livraison de livres et albums physiques.
-    """
+    """Adresses de livraison des utilisateurs."""
     user = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,
         related_name='addresses',
         verbose_name=_('utilisateur'),
     )
-    label = models.CharField(
-        _('libellé'),
-        max_length=100,
-        help_text="Ex: Domicile, Bureau, Maison familiale"
-    )
-    full_name = models.CharField(
-        _('nom complet du destinataire'),
-        max_length=200,
-    )
-    phone = models.CharField(
-        _('téléphone'),
-        max_length=20,
-    )
-    address_line1 = models.CharField(
-        _('adresse ligne 1'),
-        max_length=255,
-        help_text="Numéro et nom de rue, quartier"
-    )
-    address_line2 = models.CharField(
-        _('adresse ligne 2'),
-        max_length=255,
-        blank=True,
-        help_text="Complément d'adresse, bâtiment, appartement"
-    )
-    latitude = models.DecimalField(
-        _('latitude'),
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        help_text="Coordonnée GPS automatique"
-    )
-    longitude = models.DecimalField(
-        _('longitude'),
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        help_text="Coordonnée GPS automatique"
-    )
-    city = models.CharField(
-        _('ville'),
-        max_length=100,
-        default='Abidjan',
-    )
+    label = models.CharField(_('libellé'), max_length=100, help_text="Ex: Domicile, Bureau")
+    full_name = models.CharField(_('nom complet du destinataire'), max_length=200)
+    phone = models.CharField(_('téléphone'), max_length=20)
+    address_line1 = models.CharField(_('adresse ligne 1'), max_length=255)
+    address_line2 = models.CharField(_('adresse ligne 2'), max_length=255, blank=True)
+    latitude = models.DecimalField(_('latitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(_('longitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    city = models.CharField(_('ville'), max_length=100, default='Abidjan')
     ZONE_CHOICES = [
         ('abidjan', 'Abidjan'),
-        ('grandes_villes', 'Grandes villes (Bouaké, Daloa, Yamoussoukro...)'),
+        ('grandes_villes', 'Grandes villes'),
         ('interieur', 'Intérieur du pays'),
     ]
-    zone = models.CharField(
-        _('zone de livraison'),
-        max_length=20,
-        choices=ZONE_CHOICES,
-        default='abidjan',
-    )
-    is_default = models.BooleanField(
-        _('adresse par défaut'),
-        default=False,
-    )
+    zone = models.CharField(_('zone de livraison'), max_length=20, choices=ZONE_CHOICES, default='abidjan')
+    is_default = models.BooleanField(_('adresse par défaut'), default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -356,23 +301,11 @@ class UserAddress(models.Model):
         return f"{self.label} — {self.full_name} ({self.city})"
 
     def save(self, *args, **kwargs):
-        """
-        Si cette adresse est définie comme défaut,
-        retire le statut par défaut des autres adresses.
-        """
         if self.is_default:
-            UserAddress.objects.filter(
-                user=self.user,
-                is_default=True
-            ).exclude(pk=self.pk).update(is_default=False)
+            UserAddress.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(is_default=False)
         super().save(*args, **kwargs)
 
     @property
     def shipping_cost(self):
-        """Calcule les frais de livraison selon la zone."""
-        costs = {
-            'abidjan': 1200,
-            'grandes_villes': 2500,
-            'interieur': 4000,
-        }
+        costs = {'abidjan': 1200, 'grandes_villes': 2500, 'interieur': 4000}
         return costs.get(self.zone, 1200)

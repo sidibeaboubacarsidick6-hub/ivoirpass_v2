@@ -9,8 +9,6 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from .models import CustomUser, UserAddress
 from .forms import ProfileEditForm, OrganizerProfileForm, UserAddressForm
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
 
 
 def home(request):
@@ -21,7 +19,7 @@ def home(request):
 
     now = timezone.now()
 
-    # 🔥 Cache : événements mis en avant (5 minutes)
+    # Cache : événements mis en avant (5 minutes)
     cache_key_featured = 'home_featured_events'
     featured_events = cache.get(cache_key_featured)
     if featured_events is None:
@@ -31,7 +29,7 @@ def home(request):
         ).select_related('category').order_by('start_date')[:6])
         cache.set(cache_key_featured, featured_events, 300)
 
-    # 🔥 Pagination : cache par page (5 minutes)
+    # Pagination : cache par page (5 minutes)
     page_number = request.GET.get('page', 1)
     cache_key_upcoming = f'home_upcoming_events_page_{page_number}'
     upcoming_events = cache.get(cache_key_upcoming)
@@ -48,6 +46,8 @@ def home(request):
         'featured_events': featured_events,
         'upcoming_events': upcoming_events,
     })
+
+
 @login_required
 def profile(request):
     """Page profil — vue en lecture."""
@@ -62,9 +62,8 @@ def profile_edit(request):
     """Modification du profil utilisateur."""
     user = request.user
 
-    # Deux formulaires : profil de base + organisateur
-    profile_form    = ProfileEditForm(instance=user)
-    organizer_form  = OrganizerProfileForm(instance=user)
+    profile_form   = ProfileEditForm(instance=user)
+    organizer_form = OrganizerProfileForm(instance=user)
 
     if request.method == 'POST':
         profile_form = ProfileEditForm(
@@ -74,13 +73,37 @@ def profile_edit(request):
             request.POST, request.FILES, instance=user
         )
 
-        profile_ok    = profile_form.is_valid()
-        organizer_ok  = organizer_form.is_valid() if user.is_organizer else True
+        profile_ok   = profile_form.is_valid()
+        organizer_ok = organizer_form.is_valid() if user.is_organizer else True
 
         if profile_ok and organizer_ok:
             profile_form.save()
             if user.is_organizer:
                 organizer_form.save()
+
+            # 🔔 Notifier les admins si des documents KYC viennent d'être uploadés
+            if user.is_organizer and not user.is_organizer_verified:
+                has_new_kyc = (
+                    request.FILES.get('kyc_identity_doc') or
+                    request.FILES.get('kyc_proof_of_address') or
+                    request.FILES.get('kyc_business_doc')
+                )
+                if has_new_kyc:
+                    from apps.notifications.tasks import notify_admins_async
+                    notify_admins_async.delay(
+                        notification_type='fraud_alert',
+                        title='📋 KYC en attente de vérification',
+                        message=(
+                            f"L'organisateur {user.get_full_name()} ({user.email}) "
+                            f"vient de soumettre ses documents KYC.\n\n"
+                            f"Pièce d'identité : {'✅' if request.FILES.get('kyc_identity_doc') else '❌'}\n"
+                            f"Justificatif domicile : {'✅' if request.FILES.get('kyc_proof_of_address') else '❌'}\n"
+                            f"Document pro : {'✅' if request.FILES.get('kyc_business_doc') else '❌'}\n\n"
+                            f"Vérifiez dans le back-office : /admin/accounts/customuser/{user.pk}/change/"
+                        ),
+                        reference=f'kyc-{user.pk}',
+                    )
+
             messages.success(request, "Votre profil a été mis à jour avec succès.")
             return redirect('accounts:profile')
         else:
@@ -154,18 +177,17 @@ def post_login_redirect(request):
     else:
         return redirect('home')
 
+
 @login_required
 def my_orders_history(request):
     """Espace confiance acheteur — historique complet."""
     from apps.tickets.models import Order, Ticket
     from apps.store.models import ProductOrder
 
-    # Commandes billetterie
     ticket_orders = Order.objects.filter(
         buyer=request.user
     ).prefetch_related('items__ticket_type__event', 'items__tickets').order_by('-created_at')
 
-    # Commandes boutique
     product_orders = ProductOrder.objects.filter(
         buyer=request.user
     ).select_related('product').order_by('-created_at')
