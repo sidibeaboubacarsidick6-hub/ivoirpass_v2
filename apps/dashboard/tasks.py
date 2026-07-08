@@ -7,6 +7,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db.models import Sum
 
 logger = logging.getLogger(__name__)
 
@@ -70,3 +71,83 @@ def check_pending_withdrawals(self):
         logger.info(f"Alerte envoyée à {len(recipient_list)} admin(s)")
 
     return f"{count} reversement(s) en retard — admins notifiés"
+
+@shared_task(bind=True)
+def generate_bceao_report(self):
+    """
+    Génère un rapport mensuel pour la BCEAO.
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.tickets.models import Order
+    from apps.store.models import ProductOrder
+    from apps.dashboard.models import WithdrawalRequest, OrganizerWallet
+    from apps.accounts.models import CustomUser
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import io
+
+    now = timezone.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0)
+
+    # Nombre de transactions
+    ticket_orders = Order.objects.filter(paid_at__gte=month_start, status='paid').count()
+    store_orders = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+
+    # Volume financier
+    ticket_volume = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+        total=Sum('total')
+    )['total'] or 0
+    store_volume = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+        total=Sum('total')
+    )['total'] or 0
+
+    # Commissions
+    ticket_commission = sum(
+        float(o.total) * float(o.items.first().ticket_type.event.commission_rate) / 100
+        for o in Order.objects.filter(paid_at__gte=month_start, status='paid').prefetch_related('items__ticket_type__event')
+        if o.items.first()
+    )
+
+    # Reversements
+    withdrawals_count = WithdrawalRequest.objects.filter(created_at__gte=month_start).count()
+    withdrawals_volume = WithdrawalRequest.objects.filter(created_at__gte=month_start, status='processed').aggregate(
+        total=Sum('amount')
+    )['total'] or 0
+
+    # Utilisateurs
+    total_users = CustomUser.objects.count()
+    organizers = CustomUser.objects.filter(role='organizer').count()
+
+    report = (
+        f"=== RAPPORT MENSUEL BCEAO — {now.strftime('%B %Y')} ===\n\n"
+        f"TRANSACTIONS :\n"
+        f"- Billets vendus : {ticket_orders}\n"
+        f"- Produits boutique : {store_orders}\n"
+        f"- Total transactions : {ticket_orders + store_orders}\n\n"
+        f"VOLUME FINANCIER :\n"
+        f"- Billetterie : {int(ticket_volume):,} FCFA\n"
+        f"- Boutique : {int(store_volume):,} FCFA\n"
+        f"- Volume total : {int(ticket_volume + store_volume):,} FCFA\n"
+        f"- Commissions prélevées : {int(ticket_commission):,} FCFA\n\n"
+        f"REVERSEMENTS :\n"
+        f"- Demandes : {withdrawals_count}\n"
+        f"- Montant reversé : {int(withdrawals_volume):,} FCFA\n\n"
+        f"UTILISATEURS :\n"
+        f"- Total : {total_users}\n"
+        f"- Organisateurs : {organizers}\n\n"
+        f"Rapport généré automatiquement le {now.strftime('%d/%m/%Y à %H:%M')}"
+    )
+
+    # Envoyer aux admins
+    admins = CustomUser.objects.filter(role='admin', is_active=True, notify_email=True)
+    if admins.exists():
+        send_mail(
+            subject=f'[IvoirPass] Rapport BCEAO — {now.strftime("%B %Y")}',
+            message=report,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=list(admins.values_list('email', flat=True)),
+            fail_silently=True,
+        )
+
+    return report

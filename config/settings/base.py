@@ -284,6 +284,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.dashboard.tasks.check_pending_withdrawals',
         'schedule': crontab(hour='8,14,20', minute=0),
     },
+    'generate-bceao-report': {
+        'task': 'apps.dashboard.tasks.generate_bceao_report',
+        'schedule': crontab(hour=8, day_of_month=1),  # 1er de chaque mois à 8h
+    },
 }
 
 # ============================================
