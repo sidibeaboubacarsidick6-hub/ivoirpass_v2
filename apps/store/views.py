@@ -550,51 +550,44 @@ def order_detail(request, order_number):
 
 @login_required
 def download_file(request, token):
-    """
-    Téléchargement sécurisé d'un fichier numérique.
-    Vérifie le token, l'expiration et le nombre de téléchargements.
-    """
+    """Téléchargement sécurisé avec filigrane numérique."""
     link = get_object_or_404(DownloadLink, token=token)
 
-    # Vérifie que c'est bien l'acheteur
     if link.order.buyer != request.user:
         raise Http404
-
-    # Vérifie la validité du lien
     if link.is_expired:
-        messages.error(
-            request,
-            "Ce lien de téléchargement a expiré."
-        )
-        return redirect('store:order_detail',
-                        order_number=link.order.order_number)
-
+        messages.error(request, "Ce lien de téléchargement a expiré.")
+        return redirect('store:order_detail', order_number=link.order.order_number)
     if link.is_exhausted:
-        messages.error(
-            request,
-            f"Limite de téléchargements atteinte "
-            f"({link.max_downloads} max)."
-        )
-        return redirect('store:order_detail',
-                        order_number=link.order.order_number)
+        messages.error(request, f"Limite de téléchargements atteinte ({link.max_downloads} max).")
+        return redirect('store:order_detail', order_number=link.order.order_number)
 
-    # Incrémente le compteur
     link.download_count += 1
     link.save(update_fields=['download_count'])
 
-    # Sert le fichier
     product = link.product
     if not product.digital_file:
         raise Http404
 
-    file_path = product.digital_file.path
-    filename  = os.path.basename(file_path)
+    buyer_name = link.order.buyer.get_full_name() or link.order.buyer.email
+    order_number = link.order.order_number
 
-    response = FileResponse(
-        open(file_path, 'rb'),
-        as_attachment=True,
-        filename=filename
+    # Appliquer le filigrane
+    from .watermark import add_watermark
+    watermarked, filename = add_watermark(
+        product.digital_file.path, buyer_name, order_number
     )
+
+    if watermarked:
+        response = FileResponse(watermarked, as_attachment=True, filename=filename)
+    else:
+        # Pas de filigrane pour ce type de fichier (MP3, etc.)
+        response = FileResponse(
+            open(product.digital_file.path, 'rb'),
+            as_attachment=True,
+            filename=os.path.basename(product.digital_file.path)
+        )
+
     return response
 
 
@@ -1054,25 +1047,13 @@ def guest_store_webhook(request):
 
 
 def guest_download_file(request, token):
-    """
-    Téléchargement sécurisé — accessible sans compte via le token unique.
-    Chaque commande a ses propres liens indépendants des autres achats.
-    """
-    import os
-
+    """Téléchargement sécurisé invité avec filigrane."""
     link = get_object_or_404(GuestDownloadLink, token=token)
 
     if link.is_expired:
-        return render(request, 'store/download_expired.html', {
-            'link': link, 
-            'reason': 'expired'
-        })
-
+        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'expired'})
     if link.is_exhausted:
-        return render(request, 'store/download_expired.html', {
-            'link': link, 
-            'reason': 'exhausted'
-        })
+        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'exhausted'})
 
     link.download_count += 1
     link.save(update_fields=['download_count'])
@@ -1081,14 +1062,23 @@ def guest_download_file(request, token):
     if not product.digital_file:
         raise Http404
 
-    file_path = product.digital_file.path
-    filename  = os.path.basename(file_path)
+    buyer_name = link.order.buyer_name
+    order_number = link.order.order_number
 
-    response = FileResponse(
-        open(file_path, 'rb'), 
-        as_attachment=True, 
-        filename=filename
+    from .watermark import add_watermark
+    watermarked, filename = add_watermark(
+        product.digital_file.path, buyer_name, order_number
     )
+
+    if watermarked:
+        response = FileResponse(watermarked, as_attachment=True, filename=filename)
+    else:
+        response = FileResponse(
+            open(product.digital_file.path, 'rb'),
+            as_attachment=True,
+            filename=os.path.basename(product.digital_file.path)
+        )
+
     return response
 
 
