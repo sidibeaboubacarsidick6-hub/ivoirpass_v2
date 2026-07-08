@@ -120,12 +120,7 @@ def payment_return(request, order_number):
     if is_completed and order.status == Order.Status.PENDING:
         # ✅ Confirmer la commande
         _confirm_order(order, token, result.get('data', {}))
-        
-        # ✅ Remet l'utilisateur dans la session s'il s'est déconnecté
-        if not request.user.is_authenticated:
-            # Reconnecte l'utilisateur via la commande
-            from django.contrib.auth import login
-            login(request, order.buyer)
+
         
         messages.success(
             request,
@@ -168,24 +163,27 @@ def payment_cancel(request, order_number):
     return redirect('tickets:cart')
 
 
+
 @csrf_exempt
 @require_POST
 @ratelimit(key='ip', rate='30/m', block=True)
 def payment_webhook(request):
-        # 🔥 DEBUG: Afficher TOUT ce que PayDunya envoie
+    # 🔥 DEBUG: Afficher TOUT ce que PayDunya envoie
     import logging
     logger = logging.getLogger(__name__)
     
     logger.info("=" * 50)
     logger.info("WEBHOOK RECU")
     logger.info(f"Content-Type: {request.content_type}")
-    logger.info(f"Body brut: {request.body}")
+    logger.info(f"Body brut: {logger.debug("Webhook recu - token: %s", token)}")
     logger.info(f"POST dict: {request.POST}")
     logger.info("=" * 50)
-        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+
+    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Webhook rejeté : signature PayDunya invalide")
         return HttpResponse('FORBIDDEN', status=403)
+
     """
     Webhook PayDunya — appelé automatiquement par PayDunya
     après confirmation du paiement côté opérateur.
@@ -205,22 +203,17 @@ def payment_webhook(request):
             raw_data = json.loads(request.body)
             logger.info(f"Webhook JSON: {raw_data}")
             
-            # Extraction token
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
-            # Extraction custom_data
             custom_data = raw_data.get('data', {}).get('custom_data', {})
             order_number = custom_data.get('order_number', '')
             
         else:
-            # Form-data
             raw_data = request.POST.dict()
             logger.info(f"Webhook form-data: {raw_data}")
             
-            # Extraction token
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
-            # Extraction order_number depuis custom_data
             custom_data_str = raw_data.get('custom_data', '{}')
             try:
                 if isinstance(custom_data_str, str):
@@ -231,7 +224,6 @@ def payment_webhook(request):
             except:
                 order_number = ''
             
-            # Si toujours pas, chercher dans data
             if not order_number and 'data' in raw_data:
                 data_param = raw_data.get('data', '')
                 if isinstance(data_param, str):
@@ -240,18 +232,26 @@ def payment_webhook(request):
         
         logger.info(f"Token extrait: {token}")
         logger.info(f"Order_number extrait: {order_number}")
+
+        # Vérification serveur-à-serveur via l'API PayDunya
+        if token:
+            result = PayDunyaService.verify_payment(token)
+            api_status = result.get('status', '')
+            if api_status != 'completed':
+                logger.warning(
+                    f"Webhook: vérification API échouée pour {token}, status={api_status}"
+                )
+                return HttpResponse('OK', status=200)
         
         # 🔥 Si order_number manquant, on le récupère via le token
         if not order_number and token:
             logger.info(f"Order_number manquant, recherche via token: {token}")
             
-            # Chercher dans Payment
             payment = Payment.objects.filter(paydunya_token=token).first()
             if payment:
                 order_number = payment.order.order_number
                 logger.info(f"Order_number trouvé via Payment: {order_number}")
             
-            # Si pas trouvé, chercher dans Order
             if not order_number:
                 order = Order.objects.filter(payment_reference=token).first()
                 if order:
@@ -262,14 +262,12 @@ def payment_webhook(request):
             logger.error("Webhook: order_number manquant")
             return HttpResponse('ORDER_NOT_FOUND', status=400)
         
-        # Récupère la commande
         try:
             order = Order.objects.get(order_number=order_number)
         except Order.DoesNotExist:
             logger.error(f"Webhook: commande {order_number} introuvable")
             return HttpResponse('ORDER_NOT_FOUND', status=404)
         
-        # Traitement selon le statut
         status = raw_data.get('status', '')
         if not status:
             status = raw_data.get('data', {}).get('invoice', {}).get('status', '')
@@ -294,6 +292,7 @@ def payment_webhook(request):
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return HttpResponse('OK', status=200)
+
 
 def _confirm_order(order, token, raw_data):
     """Confirme une commande après paiement — applique la commission dynamique."""

@@ -51,14 +51,22 @@ class PayDunyaService:
         """
         Vérifie le statut d'un paiement PayDunya.
         """
-        # ✅ MODE TEST : Accepter les tokens "test_"
+        # ✅ MODE TEST : Accepter les tokens "test_" UNIQUEMENT en mode test
         if token and token.startswith('test_'):
-            logger.info(f"🔬 Mode TEST - Paiement accepté pour {token}")
-            return {
-                'success': True,
-                'status': 'completed',
-                'message': 'Test payment successful'
-            }
+            if settings.PAYDUNYA_MODE == 'test':
+                logger.info(f"Mode TEST - Paiement accepté pour {token}")
+                return {
+                    'success': True,
+                    'status': 'completed',
+                    'message': 'Test payment successful'
+                }
+            else:
+                logger.warning(f"Token test_ rejeté en mode production: {token}")
+                return {
+                    'success': False,
+                    'status': 'failed',
+                    'message': 'Test tokens not allowed in production'
+                }
 
         try:
             url = f"{settings.PAYDUNYA_API_BASE}/checkout-invoice/confirm/{token}"

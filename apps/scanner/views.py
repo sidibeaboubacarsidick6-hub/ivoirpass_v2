@@ -96,7 +96,10 @@ def scan_event(request, event_id):
     Interface principale de scan pour un événement.
     Page optimisée mobile avec caméra.
     """
-    event = get_object_or_404(Event, pk=event_id)
+    if request.user.is_platform_admin:
+        event = get_object_or_404(Event, pk=event_id)
+    else:
+        event = get_object_or_404(Event, pk=event_id, organizer=request.user)
 
     # Crée ou récupère la session de scan du jour
     session, created = ScanSession.objects.get_or_create(

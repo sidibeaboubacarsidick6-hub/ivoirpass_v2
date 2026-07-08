@@ -8,7 +8,7 @@ DEBUG = True
 
 # Tous les hôtes autorisés en dev
 # Autorise toutes les origines ngrok
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '.ngrok-free.dev']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev']
 
 CSRF_TRUSTED_ORIGINS = [
     "https://revengeless-unfervent-deandrea.ngrok-free.dev" ,
@@ -56,8 +56,6 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL  = f'IvoirPass <{config("EMAIL_HOST_USER", default="")}>'
 
 # ============================================
-# CORS - autorise toutes les origines en développement
-CORS_ALLOW_ALL_ORIGINS = True
 
 # Debug Toolbar (optionnel - désactivé pour rester simple)
 # INSTALLED_APPS += ['debug_toolbar']
