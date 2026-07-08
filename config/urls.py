@@ -1,6 +1,7 @@
 """
 IvoirPass V2 — URLs principales
 """
+from apps.dashboard.admin import bceao_report_view
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -12,6 +13,7 @@ admin.site.site_title  = "IvoirPass Admin"
 admin.site.index_title = "Tableau de bord administrateur"
 
 urlpatterns = [
+    path('admin/bceao-report/', bceao_report_view, name='bceao-report'),
     path('admin/', admin.site.urls),
     path('accounts/', include('allauth.urls')),
     path('redirect/', accounts_views.post_login_redirect, name='post_login'),
