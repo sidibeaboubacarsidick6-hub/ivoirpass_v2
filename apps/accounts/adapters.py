@@ -1,16 +1,27 @@
 """
 IvoirPass V2 — Adaptateur allauth personnalisé
-Restreint l'inscription publique tout en gardant le formulaire pour les organisateurs
+Inscription publique : réservée aux organisateurs uniquement.
 """
 from allauth.account.adapter import DefaultAccountAdapter
 
 
 class NoPublicSignupAdapter(DefaultAccountAdapter):
     """
-    L'inscription reste techniquement active (nécessaire pour créer
-    des comptes organisateurs) mais n'est plus accessible depuis
-    la navigation publique. Seul le lien direct /accounts/signup/
-    fonctionne encore pour les organisateurs qui le connaissent.
+    L'inscription est ouverte uniquement pour les organisateurs.
+    Les participants achètent sans créer de compte (mode invité).
     """
+
     def is_open_for_signup(self, request):
-        return True  # Reste ouvert techniquement, juste plus dans la nav
+        # L'inscription reste ouverte pour les organisateurs
+        return True
+
+    def save_user(self, request, user, form, commit=True):
+        """
+        Force le rôle 'organizer' pour tout nouvel inscrit.
+        Les participants n'ont pas besoin de compte.
+        """
+        user = super().save_user(request, user, form, commit=False)
+        user.role = 'organizer'
+        if commit:
+            user.save()
+        return user
