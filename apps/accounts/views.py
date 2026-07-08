@@ -79,36 +79,29 @@ def profile_edit(request):
             if user.is_organizer:
                 organizer_form.save()
 
-            # 🔔 Notifier les admins si l'organisateur a des documents KYC
+            # 🔔 Notifier les admins si KYC présent
             if user.is_organizer and not user.is_organizer_verified:
-                user.refresh_from_db()
-                if user.kyc_identity_doc or user.kyc_proof_of_address or user.kyc_business_doc:
+                # Recharger l'utilisateur depuis la base
+                from apps.accounts.models import CustomUser
+                fresh_user = CustomUser.objects.get(pk=user.pk)
+                
+                if fresh_user.kyc_identity_doc or fresh_user.kyc_proof_of_address or fresh_user.kyc_business_doc:
                     from apps.notifications.models import AdminNotification
                     AdminNotification.objects.create(
                         type='fraud_alert',
                         title='📋 KYC en attente de vérification',
                         message=(
-                            f"L'organisateur {user.get_full_name()} ({user.email}) "
+                            f"L'organisateur {fresh_user.get_full_name()} ({fresh_user.email}) "
                             f"a soumis ses documents KYC.\n\n"
-                            f"Pièce d'identité : {'✅' if user.kyc_identity_doc else '❌'}\n"
-                            f"Justificatif domicile : {'✅' if user.kyc_proof_of_address else '❌'}\n"
-                            f"Document pro : {'✅' if user.kyc_business_doc else '❌'}\n\n"
-                            f"Vérifiez dans le back-office : /admin/accounts/customuser/{user.pk}/change/"
+                            f"Pièce d'identité : {'✅' if fresh_user.kyc_identity_doc else '❌'}\n"
+                            f"Justificatif domicile : {'✅' if fresh_user.kyc_proof_of_address else '❌'}\n"
+                            f"Document pro : {'✅' if fresh_user.kyc_business_doc else '❌'}\n\n"
+                            f"Vérifiez dans le back-office : /admin/accounts/customuser/{fresh_user.pk}/change/"
                         ),
-                        reference=f'kyc-{user.pk}',
+                        reference=f'kyc-{fresh_user.pk}',
                     )
-                    messages.success(request, "Votre profil a été mis à jour. Votre demande de vérification a été envoyée aux administrateurs.")
+                    messages.success(request, "✅ Votre profil a été mis à jour. Votre demande de vérification a été envoyée.")
                     return redirect('accounts:profile')
-
-            messages.success(request, "Votre profil a été mis à jour avec succès.")
-            return redirect('accounts:profile')
-        else:
-            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
-
-    return render(request, 'pages/profile_edit.html', {
-        'profile_form':   profile_form,
-        'organizer_form': organizer_form,
-    })
 
 @login_required
 def change_password(request):
