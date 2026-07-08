@@ -179,3 +179,83 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+# ============================================
+# EXPORTS BACK-OFFICE
+# ============================================
+
+from django.http import HttpResponse
+import csv
+import openpyxl
+from io import BytesIO
+
+
+def export_admin_csv(request):
+    """Export CSV de toutes les données pour l'admin."""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="ivoirpass_export_complet.csv"'
+    response.write('\ufeff')
+    writer = csv.writer(response)
+
+    # Transactions
+    writer.writerow(['=== TRANSACTIONS ==='])
+    writer.writerow(['Type', 'Référence', 'Date', 'Montant', 'Statut'])
+
+    from apps.tickets.models import Order
+    for o in Order.objects.select_related('buyer').order_by('-created_at'):
+        writer.writerow(['Billet', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+
+    from apps.store.models import ProductOrder
+    for o in ProductOrder.objects.select_related('buyer', 'product').order_by('-created_at'):
+        writer.writerow(['Boutique', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+
+    # Reversements
+    writer.writerow([])
+    writer.writerow(['=== REVERSEMENTS ==='])
+    writer.writerow(['Référence', 'Organisateur', 'Montant', 'Méthode', 'Statut', 'Date'])
+    for w in WithdrawalRequest.objects.select_related('wallet__organizer').order_by('-created_at'):
+        writer.writerow([w.reference, w.wallet.organizer.get_full_name(), int(w.amount), w.get_payout_method_display(), w.get_status_display(), w.created_at.strftime('%d/%m/%Y')])
+
+    # Utilisateurs
+    writer.writerow([])
+    writer.writerow(['=== UTILISATEURS ==='])
+    writer.writerow(['Email', 'Nom', 'Rôle', 'Ville', 'Vérifié', 'Date inscription'])
+    from apps.accounts.models import CustomUser
+    for u in CustomUser.objects.order_by('-date_joined'):
+        writer.writerow([u.email, u.get_full_name(), u.get_role_display(), u.city, 'Oui' if u.is_organizer_verified else 'Non', u.date_joined.strftime('%d/%m/%Y')])
+
+    return response
+
+
+def export_admin_excel(request):
+    """Export Excel de toutes les données."""
+    wb = openpyxl.Workbook()
+
+    # Onglet Transactions
+    ws1 = wb.active
+    ws1.title = "Transactions"
+    ws1.append(['Type', 'Référence', 'Date', 'Montant', 'Statut'])
+    from apps.tickets.models import Order
+    for o in Order.objects.select_related('buyer').order_by('-created_at')[:1000]:
+        ws1.append(['Billet', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+    from apps.store.models import ProductOrder
+    for o in ProductOrder.objects.select_related('buyer', 'product').order_by('-created_at')[:1000]:
+        ws1.append(['Boutique', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+
+    # Onglet Reversements
+    ws2 = wb.create_sheet("Reversements")
+    ws2.append(['Référence', 'Organisateur', 'Montant', 'Méthode', 'Statut', 'Date'])
+    for w in WithdrawalRequest.objects.select_related('wallet__organizer').order_by('-created_at'):
+        ws2.append([w.reference, w.wallet.organizer.get_full_name(), int(w.amount), w.get_payout_method_display(), w.get_status_display(), w.created_at.strftime('%d/%m/%Y')])
+
+    # Onglet Utilisateurs
+    ws3 = wb.create_sheet("Utilisateurs")
+    ws3.append(['Email', 'Nom', 'Rôle', 'Ville', 'Vérifié', 'Date inscription'])
+    from apps.accounts.models import CustomUser
+    for u in CustomUser.objects.order_by('-date_joined'):
+        ws3.append([u.email, u.get_full_name(), u.get_role_display(), u.city, 'Oui' if u.is_organizer_verified else 'Non', u.date_joined.strftime('%d/%m/%Y')])
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="ivoirpass_export_complet.xlsx"'
+    wb.save(response)
+    return response

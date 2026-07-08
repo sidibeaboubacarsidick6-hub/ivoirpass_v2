@@ -1,0 +1,19 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+  <div style="flex:1; min-width:200px; padding:16px; background:white; border-radius:12px; border-left:4px solid #1B7A3E;">
+    <h3 style="margin:0 0 8px 0; color:#1B7A3E;">📊 Rapport BCEAO</h3>
+    <a href="{% url 'bceao-report' %}" style="display:block; padding:8px; background:#1B7A3E; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Voir le rapport</a>
+  </div>
+  <div style="flex:1; min-width:200px; padding:16px; background:white; border-radius:12px; border-left:4px solid #0dcaf0;">
+    <h3 style="margin:0 0 8px 0; color:#0dcaf0;">📥 Export CSV</h3>
+    <a href="{% url 'admin_export_csv' %}" style="display:block; padding:8px; background:#0dcaf0; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Télécharger CSV</a>
+  </div>
+  <div style="flex:1; min-width:200px; padding:16px; background:white; border-radius:12px; border-left:4px solid #F47920;">
+    <h3 style="margin:0 0 8px 0; color:#F47920;">📥 Export Excel</h3>
+    <a href="{% url 'admin_export_excel' %}" style="display:block; padding:8px; background:#F47920; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Télécharger Excel</a>
+  </div>
+</div>
+{{ block.super }}
+{% endblock %}
