@@ -722,15 +722,26 @@ def submit_dispute(request):
             subject=request.POST.get('subject', ''),
             description=request.POST.get('description', ''),
         )
-        messages.success(
-            request,
-            f"Votre réclamation {dispute.reference} a été enregistrée. "
-            "Nous vous contacterons sous 48h."
-        )
-        return redirect('home')
 
-                # Notifier les admins
+        # Notification en base de données
+        from apps.notifications.models import AdminNotification
+
+        AdminNotification.objects.create(
+            type='fraud_alert',
+            title=f'Nouveau litige : {dispute.get_type_display()}',
+            message=(
+                f"Référence : {dispute.reference}\n"
+                f"Type : {dispute.get_type_display()}\n"
+                f"Sujet : {dispute.subject}\n"
+                f"Email : {dispute.email}\n"
+                f"Commande : {dispute.order_number or 'N/A'}"
+            ),
+            reference=dispute.reference,
+        )
+
+        # Notification asynchrone aux administrateurs
         from apps.notifications.tasks import notify_admins_async
+
         notify_admins_async.delay(
             notification_type='fraud_alert',
             title=f'Nouveau litige : {dispute.get_type_display()}',
@@ -745,5 +756,13 @@ def submit_dispute(request):
             ),
             reference=dispute.reference,
         )
+
+        messages.success(
+            request,
+            f"Votre réclamation {dispute.reference} a été enregistrée. "
+            "Nous vous contacterons sous 48h."
+        )
+
+        return redirect('home')
 
     return render(request, 'pages/report_problem.html')

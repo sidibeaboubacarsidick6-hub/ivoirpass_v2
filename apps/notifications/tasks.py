@@ -128,16 +128,17 @@ def notify_admins_async(self, notification_type, title, message, reference=''):
 
         if admins.exists():
             recipient_list = list(admins.values_list('email', flat=True))
-            send_mail(
-                subject=f'[IvoirPass Admin] {title}',
-                message=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=recipient_list,
-                fail_silently=True,
-            )
-            logger.info(f"Notification admin envoyée à {len(recipient_list)} admin(s)")
-
-        return f"Admins notified: {title}"
+            try:
+                send_mail(
+                    subject=f'[IvoirPass Admin] {title}',
+                    message=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=recipient_list,
+                    fail_silently=False,
+                )
+                logger.info(f"Notification admin envoyee a {len(recipient_list)} admin(s)")
+            except Exception as e:
+                logger.error(f"Erreur envoi email admin: {e}")
 
     except Exception as exc:
         logger.error(f"Erreur notification admin: {exc}")

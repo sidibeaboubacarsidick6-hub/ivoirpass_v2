@@ -66,7 +66,7 @@
             <td class="ps-4">
               {% if log.ticket %}
               <div class="fw-semibold small">
-                {{ log.ticket.buyer.get_full_name }}
+                {{ log.ticket.order_item.order.buyer.get_full_name }}
               </div>
               <div class="text-muted" style="font-size:0.78rem; font-family:monospace;">
                 {{ log.ticket.ticket_number }}
@@ -78,7 +78,7 @@
             <td>
               {% if log.ticket %}
               <span class="badge bg-light text-dark border small">
-                {{ log.ticket.ticket_type.name }}
+                {{ log.ticket.order_item.ticket_type.name }}
               </span>
               {% else %}—{% endif %}
             </td>

@@ -307,13 +307,38 @@ class WithdrawalRequest(models.Model):
         self.processed_by = admin_user
         self.processed_at = timezone.now()
         self.save()
-        # Débite le wallet
+
+        # Débiter le wallet
         self.wallet.debit(
-            amount      = self.amount,
-            description = f"Reversement {self.reference}",
-            reference   = self.reference,
+            amount=self.amount,
+            description=f"Reversement {self.reference}",
+            reference=self.reference,
         )
 
+        # Notification admin
+        from apps.notifications.models import AdminNotification
+        AdminNotification.objects.create(
+            type='fraud_alert',
+            title='Reversement traite',
+            message=(
+                f"Reversement {self.reference} de {self.amount} FCFA "
+                f"traite pour {self.wallet.organizer.get_full_name()}."
+            ),
+            reference=self.reference,
+        )
+
+        # Email à l'organisateur
+        from django.core.mail import send_mail
+        send_mail(
+            '[IvoirPass] Reversement effectue',
+            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
+            f"Votre reversement de {self.amount} FCFA a ete traite.\n"
+            f"Reference : {self.reference}\n\n"
+            f"L'equipe IvoirPass",
+            None,
+            [self.wallet.organizer.email],
+            fail_silently=False,
+        )
     def reject(self, admin_user, note=''):
         """Rejette la demande — restitue le solde bloqué."""
         self.status       = self.Status.REJECTED

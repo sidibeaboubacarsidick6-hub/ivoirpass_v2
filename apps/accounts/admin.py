@@ -24,6 +24,45 @@ class UserAddressInline(admin.TabularInline):
 class CustomUserAdmin(UserAdmin):
     """Administration personnalisée des utilisateurs IvoirPass."""
 
+    def save_model(self, request, obj, form, change):
+        was_verified = False
+        if change and obj.pk:
+            try:
+                old_obj = CustomUser.objects.get(pk=obj.pk)
+                was_verified = old_obj.is_organizer_verified
+            except CustomUser.DoesNotExist:
+                pass
+
+        super().save_model(request, obj, form, change)
+
+        if obj.is_organizer_verified and not was_verified:
+            from django.core.mail import send_mail
+            send_mail(
+                '[IvoirPass] Votre compte organisateur est certifie',
+                f"Bonjour {obj.get_full_name()},\n\n"
+                f"Votre compte organisateur a ete certifie.\n\n"
+                f"Vous pouvez maintenant :\n"
+                f"- Publier des evenements payants\n"
+                f"- Vendre des produits dans la boutique\n"
+                f"- Recevoir des reversements\n\n"
+                f"Connectez-vous : http://127.0.0.1:8000/accounts/login/\n\n"
+                f"L'equipe IvoirPass",
+                None,
+                [obj.email],
+                fail_silently=False,
+            )
+
+            # SMS si activé
+            if settings.SMS_ENABLED and obj.phone_number:
+                try:
+                    from apps.notifications.sms import send_sms
+                    send_sms(
+                        obj.phone_number,
+                        f"IvoirPass : Votre compte est certifie ! Publiez vos evenements payants."
+                    )
+                except Exception:
+                    pass
+
     # Colonnes affichées dans la liste
     list_display = (
         'email', 'get_full_name', 'role', 'phone_number',
