@@ -44,8 +44,8 @@ a:hover { color: var(--ip-orange); }
   border-bottom: 3px solid var(--ip-orange);
   padding: 0.6rem 0;
   box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  z-index: 1030 !important;
 }
-
 .ip-navbar .navbar-brand {
   font-size: 1.6rem;
   font-weight: 800;
@@ -662,6 +662,11 @@ a:hover { color: var(--ip-orange); }
   text-transform: uppercase;
   letter-spacing: 0.5px;
   backdrop-filter: blur(4px);
+}
+
+.ip-navbar {
+  position: sticky !important;
+  top: 0 !important;
 }
 
 /* ============================================

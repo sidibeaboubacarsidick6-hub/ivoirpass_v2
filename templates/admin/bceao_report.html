@@ -1,0 +1,56 @@
+{% extends 'admin/base_site.html' %}
+{% load static %}
+
+{% block title %}Rapport BCEAO — {{ month }}{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:20px auto;">
+
+  <h1 style="color:#1B7A3E; margin-bottom:20px;">
+    📊 Rapport BCEAO — {{ month }}
+  </h1>
+
+  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:30px;">
+    <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #1B7A3E;">
+      <div style="color:#6c757d; font-size:0.85rem;">Transactions billets</div>
+      <div style="font-size:2rem; font-weight:800; color:#1B7A3E;">{{ ticket_orders }}</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #F47920;">
+      <div style="color:#6c757d; font-size:0.85rem;">Transactions boutique</div>
+      <div style="font-size:2rem; font-weight:800; color:#F47920;">{{ store_orders }}</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #0dcaf0;">
+      <div style="color:#6c757d; font-size:0.85rem;">Total transactions</div>
+      <div style="font-size:2rem; font-weight:800; color:#0dcaf0;">{{ total_transactions }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:16px; margin-bottom:30px;">
+    <div style="background:white; padding:20px; border-radius:12px;">
+      <h3 style="color:#1B7A3E;">💰 Volume financier</h3>
+      <table style="width:100%;">
+        <tr><td style="padding:8px 0;">Billetterie</td><td style="text-align:right; font-weight:700;">{{ ticket_volume|floatformat:0 }} FCFA</td></tr>
+        <tr><td style="padding:8px 0;">Boutique</td><td style="text-align:right; font-weight:700;">{{ store_volume|floatformat:0 }} FCFA</td></tr>
+        <tr style="border-top:2px solid #1B7A3E;"><td style="padding:8px 0; font-weight:700;">Total</td><td style="text-align:right; font-weight:800; color:#1B7A3E;">{{ total_volume|floatformat:0 }} FCFA</td></tr>
+      </table>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px;">
+      <h3 style="color:#F47920;">🏦 Reversements</h3>
+      <table style="width:100%;">
+        <tr><td style="padding:8px 0;">Demandes</td><td style="text-align:right; font-weight:700;">{{ withdrawals_count }}</td></tr>
+        <tr><td style="padding:8px 0;">Montant reversé</td><td style="text-align:right; font-weight:800; color:#F47920;">{{ withdrawals_volume|floatformat:0 }} FCFA</td></tr>
+      </table>
+      <h3 style="color:#1B7A3E; margin-top:20px;">👥 Utilisateurs</h3>
+      <table style="width:100%;">
+        <tr><td style="padding:8px 0;">Total</td><td style="text-align:right; font-weight:700;">{{ total_users }}</td></tr>
+        <tr><td style="padding:8px 0;">Organisateurs</td><td style="text-align:right; font-weight:700;">{{ organizers }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="text-align:center; color:#6c757d; font-size:0.85rem;">
+    Rapport généré automatiquement — IvoirPass V2
+  </div>
+
+</div>
+{% endblock %}

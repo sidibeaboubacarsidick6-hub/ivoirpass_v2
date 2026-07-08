@@ -57,11 +57,19 @@
               <i class="bi bi-check-circle text-green me-1"></i>
               Nous répondons à tous les messages sous 24h ouvrées.
             </p>
+
+            <!-- Bouton litige -->
+            <div class="text-center mt-4">
+              <a href="{% url 'dashboard:submit_dispute' %}" class="btn btn-orange w-100">
+                <i class="bi bi-exclamation-triangle me-2"></i>Signaler un litige ou une réclamation
+              </a>
+              <p class="text-muted small mt-2">Réponse sous 48h — Référence unique de suivi fournie</p>
+            </div>
           </div>
         </div>
 
         <div class="col-md-6">
-          <form method="POST" class="needs-validation" novalidate>
+          <form method="POST" action="{% url 'dashboard:submit_dispute' %}">
             {% csrf_token %}
             
             <div class="mb-3">
@@ -73,27 +81,41 @@
               <label for="email" class="form-label fw-semibold">Votre email</label>
               <input type="email" class="form-control" id="email" name="email" placeholder="jean@exemple.com" required>
             </div>
-            
+
             <div class="mb-3">
-              <label for="subject" class="form-label fw-semibold">Sujet</label>
-              <select class="form-select" id="subject" name="subject" required>
-                <option value="">Choisissez un sujet</option>
-                <option value="information">Demande d'information</option>
-                <option value="probleme">Problème technique</option>
-                <option value="remboursement">Demande de remboursement</option>
-                <option value="organisateur">Devenir organisateur</option>
-                <option value="partenariat">Partenariat</option>
-                <option value="autre">Autre</option>
-              </select>
+              <label for="phone" class="form-label fw-semibold">Téléphone</label>
+              <input type="tel" class="form-control" id="phone" name="phone" placeholder="+225 07 XX XX XX XX">
+            </div>
+
+            <div class="mb-3">
+              <label for="order_number" class="form-label fw-semibold">N° de commande (si concerné)</label>
+              <input type="text" class="form-control" id="order_number" name="order_number" placeholder="IP-2026-XXXXXX">
             </div>
             
             <div class="mb-3">
-              <label for="message" class="form-label fw-semibold">Message</label>
-              <textarea class="form-control" id="message" name="message" rows="4" placeholder="Décrivez votre demande..." required></textarea>
+              <label for="type" class="form-label fw-semibold">Type de problème</label>
+              <select class="form-select" id="type" name="type" required>
+                <option value="">Choisissez...</option>
+                <option value="refund">Remboursement</option>
+                <option value="non_delivery">Non-livraison</option>
+                <option value="qr_issue">Problème QR code</option>
+                <option value="wrong_item">Mauvais produit</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="subject" class="form-label fw-semibold">Sujet</label>
+              <input type="text" class="form-control" id="subject" name="subject" placeholder="Décrivez brièvement votre problème" required>
+            </div>
+            
+            <div class="mb-3">
+              <label for="description" class="form-label fw-semibold">Message détaillé</label>
+              <textarea class="form-control" id="description" name="description" rows="4" placeholder="Décrivez votre demande en détail..." required></textarea>
             </div>
             
             <button type="submit" class="btn btn-orange w-100">
-              <i class="bi bi-send me-2"></i>Envoyer le message
+              <i class="bi bi-send me-2"></i>Envoyer la réclamation
             </button>
           </form>
         </div>

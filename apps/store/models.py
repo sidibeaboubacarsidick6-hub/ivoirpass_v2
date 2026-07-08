@@ -402,6 +402,20 @@ class ProductOrder(models.Model):
         _('adresse complète'),
         blank=True
     )
+    delivery_latitude = models.DecimalField(
+        _('latitude livraison'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
+    delivery_longitude = models.DecimalField(
+        _('longitude livraison'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
     delivery_city = models.CharField(
         _('ville'),
         max_length=100,
@@ -748,6 +762,20 @@ class GuestProductOrder(models.Model):
     )
     delivery_address = models.TextField(
         _('adresse complète'),
+        blank=True
+    )
+    delivery_latitude = models.DecimalField(
+        _('latitude livraison'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
+    delivery_longitude = models.DecimalField(
+        _('longitude livraison'),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
         blank=True
     )
     delivery_city = models.CharField(

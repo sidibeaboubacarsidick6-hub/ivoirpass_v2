@@ -1,24 +1,23 @@
 {% extends 'base.html' %}
+{% load static %}
+
 {% block title %}Commander — {{ product.name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
 
 {% block content %}
 <div class="container py-5">
   <div class="row g-4 justify-content-center">
 
-    <!-- Formulaire -->
     <div class="col-lg-7">
-      <form method="POST"
-            x-data="{
-              delivery: '{% if product.product_type == 'physical' %}delivery{% elif product.product_type == 'digital' %}download{% else %}download{% endif %}',
-              maxQty: {% if product.is_physical %}{{ product.stock }}{% else %}10{% endif %}
-            }">
+      <form method="POST">
         {% csrf_token %}
 
         <!-- Infos acheteur -->
         <div class="ip-card p-4 mb-4">
-          <h5 class="fw-bold mb-4">
-            <i class="bi bi-person me-2 text-green"></i>Vos informations
-          </h5>
+          <h5 class="fw-bold mb-4"><i class="bi bi-person me-2 text-green"></i>Vos informations</h5>
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label fw-semibold small">Prénom *</label>
@@ -31,163 +30,148 @@
             <div class="col-md-6">
               <label class="form-label fw-semibold small">Email *</label>
               <input type="email" name="email" class="form-control" required />
-              <div class="text-muted small mt-1">
-                {% if product.is_digital %}
-                  Vos liens de téléchargement seront envoyés ici
-                {% else %}
-                  Votre confirmation de commande sera envoyée ici
-                {% endif %}
-              </div>
             </div>
             <div class="col-md-6">
-              <label class="form-label fw-semibold small">
-                Téléphone <span class="text-muted">(optionnel)</span>
-              </label>
-              <input type="tel" name="phone" class="form-control"
-                     placeholder="+225 07 XX XX XX XX" />
+              <label class="form-label fw-semibold small">Téléphone</label>
+              <input type="tel" name="phone" class="form-control" placeholder="+225 07 XX XX XX XX" />
             </div>
           </div>
         </div>
 
-        <!-- Type bundle : choix méthode -->
+        <!-- Bundle -->
         {% if product.product_type == 'bundle' %}
         <div class="ip-card p-4 mb-4">
-          <h5 class="fw-bold mb-3">
-            <i class="bi bi-box-seam me-2 text-orange"></i>Comment souhaitez-vous recevoir ce produit ?
-          </h5>
+          <h5 class="fw-bold mb-3"><i class="bi bi-box-seam me-2 text-orange"></i>Réception</h5>
           <div class="row g-3">
             <div class="col-6">
-              <label style="cursor:pointer; display:block;">
-                <input type="radio" name="delivery_method" value="download" class="d-none" x-model="delivery" />
-                <div class="p-3 rounded-3 border text-center"
-                     :class="delivery === 'download' ? 'border-success bg-success bg-opacity-10' : 'border-light'">
-                  <div style="font-size:1.6rem;">💾</div>
-                  <div class="fw-bold small mt-1">Numérique</div>
-                  <div class="text-muted" style="font-size:0.72rem;">Téléchargement immédiat</div>
-                </div>
-              </label>
+              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="download" class="d-none" />
+                <div class="p-3 rounded-3 border text-center">💾<br>Numérique</div></label>
             </div>
             <div class="col-6">
-              <label style="cursor:pointer; display:block;">
-                <input type="radio" name="delivery_method" value="delivery" class="d-none" x-model="delivery" />
-                <div class="p-3 rounded-3 border text-center"
-                     :class="delivery === 'delivery' ? 'border-success bg-success bg-opacity-10' : 'border-light'">
-                  <div style="font-size:1.6rem;">📦</div>
-                  <div class="fw-bold small mt-1">Physique</div>
-                  <div class="text-muted" style="font-size:0.72rem;">Livraison à domicile</div>
-                </div>
-              </label>
+              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="delivery" class="d-none" checked />
+                <div class="p-3 rounded-3 border text-center">📦<br>Physique</div></label>
             </div>
           </div>
         </div>
         {% else %}
-          <input type="hidden" name="delivery_method"
-                 value="{% if product.is_digital %}download{% else %}delivery{% endif %}" />
+        <input type="hidden" name="delivery_method" value="{% if product.is_digital %}download{% else %}delivery{% endif %}" />
         {% endif %}
 
-        <!-- Quantité (physique uniquement) -->
-        <div class="ip-card p-4 mb-4" x-show="delivery === 'delivery'">
-          <h5 class="fw-bold mb-3">
-            <i class="bi bi-boxes me-2 text-green"></i>Quantité
-          </h5>
+        <!-- Quantité -->
+        {% if product.is_physical %}
+        <div class="ip-card p-4 mb-4">
+          <h5 class="fw-bold mb-3"><i class="bi bi-boxes me-2 text-green"></i>Quantité</h5>
           <select name="quantity" class="form-select" style="max-width:150px;">
-            {% for i in "12345" %}
-              {% if forloop.counter <= product.stock %}
-              <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
-              {% endif %}
-            {% endfor %}
+            {% for i in "12345" %}{% if forloop.counter <= product.stock %}
+            <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+            {% endif %}{% endfor %}
           </select>
-          <div class="text-muted small mt-2">
-            <i class="bi bi-box me-1"></i>{{ product.stock }} en stock
-          </div>
+          <div class="text-muted small mt-2">{{ product.stock }} en stock</div>
         </div>
-
-        {% if product.is_digital %}
+        {% else %}
         <input type="hidden" name="quantity" value="1" />
         {% endif %}
 
-        <!-- Adresse livraison -->
-        <div class="ip-card p-4 mb-4" x-show="delivery === 'delivery'">
-          <h5 class="fw-bold mb-3">
-            <i class="bi bi-geo-alt me-2 text-green"></i>Adresse de livraison
-          </h5>
+        <!-- Adresse + Carte -->
+        {% if product.is_physical %}
+        <div class="ip-card p-4 mb-4">
+          <h5 class="fw-bold mb-3"><i class="bi bi-geo-alt me-2 text-green"></i>Adresse de livraison</h5>
+          <div class="alert alert-warning small mb-3 py-2">🚚 <strong>Frais de livraison à la charge du client.</strong></div>
+
+          <!-- Carte dans son propre conteneur -->
+          <div style="height:180px; width:100%; border-radius:8px; border:2px solid #ddd; margin-bottom:12px; overflow:hidden; position:relative;">
+            <div id="delivery-map" style="height:180px !important; width:100% !important;"></div>
+          </div>
+          <div class="text-muted small mb-2"><span id="map-status">👆 Cliquez sur la carte</span></div>
+          <input type="hidden" name="latitude" id="id_latitude">
+          <input type="hidden" name="longitude" id="id_longitude">
+
           <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">Nom complet *</label>
-              <input type="text" name="delivery_name" class="form-control"
-                     placeholder="Nom du destinataire" />
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">Téléphone *</label>
-              <input type="tel" name="delivery_phone" class="form-control"
-                     placeholder="+225 07 XX XX XX XX" />
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold small">Adresse complète *</label>
-              <input type="text" name="delivery_address" class="form-control"
-                     placeholder="Quartier, rue, numéro..." />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">Ville *</label>
-              <input type="text" name="delivery_city" class="form-control" value="Abidjan" />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">Commune</label>
-              <input type="text" name="delivery_commune" class="form-control"
-                     placeholder="Cocody, Yopougon..." />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">Pays</label>
-              <input type="text" name="delivery_country" class="form-control" value="Côte d'Ivoire" />
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold small">Instructions (optionnel)</label>
-              <textarea name="delivery_instructions" class="form-control" rows="2"
-                        placeholder="Point de repère, étage..."></textarea>
-            </div>
+            <div class="col-md-6"><label class="form-label fw-semibold small">Nom complet *</label><input type="text" name="delivery_name" class="form-control" required /></div>
+            <div class="col-md-6"><label class="form-label fw-semibold small">Téléphone *</label><input type="tel" name="delivery_phone" class="form-control" required /></div>
+            <div class="col-12"><label class="form-label fw-semibold small">Adresse *</label><textarea name="delivery_address" class="form-control" rows="2" required></textarea></div>
+            <div class="col-md-4"><label class="form-label fw-semibold small">Ville *</label><input type="text" name="delivery_city" class="form-control" value="Abidjan" required /></div>
+            <div class="col-md-4"><label class="form-label fw-semibold small">Commune</label><input type="text" name="delivery_commune" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label fw-semibold small">Pays</label><input type="text" name="delivery_country" class="form-control" value="Côte d'Ivoire" /></div>
           </div>
         </div>
+        {% endif %}
 
         <!-- Total -->
         <div class="ip-card p-4 mb-4" style="border-left:4px solid #1B7A3E;">
           <div class="d-flex justify-content-between align-items-center">
-            <span class="fw-bold">Total à payer</span>
+            <span class="fw-bold">Total</span>
             <span class="fw-bold fs-5 text-green">{{ product.price|floatformat:0 }} FCFA</span>
           </div>
+          {% if product.is_physical %}<small class="text-muted">+ frais livraison à charge client</small>{% endif %}
         </div>
 
-        <button type="submit" class="btn btn-orange btn-lg w-100 py-3"
-                style="font-size:1.05rem; font-weight:700;">
-          <i class="bi bi-lock me-2"></i>Payer via PayDunya
-        </button>
-
-        <p class="text-muted small text-center mt-3">
-          <i class="bi bi-shield-check me-1 text-green"></i>
-          Paiement sécurisé — Wave, Orange Money, MTN MoMo, Carte<br>
-          <strong>Aucun compte requis.</strong>
-        </p>
-
+        <button type="submit" class="btn btn-orange btn-lg w-100 py-3"><i class="bi bi-lock me-2"></i>Payer via PayDunya</button>
+        <p class="text-muted small text-center mt-3">🔒 Paiement sécurisé — Aucun compte requis.</p>
       </form>
     </div>
 
-    <!-- Sidebar produit -->
+    <!-- Sidebar -->
     <div class="col-lg-4">
-      <div class="ip-card p-4 sticky-top" style="top:80px;">
-        {% if product.cover_image %}
-          <img src="{{ product.cover_image.url }}" class="rounded-3 w-100 mb-3"
-               style="height:150px; object-fit:cover;" />
-        {% endif %}
-        <div class="fw-bold mb-1">{{ product.name }}</div>
-        {% if product.author %}
-          <div class="text-muted small mb-2">{{ product.author }}</div>
-        {% endif %}
-        <span class="badge mb-3" style="background:#1B7A3E; color:white;">
-          {{ product.get_product_type_display }}
-        </span>
-        <div class="fw-bold text-green fs-5">{{ product.price|floatformat:0 }} FCFA</div>
+      <div class="ip-card p-4">
+        {% if product.cover_image %}<img src="{{ product.cover_image.url }}" class="rounded-3 w-100 mb-3" style="height:150px;object-fit:cover;" />{% endif %}
+        <div class="fw-bold">{{ product.name }}</div>
+        {% if product.author %}<div class="text-muted small">{{ product.author }}</div>{% endif %}
+        <span class="badge bg-success mt-2">{{ product.get_product_type_display }}</span>
+        <div class="fw-bold text-green fs-5 mt-2">{{ product.price|floatformat:0 }} FCFA</div>
+        {% if product.is_physical %}<div class="alert alert-info small mt-3 mb-0 p-2 text-center">🚚 Livraison à charge client</div>{% endif %}
       </div>
     </div>
 
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if product.is_physical %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  var el = document.getElementById('delivery-map');
+  if (!el || el.dataset.ok) return;
+  el.dataset.ok = 1;
+
+  // Attendre que le conteneur soit visible
+var map = L.map('delivery-map', {
+    zoomControl: true,
+    zoomControlOptions: { position: 'bottomright' }
+}).setView([5.3599, -4.0082], 13);
+
+// Forcer la carte à remplir son conteneur
+setTimeout(function() {
+    map.invalidateSize();
+}, 100);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19
+  }).addTo(map);
+
+  var marker;
+
+  map.on('click', function(e) {
+    var la = e.latlng.lat.toFixed(6);
+    var ln = e.latlng.lng.toFixed(6);
+    if (marker) {
+      marker.setLatLng(e.latlng);
+    } else {
+      marker = L.marker(e.latlng).addTo(map);
+    }
+    document.getElementById('id_latitude').value = la;
+    document.getElementById('id_longitude').value = ln;
+    document.getElementById('map-status').innerHTML = '✅ ' + la + ', ' + ln;
+  });
+
+  // Forcer la carte à prendre toute la hauteur
+  setTimeout(function() {
+    map.invalidateSize();
+  }, 500);
+})();
+</script>
+{% endif %}
 {% endblock %}
