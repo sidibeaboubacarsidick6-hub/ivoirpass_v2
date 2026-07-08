@@ -1,15 +1,18 @@
-Bonjour,
+Bonjour {{ user.first_name|default:user.email }},
 
-Merci de vous être inscrit sur IvoirPass !
+Bienvenue sur IvoirPass ! 🎉
 
-Pour activer votre compte, cliquez sur le lien ci-dessous :
+Votre compte organisateur a bien été créé. Pour l'activer, confirmez votre adresse email :
 
 {{ activate_url }}
 
-Ce lien est valable 3 jours.
+Ce lien expire dans 3 jours.
 
-Si vous n'avez pas créé de compte sur IvoirPass, ignorez cet email.
+Une fois confirmé, vous pourrez :
+✅ Créer et publier des événements
+✅ Vendre des produits culturels
+✅ Accéder à votre dashboard et wallet
 
 ---
 IvoirPass — La plateforme culturelle ivoirienne
-MKS Soft Technologies | infos@mks-soft-technologies.com
+MKS Soft Technologies | Abidjan, Côte d'Ivoire
