@@ -43,11 +43,12 @@ def send_ticket_email_async(self, order_uuid):
     Envoi des billets par email après paiement.
     """
     from apps.tickets.models import Order
-    from apps.tickets.utils import send_ticket_email
+    from apps.notifications.service import NotificationService
     
     try:
         order = Order.objects.get(uuid=order_uuid)
-        send_ticket_email(order)
+        NotificationService.send_ticket_confirmation(order)
+
         logger.info(f"Billets envoyés pour commande {order.order_number}")
         return f"Tickets sent for {order.order_number}"
         
