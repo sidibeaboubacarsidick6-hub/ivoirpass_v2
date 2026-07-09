@@ -104,8 +104,9 @@ class OrganizerWallet(models.Model):
             raise ValueError("Solde insuffisant pour ce reversement.")
         self.balance_available -= amount
         self.balance_withdrawn += amount
+        self.balance_pending = max(0, self.balance_pending - amount)
         self.save(update_fields=[
-            'balance_available', 'balance_withdrawn', 'updated_at'
+            'balance_available', 'balance_withdrawn', 'balance_pending', 'updated_at'
         ])
         WalletTransaction.objects.create(
             wallet        = self,
@@ -308,7 +309,7 @@ class WithdrawalRequest(models.Model):
         self.processed_at = timezone.now()
         self.save()
 
-        # Mettre à jour balance_pending AVANT debit
+        # Mettre à jour balance_pending
         self.wallet.balance_pending = max(0, self.wallet.balance_pending - self.amount)
         self.wallet.save(update_fields=['balance_pending'])
 

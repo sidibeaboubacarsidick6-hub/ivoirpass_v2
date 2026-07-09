@@ -303,9 +303,8 @@ def withdraw_request(request):
                 payout_name   = name,
             )
                         # Mettre à jour le solde en attente
-            wallet.balance_available -= wr.amount
             wallet.balance_pending += wr.amount
-            wallet.save(update_fields=['balance_available', 'balance_pending'])
+            wallet.save(update_fields=['balance_pending'])
 
             # Notifier l'admin
             from apps.notifications.models import AdminNotification
