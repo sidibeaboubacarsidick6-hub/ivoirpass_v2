@@ -712,19 +712,16 @@ def store_webhook(request):
         logger.warning("Store webhook: body vide")
         return HttpResponse('OK', status=200)
 
-        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Store webhook rejeté : signature PayDunya invalide")
         return HttpResponse('FORBIDDEN', status=403)
     
     try:
-        # PayDunya peut envoyer soit directement le JSON, soit dans data
         raw_data = json.loads(request.body)
         logger.info(f"Store webhook raw data: {raw_data}")
         
-        # PayDunya V2 format: {"data": {"invoice": {...}, "custom_data": {...}}}
-        # ou format direct: {"invoice": {...}, "custom_data": {...}}
         if 'data' in raw_data:
             payload = raw_data['data']
         else:
@@ -738,6 +735,13 @@ def store_webhook(request):
         order_number = custom_data.get('store_order_number', '')
         
         logger.info(f"Store webhook: order={order_number}, status={status}, token={token}")
+
+        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
+        if token and status == 'completed':
+            result = PayDunyaService.verify_payment(token)
+            if result.get('status') != 'completed':
+                logger.warning(f"Store webhook: paiement non confirmé par API - {token}")
+                return HttpResponse('OK', status=200)
         
         if status == 'completed' and order_number:
             try:
@@ -746,7 +750,6 @@ def store_webhook(request):
                     status=ProductOrder.Status.PENDING
                 )
                 
-                # Mise à jour manuelle de la commande
                 order.status = ProductOrder.Status.PAID
                 order.payment_method = 'paydunya'
                 order.payment_reference = token
@@ -755,25 +758,21 @@ def store_webhook(request):
                 
                 logger.info(f"Store webhook: commande {order_number} validée")
                 
-                # Crédit du vendeur
                 try:
                     order._credit_seller_wallet()
                 except Exception as e:
                     logger.error(f"Store webhook: erreur wallet: {e}")
                 
-                # Génération des liens de téléchargement si digital
                 if order.product.is_digital:
                     from .models import DownloadLink
                     if not DownloadLink.objects.filter(order=order).exists():
                         order._generate_download_links()
-                        # ✅ Envoyer l'email avec les liens
                         try:
                             from apps.notifications.tasks import send_download_link_email_async
                             send_download_link_email_async.delay(str(order.uuid))
                         except Exception as e:
                             logger.error(f"Store webhook: erreur envoi email: {e}")
                 
-                # Mise à jour du stock si physique
                 if order.product.is_physical:
                     order.product.stock -= order.quantity
                     order.product.sold_count += order.quantity
@@ -788,7 +787,7 @@ def store_webhook(request):
         
     except json.JSONDecodeError as e:
         logger.error(f"Store webhook: JSON invalide - {e}, body: {request.body[:200]}")
-        return HttpResponse('OK', status=200)  # Toujours 200 pour PayDunya
+        return HttpResponse('OK', status=200)
     except Exception as e:
         logger.error(f"Store webhook error: {e}")
         return HttpResponse('OK', status=200)
@@ -1014,7 +1013,8 @@ def guest_store_webhook(request):
     
     if not request.body:
         return HttpResponse('EMPTY', status=200)
-        # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
+
+    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Guest store webhook rejeté : signature PayDunya invalide")
@@ -1027,6 +1027,13 @@ def guest_store_webhook(request):
         status       = invoice_data.get('invoice', {}).get('status', '')
         token        = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_store_order_number', '')
+
+        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
+        if token and status == 'completed':
+            result = PayDunyaService.verify_payment(token)
+            if result.get('status') != 'completed':
+                logger.warning(f"Guest store webhook: paiement non confirmé par API - {token}")
+                return HttpResponse('OK', status=200)
 
         if status == 'completed' and order_number:
             try:
