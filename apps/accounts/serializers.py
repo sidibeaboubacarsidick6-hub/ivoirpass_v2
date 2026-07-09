@@ -97,7 +97,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             })
         # Seuls ces rôles sont autorisés à l'inscription publique
         allowed_roles = [
-            CustomUser.Role.PARTICIPANT,
             CustomUser.Role.ORGANIZER,
         ]
         if attrs.get('role', CustomUser.Role.PARTICIPANT) not in allowed_roles:

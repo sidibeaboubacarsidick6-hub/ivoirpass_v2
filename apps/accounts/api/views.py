@@ -17,7 +17,7 @@ from ..serializers import (
 class RegisterAPIView(generics.CreateAPIView):
     """
     POST /api/v1/auth/register/
-    Inscription d'un nouvel utilisateur (participant ou organisateur).
+    Inscription d'un nouvel organisateur
     """
     queryset = CustomUser.objects.all()
     serializer_class = RegisterSerializer

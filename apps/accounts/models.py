@@ -16,7 +16,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     Modèle utilisateur IvoirPass.
     
     Rôles possibles :
-    - participant   : Acheteur de tickets et produits culturels
     - organizer     : Organisateur d'événements / vendeur culturel
     - scanner       : Agent de contrôle d'accès (scan QR)
     - admin         : Administrateur de la plateforme
@@ -242,10 +241,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.first_name or self.email.split('@')[0]
-
-    @property
-    def is_participant(self):
-        return self.role == self.Role.PARTICIPANT
 
     @property
     def is_organizer(self):

@@ -43,7 +43,6 @@ class IvoirPassSignupForm(SignupForm):
     role = forms.ChoiceField(
         label="Je suis",
         choices=[
-            ('participant', '🎟️  Participant — J\'achète des billets et produits culturels'),
             ('organizer',   '🎪  Organisateur — Je crée et gère des événements'),
         ],
         widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
