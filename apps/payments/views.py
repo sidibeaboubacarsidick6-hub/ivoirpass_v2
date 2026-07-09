@@ -175,7 +175,7 @@ def payment_webhook(request):
     logger.info("=" * 50)
     logger.info("WEBHOOK RECU")
     logger.info(f"Content-Type: {request.content_type}")
-    logger.info(f"Body brut: {logger.debug("Webhook recu - token: %s", token)}")
+    logger.debug("Webhook recu - body: %s", request.body[:200])
     logger.info(f"POST dict: {request.POST}")
     logger.info("=" * 50)
 

@@ -13,29 +13,24 @@ class PayDunyaService:
 
     @classmethod
     def verify_webhook_signature(cls, request):
-        """
-        Vérifie la signature HMAC du webhook PayDunya.
-        Retourne True si la signature est valide, False sinon.
-        """
+        """Vérifie le hash SHA-512 du webhook PayDunya."""
         import hashlib
-        import hmac as hmac_lib
+        import json
 
-        # Récupérer la signature envoyée par PayDunya
-        paydunya_signature = request.headers.get('PAYDUNYA-SIGNATURE', '')
-
-        if not paydunya_signature:
-            logger.warning("Webhook sans signature PayDunya")
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
             return False
 
-        # La signature est un HMAC-SHA256 du body avec la PRIVATE_KEY
-        expected_signature = hmac_lib.new(
-            settings.PAYDUNYA_PRIVATE_KEY.encode('utf-8'),
-            request.body,
-            hashlib.sha256
+        received_hash = body.get('hash', '') or body.get('data', {}).get('hash', '')
+        if not received_hash:
+            return False
+
+        expected_hash = hashlib.sha512(
+            settings.PAYDUNYA_MASTER_KEY.encode('utf-8')
         ).hexdigest()
 
-        # Comparaison sécurisée (timing-attack safe)
-        return hmac_lib.compare_digest(paydunya_signature, expected_signature)
+        return hmac.compare_digest(received_hash, expected_hash)
 
     @classmethod
     def get_headers(cls):
