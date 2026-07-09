@@ -44,3 +44,4 @@ htmlcov/
 # Migrations (optionnel - certains projets les committent)
 # apps/*/migrations/backups/
 *.sql
+backup_avant_migration.sql
