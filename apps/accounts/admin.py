@@ -138,7 +138,7 @@ class CustomUserAdmin(UserAdmin):
             'classes': ('wide',),
             'fields': (
                 'email', 'first_name', 'last_name',
-                'phone_number', 'role', 'password1', 'password2'
+                'phone_number','password1', 'password2'
             ),
         }),
     )

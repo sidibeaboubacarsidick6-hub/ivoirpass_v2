@@ -26,7 +26,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # CHOIX DE RÔLES
     # ============================================
     class Role(models.TextChoices):
-        PARTICIPANT = 'participant', _('Participant')
         ORGANIZER   = 'organizer',   _('Organisateur')
         SCANNER     = 'scanner',     _('Agent Scanner')
         ADMIN       = 'admin',       _('Administrateur')
@@ -64,7 +63,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         _('rôle'),
         max_length=20,
         choices=Role.choices,
-        default=Role.PARTICIPANT,
+        default=Role.ORGANIZER
     )
     is_active = models.BooleanField(
         _('actif'),
