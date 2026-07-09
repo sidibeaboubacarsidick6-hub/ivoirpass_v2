@@ -308,15 +308,16 @@ class WithdrawalRequest(models.Model):
         self.processed_at = timezone.now()
         self.save()
 
+        # Mettre à jour balance_pending AVANT debit
+        self.wallet.balance_pending = max(0, self.wallet.balance_pending - self.amount)
+        self.wallet.save(update_fields=['balance_pending'])
+
         # Débiter le wallet
         self.wallet.debit(
             amount=self.amount,
             description=f"Reversement {self.reference}",
             reference=self.reference,
         )
-                # Mettre à jour balance_pending
-        self.wallet.balance_pending -= self.amount
-        self.wallet.save(update_fields=['balance_pending'])
 
         # Notification admin
         from apps.notifications.models import AdminNotification
