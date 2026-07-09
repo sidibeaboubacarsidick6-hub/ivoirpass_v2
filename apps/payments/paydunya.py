@@ -15,6 +15,7 @@ class PayDunyaService:
     def verify_webhook_signature(cls, request):
         """Vérifie le hash SHA-512 du webhook PayDunya."""
         import hashlib
+        import hmac
         import json
 
         try:
