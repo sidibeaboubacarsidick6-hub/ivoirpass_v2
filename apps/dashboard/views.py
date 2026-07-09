@@ -283,10 +283,10 @@ def withdraw_request(request):
             errors.append("Méthode de paiement requise.")
 
         pending = wallet.withdrawal_requests.filter(
-            status__in=[
-                WithdrawalRequest.Status.PENDING,
-                WithdrawalRequest.Status.APPROVED,
-            ]
+            
+                status=WithdrawalRequest.Status.PENDING
+                
+            
         ).exists()
         if pending:
             errors.append("Une demande est déjà en cours.")
