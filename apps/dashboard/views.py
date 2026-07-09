@@ -302,6 +302,19 @@ def withdraw_request(request):
                 payout_phone  = phone,
                 payout_name   = name,
             )
+                        # Mettre à jour le solde en attente
+            wallet.balance_available -= wr.amount
+            wallet.balance_pending += wr.amount
+            wallet.save(update_fields=['balance_available', 'balance_pending'])
+
+            # Notifier l'admin
+            from apps.notifications.models import AdminNotification
+            AdminNotification.objects.create(
+                type='fraud_alert',
+                title='Nouvelle demande de reversement',
+                message=f"{request.user.get_full_name()} demande {wr.amount} FCFA via {wr.get_payout_method_display()}.\nRéférence : {wr.reference}",
+                reference=wr.reference,
+            )
 
             # Audit log — création de la demande de reversement
             from .models import AuditLog

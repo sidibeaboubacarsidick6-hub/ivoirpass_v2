@@ -314,6 +314,9 @@ class WithdrawalRequest(models.Model):
             description=f"Reversement {self.reference}",
             reference=self.reference,
         )
+                # Mettre à jour balance_pending
+        self.wallet.balance_pending -= self.amount
+        self.wallet.save(update_fields=['balance_pending'])
 
         # Notification admin
         from apps.notifications.models import AdminNotification
