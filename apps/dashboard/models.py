@@ -106,7 +106,7 @@ class OrganizerWallet(models.Model):
         self.balance_withdrawn += amount
         self.balance_pending = max(0, self.balance_pending - amount)
         self.save(update_fields=[
-            'balance_available', 'balance_withdrawn', 'balance_pending', 'updated_at'
+            'balance_available', 'balance_withdrawn', 'balance_pending', 'updated_at'   
         ])
         WalletTransaction.objects.create(
             wallet        = self,
