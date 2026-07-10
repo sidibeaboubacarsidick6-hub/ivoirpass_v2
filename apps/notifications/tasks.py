@@ -42,8 +42,9 @@ def send_ticket_email_async(self, order_uuid):
     """
     Envoi des billets par email après paiement.
     """
-    from apps.tickets.models import Order
     from apps.notifications.service import NotificationService
+    NotificationService.ticket_confirmed(order)
+
     
     try:
         order = Order.objects.get(uuid=order_uuid)
