@@ -302,25 +302,34 @@ class WithdrawalRequest(models.Model):
         self.save()
 
     def mark_processed(self, admin_user, note=''):
-        """Marque comme traitée après virement effectué."""
-        self.status       = self.Status.PROCESSED
-        self.admin_note   = note
-        self.processed_by = admin_user
-        self.processed_at = timezone.now()
-        self.save()
+        """
+        Marque comme traitée après virement effectué.
+        Le débit du wallet est effectué AVANT de figer le statut PROCESSED :
+        si le débit échoue (solde insuffisant), la demande reste dans son
+        statut précédent (ex: APPROVED) au lieu d'être marquée comme traitée
+        à tort — évite toute incohérence comptable.
+        """
+        from django.db import transaction
 
-        # Mettre à jour balance_pending
-        self.wallet.balance_pending = max(0, self.wallet.balance_pending - self.amount)
-        self.wallet.save(update_fields=['balance_pending'])
+        with transaction.atomic():
+            # Débiter le wallet en premier — si ça échoue, tout est annulé
+            # (y compris balance_pending) et le statut n'est jamais touché.
+            self.wallet.debit(
+                amount=self.amount,
+                description=f"Reversement {self.reference}",
+                reference=self.reference,
+            )
 
-        # Débiter le wallet
-        self.wallet.debit(
-            amount=self.amount,
-            description=f"Reversement {self.reference}",
-            reference=self.reference,
-        )
+            self.wallet.balance_pending = max(0, self.wallet.balance_pending - self.amount)
+            self.wallet.save(update_fields=['balance_pending'])
 
-        # Notification admin
+            self.status       = self.Status.PROCESSED
+            self.admin_note   = note
+            self.processed_by = admin_user
+            self.processed_at = timezone.now()
+            self.save()
+
+        # Notification admin — seulement une fois le débit confirmé
         from apps.notifications.models import AdminNotification
         AdminNotification.objects.create(
             type='fraud_alert',

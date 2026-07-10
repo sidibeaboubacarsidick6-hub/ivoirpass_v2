@@ -118,14 +118,13 @@ class WithdrawalRequestLifecycleTests(TestCase):
         self.assertEqual(wr.status, WithdrawalRequest.Status.REJECTED)
         self.assertEqual(self.wallet.balance_available, Decimal('100000'))
 
-    def test_BUG_mark_processed_incoherent_si_debit_echoue(self):
+    def test_mark_processed_reste_coherent_si_debit_echoue(self):
         """
-        BUG CONNU : mark_processed() sauvegarde le statut PROCESSED
-        AVANT d'appeler wallet.debit(). Si le débit échoue (solde
-        devenu insuffisant entre-temps), la demande reste marquée
-        PROCESSED alors que l'argent n'a jamais quitté le wallet.
-        Ce test documente le comportement actuel — il doit être
-        adapté (ou l'implémentation corrigée) une fois le bug traité.
+        Non-régression : mark_processed() débite le wallet AVANT de figer
+        le statut PROCESSED (dans une transaction atomique). Si le débit
+        échoue (solde insuffisant), la demande doit rester dans son statut
+        précédent, PAS PROCESSED — pour ne jamais afficher un reversement
+        comme "traité" alors que l'argent n'a jamais bougé.
         """
         wr = WithdrawalRequest.objects.create(
             wallet=self.wallet, amount=Decimal('30000'), fee=Decimal('0'),
@@ -144,15 +143,11 @@ class WithdrawalRequestLifecycleTests(TestCase):
         wr.refresh_from_db()
         self.wallet.refresh_from_db()
 
-        incoherent = (wr.status == WithdrawalRequest.Status.PROCESSED and self.wallet.balance_withdrawn == Decimal('0'))
-        if incoherent:
-            print(
-                "  [BUG CONFIRMÉ] La demande est marquée PROCESSED en base "
-                "alors que le débit du wallet a échoué (ValueError) — "
-                "incohérence comptable. Voir apps/dashboard/models.py: mark_processed()."
-            )
-        self.assertTrue(
-            incoherent,
-            "Si ce test échoue, c'est que le bug a été corrigé (l'ordre "
-            "statut/débit a changé) — adapter ce test en conséquence."
+        self.assertEqual(
+            wr.status, WithdrawalRequest.Status.APPROVED,
+            "La demande ne doit PAS passer à PROCESSED si le débit a échoué"
+        )
+        self.assertEqual(
+            self.wallet.balance_withdrawn, Decimal('0'),
+            "Aucun montant ne doit être compté comme reversé si le débit a échoué"
         )
