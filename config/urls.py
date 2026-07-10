@@ -34,6 +34,8 @@ urlpatterns = [
     path('scanner/',    include('apps.scanner.urls',   namespace='scanner')),
     path('boutique/',   include('apps.store.urls',     namespace='store')),
     path('', include('apps.core.urls')),
+    path('api/scanner/', include('apps.scanner.api.urls')),
+
 ]
 
 if settings.DEBUG:
