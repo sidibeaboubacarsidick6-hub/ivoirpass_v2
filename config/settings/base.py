@@ -259,6 +259,8 @@ IVOIRPASS = {
 # Clé primaire par défaut
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+SCANNER_API_KEY = config('SCANNER_API_KEY', default='ivoirpass-scanner-2026')
+
 
 # ============================================
 # CELERY — Tâches asynchrones

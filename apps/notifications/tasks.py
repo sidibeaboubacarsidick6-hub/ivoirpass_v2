@@ -42,17 +42,15 @@ def send_ticket_email_async(self, order_uuid):
     """
     Envoi des billets par email après paiement.
     """
+    from apps.tickets.models import Order
     from apps.notifications.service import NotificationService
-    NotificationService.ticket_confirmed(order)
 
-    
     try:
         order = Order.objects.get(uuid=order_uuid)
-        NotificationService.send_ticket_confirmation(order)
-
+        NotificationService.ticket_confirmed(order)
         logger.info(f"Billets envoyés pour commande {order.order_number}")
         return f"Tickets sent for {order.order_number}"
-        
+
     except Order.DoesNotExist:
         logger.error(f"Commande {order_uuid} introuvable")
         return None

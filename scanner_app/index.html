@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>IvoirPass Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #000; color: white; height: 100vh; overflow: hidden; }
+        
+        #loginScreen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; padding: 40px; background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%); }
+        #loginScreen .logo { width: 80px; height: 80px; background: linear-gradient(135deg, #1B7A3E, #0d3d1f); border-radius: 22px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(27,122,62,0.3); }
+        #loginScreen h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        #loginScreen .subtitle { font-size: 0.8rem; color: #888; margin-bottom: 35px; }
+        #loginScreen .input-group { width: 100%; max-width: 300px; margin-bottom: 15px; }
+        #loginScreen label { display: block; font-size: 0.7rem; font-weight: 600; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        #loginScreen input { width: 100%; padding: 16px 20px; font-size: 1.1rem; border-radius: 16px; border: 1.5px solid #333; background: #111; color: white; outline: none; transition: 0.3s; }
+        #loginScreen input:focus { border-color: #1B7A3E; box-shadow: 0 0 0 3px rgba(27,122,62,0.15); }
+        #loginScreen button { width: 100%; max-width: 300px; padding: 16px; font-size: 1rem; font-weight: 700; border: none; border-radius: 16px; background: #1B7A3E; color: white; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        #loginScreen button:active { transform: scale(0.97); background: #15632e; }
+
+        #scanScreen { display: none; height: 100vh; position: relative; background: #000; }
+        #scanScreen.active { display: block; }
+        #reader { width: 100%; height: 100%; }
+        
+        .scan-header { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .scan-header .event-badge { background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); padding: 8px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; }
+        .scan-header .event-badge span { color: #F47920; }
+        .scan-header .close-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); border: none; color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        .scan-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 10; padding: 20px; display: flex; gap: 10px; }
+        .scan-footer .stat { flex: 1; background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border-radius: 16px; padding: 12px; text-align: center; }
+        .scan-footer .stat .number { font-size: 1.5rem; font-weight: 800; }
+        .scan-footer .stat .label { font-size: 0.65rem; color: #aaa; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .scan-footer .stat.valid .number { color: #1B7A3E; }
+        .scan-footer .stat.invalid .number { color: #dc3545; }
+
+        .history-drawer { position: absolute; bottom: 110px; left: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); border-radius: 20px; max-height: 30vh; overflow-y: auto; display: none; padding: 10px; }
+        .history-drawer.show { display: block; }
+        .history-drawer .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 4px; }
+        .history-drawer .item.valid { background: rgba(27,122,62,0.2); }
+        .history-drawer .item.invalid { background: rgba(220,53,69,0.2); }
+        .history-toggle { position: absolute; bottom: 115px; right: 15px; z-index: 11; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); border: none; color: white; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        .result-overlay { position: fixed; inset: 0; z-index: 100; display: none; justify-content: center; align-items: center; flex-direction: column; background: rgba(0,0,0,0.9); }
+        .result-overlay.show { display: flex; animation: fadeIn 0.15s; }
+        .result-overlay .circle { width: 130px; height: 130px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; margin-bottom: 15px; }
+        .result-overlay.valid .circle { background: #1B7A3E; box-shadow: 0 0 60px rgba(27,122,62,0.5); }
+        .result-overlay.invalid .circle { background: #dc3545; box-shadow: 0 0 60px rgba(220,53,69,0.5); }
+        .result-overlay .message { font-size: 1.6rem; font-weight: 800; text-align: center; }
+        .result-overlay .detail { font-size: 0.9rem; color: #aaa; margin-top: 6px; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN -->
+    <div id="loginScreen">
+        <div class="logo">🎫</div>
+        <h1>IvoirPass Scanner</h1>
+        <p class="subtitle">Contrôle d'accès événementiel</p>
+        <div class="input-group">
+            <label>ID de l'événement</label>
+            <input type="number" id="eventIdInput" placeholder="Ex: 5" autofocus>
+        </div>
+        <button onclick="startScan()">Démarrer le scan</button>
+    </div>
+
+    <!-- SCAN -->
+    <div id="scanScreen">
+        <div id="reader"></div>
+        
+        <div class="scan-header">
+            <div class="event-badge">🎫 #<span id="eventIdDisplay"></span></div>
+            <button class="close-btn" onclick="stopScan()">✕</button>
+        </div>
+
+        <button class="history-toggle" onclick="toggleHistory()">📋</button>
+        <div class="history-drawer" id="historyDrawer"></div>
+
+        <div class="scan-footer">
+            <div class="stat valid"><div class="number" id="validCount">0</div><div class="label">Valides</div></div>
+            <div class="stat invalid"><div class="number" id="invalidCount">0</div><div class="label">Refusés</div></div>
+        </div>
+    </div>
+
+    <!-- RÉSULTAT -->
+    <div id="resultOverlay" class="result-overlay">
+        <div class="circle"></div>
+        <div class="message"></div>
+        <div class="detail"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8000/api/scanner/scan/';
+        const API_KEY = 'ivoirpass-scanner-2026';
+        let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
+
+        document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
+
+        function startScan() {
+            eventId = parseInt(document.getElementById('eventIdInput').value);
+            if(!eventId||eventId<1) return;
+            document.getElementById('loginScreen').style.display='none';
+            document.getElementById('scanScreen').classList.add('active');
+            document.getElementById('eventIdDisplay').textContent=eventId;
+            html5QrCode=new Html5Qrcode("reader",{formatsToSupport:[0]});
+            html5QrCode.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1},onScan,()=>{})
+            .then(()=>{scanning=true}).catch(e=>{alert('Caméra: '+e.message);stopScan();});
+        }
+
+        function stopScan() {
+            scanning=false;
+            if(html5QrCode){html5QrCode.stop().catch(()=>{});html5QrCode=null;}
+            document.getElementById('scanScreen').classList.remove('active');
+            document.getElementById('loginScreen').style.display='flex';
+            document.getElementById('eventIdInput').value=''; document.getElementById('eventIdInput').focus();
+            validCount=0;invalidCount=0;history=[];
+            updateCounters(); updateHistory();
+        }
+
+        function onScan(decodedText) {
+            if(!scanning)return; scanning=false;
+            fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':API_KEY},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
+            .then(r=>r.json()).then(data=>{
+                showResult(data);
+                data.result==='valid'?validCount++:invalidCount++;
+                updateCounters();
+                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:data.result,msg:data.message.substring(0,25)});
+                if(history.length>30) history.pop();
+                updateHistory();
+                setTimeout(()=>{hideResult();scanning=true;},1500);
+            }).catch(()=>{
+                showResult({result:'error',message:'Erreur réseau',color:'red'});
+                invalidCount++;updateCounters();
+                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:'error',msg:'Erreur réseau'});
+                updateHistory();
+                setTimeout(()=>{hideResult();scanning=true;},1500);
+            });
+        }
+
+        function showResult(d) {
+            const o=document.getElementById('resultOverlay');
+            o.className='result-overlay show '+(d.color==='green'?'valid':'invalid');
+            o.querySelector('.circle').textContent=d.color==='green'?'✅':'❌';
+            o.querySelector('.message').textContent=d.color==='green'?'ACCÈS AUTORISÉ':'ACCÈS REFUSÉ';
+            o.querySelector('.detail').textContent=d.message;
+            if(navigator.vibrate)navigator.vibrate(d.color==='green'?[100,50,200]:500);
+        }
+        function hideResult(){document.getElementById('resultOverlay').classList.remove('show');}
+        function updateCounters(){document.getElementById('validCount').textContent=validCount;document.getElementById('invalidCount').textContent=invalidCount;}
+        function updateHistory(){document.getElementById('historyDrawer').innerHTML=history.map(h=>`<div class="item ${h.result==='valid'?'valid':'invalid'}">${h.result==='valid'?'✅':'❌'} ${h.time} — ${h.msg}</div>`).join('');}
+        function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
+    </script>
+</body>
+</html>

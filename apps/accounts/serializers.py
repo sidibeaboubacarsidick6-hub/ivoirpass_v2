@@ -99,7 +99,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         allowed_roles = [
             CustomUser.Role.ORGANIZER,
         ]
-        if attrs.get('role', CustomUser.Role.PARTICIPANT) not in allowed_roles:
+        if attrs.get('role', CustomUser.Role.ORGANIZER) not in allowed_roles:
             raise serializers.ValidationError({
                 "role": "Rôle non autorisé à l'inscription."
             })

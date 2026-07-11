@@ -15,7 +15,8 @@ from django.core import mail
 from django.test import TestCase, override_settings
 
 from apps.accounts.models import CustomUser
-from apps.tickets.models import Order
+from apps.tickets.models import Order, OrderItem, Ticket
+from apps.events.models import Event, Category, TicketType
 from apps.notifications.service import NotificationService
 
 
@@ -29,7 +30,7 @@ class TicketEmailAfterPaymentTests(TestCase):
     def setUp(self):
         self.buyer = CustomUser.objects.create_user(
             email="client-billet@test.com", password="Pass123!",
-            first_name="Client", last_name="Billet", role=CustomUser.Role.PARTICIPANT,
+            first_name="Client", last_name="Billet",
         )
         self.order = Order.objects.create(
             buyer=self.buyer,
@@ -37,33 +38,70 @@ class TicketEmailAfterPaymentTests(TestCase):
             status=Order.Status.PAID,
         )
 
-    def test_BUG_send_ticket_email_async_importe_une_fonction_inexistante(self):
+    def test_send_ticket_email_async_utilise_le_bon_service(self):
         """
-        BUG CRITIQUE : apps/notifications/tasks.py::send_ticket_email_async
-        importe `send_ticket_email` depuis apps.tickets.utils — cette
-        fonction N'EXISTE PAS dans ce module. La vraie fonction d'envoi
-        s'appelle NotificationService.ticket_confirmed() (apps/notifications/service.py).
-
-        Conséquence en production : après CHAQUE paiement confirmé, la tâche
-        Celery censée envoyer le billet par email échoue silencieusement
-        (ImportError, absorbée par le retry Celery puis abandonnée après
-        3 tentatives) — le client ne reçoit jamais son billet automatiquement.
+        Vérifie que la tâche appelle bien NotificationService.ticket_confirmed
+        (le chemin qui fonctionne réellement), et non plus l'ancienne fonction
+        inexistante apps.tickets.utils.send_ticket_email.
         """
-        from apps.tickets import utils as tickets_utils
-
-        has_function = hasattr(tickets_utils, 'send_ticket_email')
-        if not has_function:
-            print(
-                "\n  [BUG CONFIRMÉ] apps/tickets/utils.py n'a PAS de fonction "
-                "'send_ticket_email'. apps/notifications/tasks.py::send_ticket_email_async "
-                "va lever une ImportError à chaque exécution — AUCUN billet n'est "
-                "envoyé automatiquement après paiement tant que ce n'est pas corrigé."
-            )
-        self.assertTrue(
-            has_function,
-            "send_ticket_email n'existe pas dans apps.tickets.utils — "
-            "voir apps/notifications/tasks.py::send_ticket_email_async"
+        import inspect
+        from apps.notifications import tasks
+        source = inspect.getsource(tasks.send_ticket_email_async)
+        self.assertNotIn(
+            'from apps.tickets.utils import send_ticket_email', source,
+            "L'ancien import cassé est toujours présent dans send_ticket_email_async"
         )
+        self.assertIn(
+            'NotificationService', source,
+            "send_ticket_email_async devrait utiliser NotificationService.ticket_confirmed"
+        )
+
+    def test_scenario_realiste_client_recoit_vraiment_son_billet_en_piece_jointe(self):
+        """
+        LE test qui compte le plus : un vrai achat, un vrai billet généré,
+        paiement confirmé -> la tâche async doit livrer un email AVEC le PDF
+        du billet en pièce jointe dans la boîte du client.
+        """
+        category = Category.objects.create(name='Concerts E2E')
+        organizer = CustomUser.objects.create_user(
+            email='organizer-e2e@test.com', password='Pass123!',
+            role='organizer', is_organizer_verified=True,
+        )
+        event = Event.objects.create(
+            title='Concert Test Email', description='Description',
+            category=category, organizer=organizer,
+            start_date=self._future(30), end_date=self._future(31),
+            status='published',
+        )
+        ticket_type = TicketType.objects.create(
+            event=event, name='Standard', price=5000, quantity=100,
+        )
+        order = Order.objects.create(
+            buyer=self.buyer, subtotal=5000, total=5000, status='pending',
+        )
+        OrderItem.objects.create(
+            order=order, ticket_type=ticket_type, quantity=1, unit_price=5000,
+        )
+
+        mail.outbox.clear()
+        order.mark_as_paid(payment_method='wave', payment_reference='PAY-TEST-EMAIL')
+        self.assertTrue(Ticket.objects.filter(order_item__order=order).exists(), "Le billet doit être généré au paiement")
+
+        from apps.notifications.tasks import send_ticket_email_async
+        send_ticket_email_async.apply(args=[str(order.uuid)])
+
+        self.assertEqual(len(mail.outbox), 1, "Le client doit recevoir exactement un email avec son billet")
+        msg = mail.outbox[0]
+        self.assertEqual(msg.to, ["client-billet@test.com"])
+        self.assertTrue(len(msg.attachments) >= 1, "Le PDF du billet doit être joint à l'email")
+        attachment_name = msg.attachments[0][0]
+        self.assertTrue(attachment_name.endswith('.pdf'), f"Pièce jointe inattendue : {attachment_name}")
+
+    @staticmethod
+    def _future(days):
+        from django.utils import timezone
+        from datetime import timedelta
+        return timezone.now() + timedelta(days=days)
 
     def test_email_billet_arrive_reellement_via_le_bon_chemin(self):
         """
@@ -111,7 +149,7 @@ class WelcomeAndOtherEmailsTests(TestCase):
         mail.outbox.clear()
         user = CustomUser.objects.create_user(
             email="nouveau@test.com", password="Pass123!",
-            first_name="Nouveau", last_name="Membre", role=CustomUser.Role.PARTICIPANT,
+            first_name="Nouveau", last_name="Membre",
         )
         sent = NotificationService.welcome(user)
         self.assertTrue(sent is not False)

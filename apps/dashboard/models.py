@@ -295,11 +295,25 @@ class WithdrawalRequest(models.Model):
         return f"REV-{suffix}"
 
     def approve(self, admin_user, note=''):
-        """Approuve la demande — déclenche le débit du wallet."""
+        """Approuve la demande et notifie l'organisateur."""
         self.status      = self.Status.APPROVED
         self.admin_note  = note
         self.processed_by = admin_user
         self.save()
+
+        # Email à l'organisateur
+        from django.core.mail import send_mail
+        send_mail(
+            '[IvoirPass] Reversement approuvé',
+            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
+            f"Votre demande de reversement de {self.amount} FCFA a été approuvée.\n"
+            f"Référence : {self.reference}\n\n"
+            f"Le virement sera effectué sous 24-48h.\n\n"
+            f"L'équipe IvoirPass",
+            None,
+            [self.wallet.organizer.email],
+            fail_silently=False,
+        )
 
     def mark_processed(self, admin_user, note=''):
         """

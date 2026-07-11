@@ -98,7 +98,7 @@ class PaymentWebhookEndToEndTests(TestCase):
         self.client = Client()
         self.buyer = CustomUser.objects.create_user(
             email="acheteur@test.com", password="Pass123!",
-            first_name="Ache", last_name="Teur", role=CustomUser.Role.PARTICIPANT,
+            first_name="Ache", last_name="Teur",
         )
         self.order = Order.objects.create(
             buyer=self.buyer,
@@ -178,7 +178,7 @@ class PaymentReturnSecurityTests(TestCase):
         self.client = Client()
         self.buyer = CustomUser.objects.create_user(
             email="acheteur2@test.com", password="Pass123!",
-            first_name="Ache", last_name="Teur", role=CustomUser.Role.PARTICIPANT,
+            first_name="Ache", last_name="Teur",
         )
         self.order = Order.objects.create(
             buyer=self.buyer,
