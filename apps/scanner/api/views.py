@@ -4,6 +4,7 @@ IvoirPass V2 — API Scan QR pour application mobile externe
 import json
 import hmac
 import hashlib
+from django_ratelimit.decorators import ratelimit
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -18,6 +19,7 @@ from apps.scanner.models import ScanSession, ScanLog
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='30/m', block=True)
 @permission_classes([AllowAny])
 def scan_qr_api(request):
     """
@@ -40,11 +42,17 @@ def scan_qr_api(request):
             "ticket_info": { ... }
         }
     """
-    # Vérifier la clé API
+    # Vérifier la clé API — AUCUN fallback : si SCANNER_API_KEY n'est pas
+    # configurée explicitement, l'API refuse tout appel plutôt que d'utiliser
+    # une clé par défaut connue publiquement (ancien comportement dangereux).
+    expected_key = getattr(settings, 'SCANNER_API_KEY', '') or ''
     api_key = request.headers.get('X-API-Key', '')
-    expected_key = getattr(settings, 'SCANNER_API_KEY', 'ivoirpass-scanner-2026')
-    
-    if not hmac.compare_digest(api_key, expected_key):
+
+    if not expected_key:
+        return JsonResponse(
+            {'result': 'unauthorized', 'message': 'API scanner non configurée'}, status=503
+        )
+    if not api_key or not hmac.compare_digest(api_key, expected_key):
         return JsonResponse({'result': 'unauthorized', 'message': 'Clé API invalide'}, status=403)
 
     try:

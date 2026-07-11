@@ -2,6 +2,7 @@
 IvoirPass V2 — Administration du dashboard et wallet
 """
 from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.utils.html import format_html
 from django.utils import timezone
 from django.urls import path
@@ -14,6 +15,7 @@ from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, Audit
 # VUE RAPPORT BCEAO
 # ============================================
 
+@staff_member_required
 def bceao_report_view(request):
     """Rapport mensuel BCEAO accessible dans l'admin."""
     from apps.tickets.models import Order
@@ -190,6 +192,7 @@ import openpyxl
 from io import BytesIO
 
 
+@staff_member_required
 def export_admin_csv(request):
     """Export CSV de toutes les données pour l'admin."""
     response = HttpResponse(content_type='text/csv')
@@ -227,6 +230,7 @@ def export_admin_csv(request):
     return response
 
 
+@staff_member_required
 def export_admin_excel(request):
     """Export Excel de toutes les données."""
     wb = openpyxl.Workbook()
