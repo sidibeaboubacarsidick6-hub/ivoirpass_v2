@@ -1,39 +1,77 @@
 """
 IvoirPass V2 — API Scan QR pour application mobile externe
+
+Authentification : JWT (même mécanisme que le reste de l'API IvoirPass).
+Chaque agent scanner se connecte avec son propre compte (email + mot de
+passe) via /api/accounts/token/ pour obtenir un access token, puis l'envoie
+en en-tête Authorization: Bearer <token> sur chaque appel à cette API.
+
+Avantages par rapport à l'ancienne clé API partagée :
+- Chaque scan est attribué au VRAI agent qui l'a effectué (traçabilité réelle
+  dans ScanSession/ScanLog), plus à un compte système fictif partagé.
+- Un agent désactivé (is_active=False) ou dont le rôle change perd l'accès
+  immédiatement, sans avoir à faire tourner une clé partagée à tout le monde.
+- Cohérent avec le reste de la plateforme (JWTAuthentication déjà utilisé
+  partout ailleurs dans apps/accounts/api/views.py).
 """
 import json
-import hmac
-import hashlib
+
 from django_ratelimit.decorators import ratelimit
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from rest_framework.decorators import permission_classes
-from rest_framework.permissions import AllowAny
 from django.utils import timezone
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+
 from apps.tickets.models import Ticket
 from apps.events.models import Event
 from apps.scanner.models import ScanSession, ScanLog
 
 
+def _authenticate_agent(request):
+    """
+    Authentifie l'agent via JWT et vérifie son rôle.
+    Retourne (user, None) si OK, ou (None, JsonResponse d'erreur) sinon.
+    """
+    try:
+        auth_result = JWTAuthentication().authenticate(request)
+    except AuthenticationFailed as exc:
+        return None, JsonResponse({'result': 'unauthorized', 'message': str(exc)}, status=401)
+
+    if auth_result is None:
+        return None, JsonResponse(
+            {'result': 'unauthorized', 'message': 'Authentification requise (Authorization: Bearer <token>)'},
+            status=401,
+        )
+
+    user, _token = auth_result
+
+    if not user.is_active:
+        return None, JsonResponse({'result': 'unauthorized', 'message': 'Compte désactivé'}, status=403)
+
+    if not (user.is_scanner_agent or user.is_organizer or user.is_platform_admin):
+        return None, JsonResponse(
+            {'result': 'unauthorized', 'message': 'Rôle non autorisé à scanner'}, status=403
+        )
+
+    return user, None
+
+
 @csrf_exempt
 @require_POST
-@ratelimit(key='ip', rate='30/m', block=True)
-@permission_classes([AllowAny])
+@ratelimit(key='ip', rate='60/m', block=True)
 def scan_qr_api(request):
     """
-    API publique pour scanner un QR code.
-    Nécessite une clé API pour l'authentification.
-    
+    API pour scanner un QR code depuis l'application mobile externe.
+
     Headers:
-        X-API-Key: <clé API du scanner>
-    
+        Authorization: Bearer <access_token JWT>
+
     Body:
         qr_data: chaîne du QR code
         event_id: ID de l'événement
-        agent_email: email de l'agent scanner (optionnel)
-    
+
     Réponse:
         {
             "result": "valid" | "already_used" | "invalid_qr" | "wrong_event" | "not_found",
@@ -42,18 +80,9 @@ def scan_qr_api(request):
             "ticket_info": { ... }
         }
     """
-    # Vérifier la clé API — AUCUN fallback : si SCANNER_API_KEY n'est pas
-    # configurée explicitement, l'API refuse tout appel plutôt que d'utiliser
-    # une clé par défaut connue publiquement (ancien comportement dangereux).
-    expected_key = getattr(settings, 'SCANNER_API_KEY', '') or ''
-    api_key = request.headers.get('X-API-Key', '')
-
-    if not expected_key:
-        return JsonResponse(
-            {'result': 'unauthorized', 'message': 'API scanner non configurée'}, status=503
-        )
-    if not api_key or not hmac.compare_digest(api_key, expected_key):
-        return JsonResponse({'result': 'unauthorized', 'message': 'Clé API invalide'}, status=403)
+    agent, error_response = _authenticate_agent(request)
+    if error_response:
+        return error_response
 
     try:
         body = json.loads(request.body)
@@ -68,22 +97,19 @@ def scan_qr_api(request):
     except Event.DoesNotExist:
         return JsonResponse({'result': 'wrong_event', 'message': 'Événement introuvable'})
 
-    # Utiliser un utilisateur système pour l'API mobile
-    from apps.accounts.models import CustomUser
-    scanner_user, _ = CustomUser.objects.get_or_create(
-        email='scanner-api@ivoirpass.com',
-        defaults={
-            'role': 'scanner',
-            'is_active': True,
-            'first_name': 'API',
-            'last_name': 'Scanner'
-        }
-    )
+    # Un organisateur ne peut scanner que ses propres événements.
+    # Les agents scanner et les admins plateforme peuvent scanner tout événement publié
+    # (même limitation que le scanner web — voir apps/scanner/views.py::scan_event).
+    if agent.is_organizer and not agent.is_platform_admin and event.organizer_id != agent.id:
+        return JsonResponse(
+            {'result': 'unauthorized', 'message': "Vous n'êtes pas l'organisateur de cet événement"},
+            status=403,
+        )
 
-    # Créer ou récupérer la session du jour
+    # Créer ou récupérer la session du jour, attribuée au VRAI agent connecté
     session, _ = ScanSession.objects.get_or_create(
         event=event,
-        agent=scanner_user,
+        agent=agent,
         started_at__date=timezone.now().date(),
         defaults={'started_at': timezone.now()}
     )
