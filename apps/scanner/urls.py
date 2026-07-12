@@ -22,4 +22,8 @@ urlpatterns = [
     # Historique des scans
     path('evenement/<int:event_id>/historique/',
          views.scan_history, name='history'),
+
+    # Application de scan installable (PWA) — remplace scanner_app en local
+    path('app/',
+         views.scanner_app, name='app'),
 ]

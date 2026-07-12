@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
+from django.db import transaction
 from apps.events.models import Event
 from apps.tickets.models import Ticket
 from .models import ScanSession, ScanLog
@@ -184,69 +185,74 @@ def validate_qr(request):
         ticket_uuid   = parts[0]
         ticket_number = parts[1]
 
-        # 2. Cherche le ticket
-        try:
-            ticket = Ticket.objects.select_related(
-                'order_item__ticket_type__event',
-                'order_item__order__buyer'
-            ).get(
-                uuid=ticket_uuid,
-                ticket_number=ticket_number
-            )
-        except Ticket.DoesNotExist:
-            result  = ScanLog.Result.NOT_FOUND
-            message = "Ticket introuvable dans notre système."
-            color   = 'red'
-            ticket  = None
-
-        if ticket:
-            # 3. Vérifie la signature HMAC
-            if not ticket.verify_qr(qr_data):
-                result  = ScanLog.Result.INVALID_QR
-                message = "Signature QR invalide — billet falsifié."
-                color   = 'red'
-
-            # 4. Vérifie que c'est le bon événement
-            elif ticket.event.id != event.id:
-                result  = ScanLog.Result.WRONG_EVENT
-                message = (
-                    f"Ce billet est pour : "
-                    f"« {ticket.event.title} », "
-                    f"pas cet événement."
+        # 2. Cherche le ticket — verrouillé en base (select_for_update) le temps
+        # de la vérification et du marquage, pour qu'un second agent scannant
+        # le MÊME billet à la même milliseconde attende son tour et voie bien
+        # "déjà utilisé" au lieu de valider deux fois le même billet.
+        with transaction.atomic():
+            try:
+                ticket = Ticket.objects.select_for_update().select_related(
+                    'order_item__ticket_type__event',
+                    'order_item__order__buyer'
+                ).get(
+                    uuid=ticket_uuid,
+                    ticket_number=ticket_number
                 )
-                color   = 'orange'
-
-            # 5. Vérifie que le ticket n'est pas annulé
-            elif ticket.status == Ticket.Status.VOID:
-                result  = ScanLog.Result.TICKET_VOID
-                message = "Ce billet a été annulé."
+            except Ticket.DoesNotExist:
+                result  = ScanLog.Result.NOT_FOUND
+                message = "Ticket introuvable dans notre système."
                 color   = 'red'
+                ticket  = None
 
-            # 6. Vérifie que le ticket n'est pas déjà utilisé
-            elif ticket.status == Ticket.Status.USED:
-                result  = ScanLog.Result.ALREADY_USED
-                message = (
-                    f"Billet déjà utilisé "
-                    f"le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}."
-                )
-                color   = 'red'
+            if ticket:
+                # 3. Vérifie la signature HMAC
+                if not ticket.verify_qr(qr_data):
+                    result  = ScanLog.Result.INVALID_QR
+                    message = "Signature QR invalide — billet falsifié."
+                    color   = 'red'
 
-            # 7. TICKET VALIDE ✅
-            else:
-                result  = ScanLog.Result.VALID
-                message = "Accès autorisé ✅"
-                color   = 'green'
+                # 4. Vérifie que c'est le bon événement
+                elif ticket.event.id != event.id:
+                    result  = ScanLog.Result.WRONG_EVENT
+                    message = (
+                        f"Ce billet est pour : "
+                        f"« {ticket.event.title} », "
+                        f"pas cet événement."
+                    )
+                    color   = 'orange'
 
-                # Invalide le ticket
-                ticket.mark_as_used(scanned_by=request.user)
+                # 5. Vérifie que le ticket n'est pas annulé
+                elif ticket.status == Ticket.Status.VOID:
+                    result  = ScanLog.Result.TICKET_VOID
+                    message = "Ce billet a été annulé."
+                    color   = 'red'
 
-                ticket_info = {
-                    'ticket_number': ticket.ticket_number,
-                    'ticket_type':   ticket.ticket_type.name,
-                    'buyer_name':    ticket.buyer.get_full_name(),
-                    'buyer_email':   ticket.buyer.email,
-                    'event_title':   ticket.event.title,
-                }
+                # 6. Vérifie que le ticket n'est pas déjà utilisé
+                elif ticket.status == Ticket.Status.USED:
+                    result  = ScanLog.Result.ALREADY_USED
+                    message = (
+                        f"Billet déjà utilisé "
+                        f"le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}."
+                    )
+                    color   = 'red'
+
+                # 7. TICKET VALIDE ✅
+                else:
+                    result  = ScanLog.Result.VALID
+                    message = "Accès autorisé ✅"
+                    color   = 'green'
+
+                    # Invalide le ticket — toujours dans la même transaction
+                    # verrouillée, avant que quiconque d'autre ne puisse le relire.
+                    ticket.mark_as_used(scanned_by=request.user)
+
+                    ticket_info = {
+                        'ticket_number': ticket.ticket_number,
+                        'ticket_type':   ticket.ticket_type.name,
+                        'buyer_name':    ticket.buyer.get_full_name(),
+                        'buyer_email':   ticket.buyer.email,
+                        'event_title':   ticket.event.title,
+                    }
 
     # ============================================
     # ENREGISTREMENT DU LOG
@@ -312,3 +318,13 @@ def scan_history(request, event_id):
         'logs':     all_logs,
         'stats':    stats,
     })
+
+
+@scanner_required
+def scanner_app(request):
+    """
+    Sert l'application PWA de scan (scanner_app/index.html) directement
+    depuis le site — plus besoin de lancer un serveur local à part.
+    Protégée par le même contrôle d'accès que le reste du scanner.
+    """
+    return render(request, 'scanner_app/index.html')
