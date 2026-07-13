@@ -309,6 +309,14 @@ async function initScanner() {
 // ============================================
 // DÉMARRER / ARRÊTER LE SCAN
 // ============================================
+
+async function toggleScanner() {
+  if (isScanning) {
+    stopScanner();
+  } else {
+    startScanner();
+  }
+}
 async function startScanner() {
   if (!codeReader) {
     showResult('red', '⚠️', 'Scanner non initialisé', 'Rechargez la page');
