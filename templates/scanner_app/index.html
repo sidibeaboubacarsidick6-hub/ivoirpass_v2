@@ -3,122 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#0d0d0d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <title>IvoirPass Scanner</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', sans-serif; background: #000; color: white; height: 100vh; overflow: hidden; }
-
-        #loginScreen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; padding: 40px; background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%); }
-        #loginScreen .logo { width: 80px; height: 80px; background: linear-gradient(135deg, #1B7A3E, #0d3d1f); border-radius: 22px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(27,122,62,0.3); }
-        #loginScreen h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
-        #loginScreen .subtitle { font-size: 0.8rem; color: #888; margin-bottom: 35px; }
-        #loginScreen .input-group { width: 100%; max-width: 300px; margin-bottom: 15px; }
-        #loginScreen label { display: block; font-size: 0.7rem; font-weight: 600; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        #loginScreen input { width: 100%; padding: 16px 20px; font-size: 1.1rem; border-radius: 16px; border: 1.5px solid #333; background: #111; color: white; outline: none; transition: 0.3s; }
-        #loginScreen input:focus { border-color: #1B7A3E; box-shadow: 0 0 0 3px rgba(27,122,62,0.15); }
-        #loginScreen button { width: 100%; max-width: 300px; padding: 16px; font-size: 1rem; font-weight: 700; border: none; border-radius: 16px; background: #1B7A3E; color: white; cursor: pointer; margin-top: 10px; transition: 0.2s; }
-        #loginScreen button:active { transform: scale(0.97); background: #15632e; }
-        #loginScreen button:disabled { background: #333; cursor: not-allowed; }
-        #loginError { color: #ff6b6b; font-size: 0.8rem; margin-top: 12px; min-height: 16px; text-align: center; }
-
-        #eventScreen { display: none; flex-direction: column; justify-content: center; align-items: center; height: 100vh; padding: 40px; background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%); }
-        #eventScreen.active { display: flex; }
-        #eventScreen .agent-info { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #888; }
-        #eventScreen .agent-info button { background: none; border: none; color: #888; font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+        
+        #loginScreen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; padding: 30px; background: linear-gradient(180deg, #0a0a0a 0%, #0f0f1a 100%); }
+        #loginScreen .logo-container { margin-bottom: 30px; text-align: center; }
+        #loginScreen .logo-icon { width: 90px; height: 90px; background: linear-gradient(135deg, #1B7A3E, #0a2a15); border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 2.8rem; margin: 0 auto 15px; box-shadow: 0 15px 40px rgba(27,122,62,0.25); }
+        #loginScreen h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.5px; color: #fff; }
+        #loginScreen .brand { color: #F47920; }
+        #loginScreen .subtitle { font-size: 0.8rem; color: #666; margin-top: 5px; }
+        
+        #loginScreen .card { background: #111; border-radius: 20px; padding: 25px; width: 100%; max-width: 350px; border: 1px solid #222; }
+        #loginScreen .card .icon-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+        #loginScreen .card .icon-row .mini-icon { width: 40px; height: 40px; background: rgba(244,121,32,0.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+        #loginScreen .card .icon-row span { font-size: 0.9rem; font-weight: 600; color: #ccc; }
+        #loginScreen .card input { width: 100%; padding: 16px; font-size: 1.3rem; text-align: center; border-radius: 14px; border: 2px solid #333; background: #0a0a0a; color: white; font-weight: 700; letter-spacing: 2px; outline: none; transition: 0.3s; }
+        #loginScreen .card input:focus { border-color: #F47920; box-shadow: 0 0 0 4px rgba(244,121,32,0.1); }
+        #loginScreen .card .hint { font-size: 0.7rem; color: #555; text-align: center; margin-top: 10px; }
+        #loginScreen .card button { width: 100%; padding: 15px; font-size: 1rem; font-weight: 700; border: none; border-radius: 14px; background: #1B7A3E; color: white; cursor: pointer; margin-top: 15px; transition: 0.2s; }
+        #loginScreen .card button:active { transform: scale(0.97); background: #15632e; }
+        #loginScreen .card .error { color: #dc3545; font-size: 0.75rem; text-align: center; margin-top: 8px; display: none; }
 
         #scanScreen { display: none; height: 100vh; position: relative; background: #000; }
         #scanScreen.active { display: block; }
         #reader { width: 100%; height: 100%; }
-
+        
         .scan-header { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .scan-header .event-badge { background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); padding: 8px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; }
+        .scan-header .event-badge { background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); padding: 10px 18px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
         .scan-header .event-badge span { color: #F47920; }
-        .scan-header .close-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); border: none; color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-        .network-badge { position: absolute; top: 70px; left: 20px; right: 20px; z-index: 10; text-align: center; padding: 6px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; display: none; }
-        .network-badge.show { display: block; }
-        .network-badge.offline { background: rgba(220,53,69,0.85); }
-        .network-badge.retrying { background: rgba(244,121,32,0.85); }
-
-        .scan-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 10; padding: 20px; display: flex; gap: 10px; }
-        .scan-footer .stat { flex: 1; background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border-radius: 16px; padding: 12px; text-align: center; }
-        .scan-footer .stat .number { font-size: 1.5rem; font-weight: 800; }
-        .scan-footer .stat .label { font-size: 0.65rem; color: #aaa; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .scan-header .close-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        .scan-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 10; padding: 15px 20px 25px; display: flex; gap: 10px; }
+        .scan-footer .stat { flex: 1; background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); border-radius: 16px; padding: 14px; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
+        .scan-footer .stat .number { font-size: 1.8rem; font-weight: 800; }
+        .scan-footer .stat .label { font-size: 0.65rem; color: #888; margin-top: 2px; text-transform: uppercase; letter-spacing: 1px; }
         .scan-footer .stat.valid .number { color: #1B7A3E; }
         .scan-footer .stat.invalid .number { color: #dc3545; }
-        .scan-footer .stat.pending .number { color: #F47920; }
 
-        .history-drawer { position: absolute; bottom: 110px; left: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); border-radius: 20px; max-height: 30vh; overflow-y: auto; display: none; padding: 10px; }
+        .history-drawer { position: absolute; bottom: 120px; left: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.9); backdrop-filter: blur(20px); border-radius: 20px; max-height: 30vh; overflow-y: auto; display: none; padding: 10px; border: 1px solid rgba(255,255,255,0.1); }
         .history-drawer.show { display: block; }
         .history-drawer .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 4px; }
         .history-drawer .item.valid { background: rgba(27,122,62,0.2); }
         .history-drawer .item.invalid { background: rgba(220,53,69,0.2); }
-        .history-drawer .item.pending { background: rgba(244,121,32,0.2); }
-        .history-toggle { position: absolute; bottom: 115px; right: 15px; z-index: 11; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); border: none; color: white; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .history-toggle { position: absolute; bottom: 120px; right: 15px; z-index: 11; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-        .result-overlay { position: fixed; inset: 0; z-index: 100; display: none; justify-content: center; align-items: center; flex-direction: column; background: rgba(0,0,0,0.9); }
+        .result-overlay { position: fixed; inset: 0; z-index: 100; display: none; justify-content: center; align-items: center; flex-direction: column; background: rgba(0,0,0,0.92); }
         .result-overlay.show { display: flex; animation: fadeIn 0.15s; }
-        .result-overlay .circle { width: 130px; height: 130px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; margin-bottom: 15px; }
-        .result-overlay.valid .circle { background: #1B7A3E; box-shadow: 0 0 60px rgba(27,122,62,0.5); }
-        .result-overlay.invalid .circle { background: #dc3545; box-shadow: 0 0 60px rgba(220,53,69,0.5); }
-        .result-overlay.pending .circle { background: #F47920; box-shadow: 0 0 60px rgba(244,121,32,0.5); }
-        .result-overlay .message { font-size: 1.6rem; font-weight: 800; text-align: center; }
-        .result-overlay .detail { font-size: 0.9rem; color: #aaa; margin-top: 6px; text-align: center; padding: 0 20px; }
+        .result-overlay .circle { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 4rem; margin-bottom: 20px; }
+        .result-overlay.valid .circle { background: #1B7A3E; box-shadow: 0 0 80px rgba(27,122,62,0.5); }
+        .result-overlay.invalid .circle { background: #dc3545; box-shadow: 0 0 80px rgba(220,53,69,0.5); }
+        .result-overlay .message { font-size: 1.8rem; font-weight: 800; text-align: center; }
+        .result-overlay .detail { font-size: 0.9rem; color: #aaa; margin-top: 8px; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
 
-    <!-- LOGIN : email + mot de passe de l'agent (compte IvoirPass réel) -->
+    <!-- LOGIN -->
     <div id="loginScreen">
-        <div class="logo">🎫</div>
-        <h1>IvoirPass Scanner</h1>
-        <p class="subtitle">Connexion agent</p>
-        <div class="input-group">
-            <label>Email</label>
-            <input type="email" id="emailInput" placeholder="agent@ivoirpass.com" autocomplete="username">
+        <div class="logo-container">
+            <div class="logo-icon">🎫</div>
+            <h1>Ivoir<span class="brand">Pass</span></h1>
+            <p class="subtitle">Scanner de billets</p>
         </div>
-        <div class="input-group">
-            <label>Mot de passe</label>
-            <input type="password" id="passwordInput" placeholder="••••••••" autocomplete="current-password">
-        </div>
-        <button id="loginBtn" onclick="login()">Se connecter</button>
-        <div id="loginError"></div>
-    </div>
 
-    <!-- CHOIX DE L'ÉVÉNEMENT (après connexion réussie) -->
-    <div id="eventScreen">
-        <div class="agent-info">
-            <span id="agentEmailDisplay"></span>
-            <button onclick="logout()">Déconnexion</button>
-        </div>
-        <div class="logo">🎫</div>
-        <h1>Quel événement ?</h1>
-        <p class="subtitle">Entre l'ID de l'événement à scanner</p>
-        <div class="input-group">
-            <label>ID de l'événement</label>
+        <div class="card">
+            <div class="icon-row">
+                <div class="mini-icon">🎯</div>
+                <span>ID de l'événement</span>
+            </div>
             <input type="number" id="eventIdInput" placeholder="Ex: 5" autofocus>
+            <p class="hint">Communiqué par l'organisateur</p>
+            <p class="error" id="errorMsg">Veuillez entrer un ID valide</p>
+            <button onclick="startScan()">🚀 Démarrer le scan</button>
         </div>
-        <button onclick="startScan()">Démarrer le scan</button>
     </div>
 
     <!-- SCAN -->
     <div id="scanScreen">
         <div id="reader"></div>
-
+        
         <div class="scan-header">
-            <div class="event-badge">🎫 #<span id="eventIdDisplay"></span></div>
+            <div class="event-badge">🎫 Événement #<span id="eventIdDisplay"></span></div>
             <button class="close-btn" onclick="stopScan()">✕</button>
         </div>
-
-        <div class="network-badge" id="networkBadge"></div>
 
         <button class="history-toggle" onclick="toggleHistory()">📋</button>
         <div class="history-drawer" id="historyDrawer"></div>
@@ -126,7 +103,6 @@
         <div class="scan-footer">
             <div class="stat valid"><div class="number" id="validCount">0</div><div class="label">Valides</div></div>
             <div class="stat invalid"><div class="number" id="invalidCount">0</div><div class="label">Refusés</div></div>
-            <div class="stat pending"><div class="number" id="pendingCount">0</div><div class="label">En attente</div></div>
         </div>
     </div>
 
@@ -138,324 +114,70 @@
     </div>
 
     <script>
-        // ============================================================
-        // CONFIGURATION
-        // ============================================================
-        // URLs relatives : cette page est servie par le même site Django
-        // que l'API, donc pas besoin d'indiquer un domaine — ça marche
-        // automatiquement en local, en pré-prod et en production.
-        const TOKEN_URL = '/api/accounts/token/';
-        const TOKEN_REFRESH_URL = '/api/accounts/token/refresh/';
         const SCAN_URL = '/api/scanner/scan/';
+        let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
 
-        // Combien de fois on retente automatiquement un scan avant de
-        // le mettre en file d'attente "en attente de connexion".
-        const MAX_AUTO_RETRIES = 2;
+        document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
 
-        // ============================================================
-        // ÉTAT (tokens en localStorage pour rester connecté entre les
-        // sessions — perdu uniquement si l'agent se déconnecte explicitement
-        // ou vide les données du navigateur).
-        // ============================================================
-        let accessToken = localStorage.getItem('ivoirpass_access_token') || null;
-        let refreshToken = localStorage.getItem('ivoirpass_refresh_token') || null;
-        let agentEmail = localStorage.getItem('ivoirpass_agent_email') || null;
-
-        let html5QrCode, eventId, validCount = 0, invalidCount = 0, pendingCount = 0;
-        let scanning = false;
-        let history = [];
-        let pendingQueue = JSON.parse(localStorage.getItem('ivoirpass_pending_queue') || '[]');
-
-        // ============================================================
-        // DÉMARRAGE : si un token existe déjà, on saute direct à l'écran événement
-        // ============================================================
-        window.addEventListener('load', () => {
-            if (accessToken && agentEmail) {
-                document.getElementById('agentEmailDisplay').textContent = agentEmail;
-                showScreen('event');
-            }
-            updatePendingBadge();
-            // Retente la file d'attente dès que le réseau revient
-            window.addEventListener('online', flushPendingQueue);
-            setInterval(flushPendingQueue, 15000); // et toutes les 15s par sécurité
-        });
-
-        document.getElementById('passwordInput').addEventListener('keydown', e => {
-            if (e.key === 'Enter') login();
-        });
-        document.getElementById('eventIdInput').addEventListener('keydown', e => {
-            if (e.key === 'Enter') startScan();
-        });
-
-        function showScreen(name) {
-            document.getElementById('loginScreen').style.display = name === 'login' ? 'flex' : 'none';
-            document.getElementById('eventScreen').classList.toggle('active', name === 'event');
-            document.getElementById('scanScreen').classList.toggle('active', name === 'scan');
-        }
-
-        // ============================================================
-        // CONNEXION — vraie authentification par compte IvoirPass (JWT)
-        // ============================================================
-        async function login() {
-            const email = document.getElementById('emailInput').value.trim();
-            const password = document.getElementById('passwordInput').value;
-            const errorEl = document.getElementById('loginError');
-            const btn = document.getElementById('loginBtn');
-
-            if (!email || !password) {
-                errorEl.textContent = 'Email et mot de passe requis.';
-                return;
-            }
-
-            btn.disabled = true;
-            btn.textContent = 'Connexion...';
-            errorEl.textContent = '';
-
-            try {
-                const response = await fetch(TOKEN_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password }),
-                });
-
-                if (!response.ok) {
-                    errorEl.textContent = response.status === 401
-                        ? 'Email ou mot de passe incorrect.'
-                        : "Impossible de se connecter au serveur.";
-                    return;
-                }
-
-                const data = await response.json();
-                accessToken = data.access;
-                refreshToken = data.refresh;
-                agentEmail = email;
-
-                localStorage.setItem('ivoirpass_access_token', accessToken);
-                localStorage.setItem('ivoirpass_refresh_token', refreshToken);
-                localStorage.setItem('ivoirpass_agent_email', agentEmail);
-
-                document.getElementById('agentEmailDisplay').textContent = agentEmail;
-                document.getElementById('passwordInput').value = '';
-                showScreen('event');
-
-            } catch (err) {
-                errorEl.textContent = 'Erreur réseau — vérifie ta connexion.';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Se connecter';
-            }
-        }
-
-        function logout() {
-            accessToken = null;
-            refreshToken = null;
-            agentEmail = null;
-            localStorage.removeItem('ivoirpass_access_token');
-            localStorage.removeItem('ivoirpass_refresh_token');
-            localStorage.removeItem('ivoirpass_agent_email');
-            showScreen('login');
-        }
-
-        // Rafraîchit le token d'accès quand il a expiré (access token JWT
-        // de courte durée, refresh token de plus longue durée).
-        async function refreshAccessToken() {
-            if (!refreshToken) return false;
-            try {
-                const response = await fetch(TOKEN_REFRESH_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refresh: refreshToken }),
-                });
-                if (!response.ok) return false;
-                const data = await response.json();
-                accessToken = data.access;
-                localStorage.setItem('ivoirpass_access_token', accessToken);
-                return true;
-            } catch (err) {
-                return false;
-            }
-        }
-
-        // ============================================================
-        // ÉCRAN ÉVÉNEMENT
-        // ============================================================
         function startScan() {
             eventId = parseInt(document.getElementById('eventIdInput').value);
-            if (!eventId || eventId < 1) return;
-            showScreen('scan');
-            document.getElementById('eventIdDisplay').textContent = eventId;
-            html5QrCode = new Html5Qrcode("reader", { formatsToSupport: [0] });
-            html5QrCode.start(
-                { facingMode: "environment" },
-                { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
-                onScan, () => {}
-            ).then(() => { scanning = true; }).catch(e => { alert('Caméra: ' + e.message); stopScan(); });
+            if(!eventId||eventId<1) { document.getElementById('errorMsg').style.display='block'; return; }
+            document.getElementById('errorMsg').style.display='none';
+            document.getElementById('loginScreen').style.display='none';
+            document.getElementById('scanScreen').classList.add('active');
+            document.getElementById('eventIdDisplay').textContent=eventId;
+            html5QrCode=new Html5Qrcode("reader",{formatsToSupport:[0]});
+            html5QrCode.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1},onScan,()=>{})
+            .then(()=>{scanning=true}).catch(e=>{alert('Caméra: '+e.message);stopScan();});
         }
 
         function stopScan() {
-            scanning = false;
-            if (html5QrCode) { html5QrCode.stop().catch(() => {}); html5QrCode = null; }
-            showScreen('event');
-            document.getElementById('eventIdInput').value = '';
-            document.getElementById('eventIdInput').focus();
-            validCount = 0; invalidCount = 0; history = [];
+            scanning=false;
+            if(html5QrCode){html5QrCode.stop().catch(()=>{});html5QrCode=null;}
+            document.getElementById('scanScreen').classList.remove('active');
+            document.getElementById('loginScreen').style.display='flex';
+            document.getElementById('eventIdInput').value=''; document.getElementById('eventIdInput').focus();
+            validCount=0;invalidCount=0;history=[];
             updateCounters(); updateHistory();
         }
 
-        // ============================================================
-        // SCAN D'UN QR CODE — avec nouvelle tentative automatique et
-        // file d'attente si le réseau est vraiment coupé.
-        // ============================================================
         function onScan(decodedText) {
-            if (!scanning) return;
-            scanning = false;
-            attemptScan(decodedText, 0);
-        }
-
-        async function attemptScan(qrData, retryCount) {
-            try {
-                let response = await callScanAPI(qrData);
-
-                // Token expiré -> on rafraîchit une fois et on retente
-                if (response.status === 401 && retryCount === 0) {
-                    const refreshed = await refreshAccessToken();
-                    if (refreshed) {
-                        response = await callScanAPI(qrData);
-                    } else {
-                        logout();
-                        return;
-                    }
-                }
-
-                if (!response.ok && response.status !== 200) {
-                    throw new Error('http_' + response.status);
-                }
-
-                const data = await response.json();
+            if(!scanning)return; scanning=false;
+            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
+            .then(r=>r.json()).then(data=>{
                 showResult(data);
-                recordResult(data.result, data.message);
-                setTimeout(() => { hideResult(); scanning = true; }, 1500);
-
-            } catch (err) {
-                // Erreur réseau (pas de connexion, timeout...) : on retente
-                // automatiquement quelques fois avant d'abandonner et de
-                // mettre en file d'attente.
-                if (retryCount < MAX_AUTO_RETRIES) {
-                    setTimeout(() => attemptScan(qrData, retryCount + 1), 800);
-                    return;
-                }
-                queuePendingScan(qrData);
-                showResult({
-                    result: 'pending', color: 'orange',
-                    message: 'Pas de réseau — scan mis en attente, sera vérifié dès que la connexion revient.',
-                });
-                pendingCount++;
+                data.result==='valid'?validCount++:invalidCount++;
                 updateCounters();
-                history.unshift({ time: new Date().toLocaleTimeString().slice(0, 5), result: 'pending', msg: 'En attente de connexion' });
+                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:data.result,msg:data.message.substring(0,25)});
+                if(history.length>30) history.pop();
                 updateHistory();
-                setTimeout(() => { hideResult(); scanning = true; }, 2000);
-            }
-        }
-
-        async function callScanAPI(qrData) {
-            return fetch(SCAN_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + accessToken,
-                },
-                body: JSON.stringify({ qr_data: qrData, event_id: eventId }),
+                setTimeout(()=>{hideResult();scanning=true;},1500);
+            }).catch(()=>{
+                showResult({result:'error',message:'Erreur réseau',color:'red'});
+                invalidCount++;updateCounters();
+                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:'error',msg:'Erreur réseau'});
+                updateHistory();
+                setTimeout(()=>{hideResult();scanning=true;},1500);
             });
         }
 
-        function recordResult(result, message) {
-            result === 'valid' ? validCount++ : invalidCount++;
-            updateCounters();
-            history.unshift({ time: new Date().toLocaleTimeString().slice(0, 5), result, msg: message.substring(0, 40) });
-            if (history.length > 30) history.pop();
-            updateHistory();
+        function getCSRF() {
+            const match = document.cookie.match(/csrftoken=([\w]+)/);
+            return match ? match[1] : '';
         }
 
-        // ============================================================
-        // FILE D'ATTENTE HORS-LIGNE
-        //
-        // IMPORTANT — à bien comprendre : un scan mis en attente est
-        // affiché en ORANGE ("en attente"), jamais en vert. L'agent sait
-        // qu'il doit laisser entrer la personne à sa discrétion, mais que
-        // la vérification définitive (billet valide ? déjà utilisé par
-        // quelqu'un d'autre ?) n'aura lieu que lorsque la connexion revient.
-        // Pendant une coupure réseau totale, la garantie anti-double-scan
-        // entre plusieurs agents ne peut PAS être assurée à 100% — c'est
-        // une limite technique honnête, pas un bug.
-        // ============================================================
-        function queuePendingScan(qrData) {
-            pendingQueue.push({ qrData, eventId, timestamp: Date.now() });
-            localStorage.setItem('ivoirpass_pending_queue', JSON.stringify(pendingQueue));
-            updatePendingBadge();
-        }
-
-        async function flushPendingQueue() {
-            if (pendingQueue.length === 0 || !navigator.onLine) return;
-
-            const badge = document.getElementById('networkBadge');
-            badge.className = 'network-badge show retrying';
-            badge.textContent = `Synchronisation de ${pendingQueue.length} scan(s) en attente...`;
-
-            const remaining = [];
-            for (const item of pendingQueue) {
-                try {
-                    const response = await fetch(SCAN_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
-                        body: JSON.stringify({ qr_data: item.qrData, event_id: item.eventId }),
-                    });
-                    if (!response.ok) { remaining.push(item); continue; }
-                    // Synchronisé avec succès — retiré de la file
-                } catch (err) {
-                    remaining.push(item);
-                }
-            }
-            pendingQueue = remaining;
-            localStorage.setItem('ivoirpass_pending_queue', JSON.stringify(pendingQueue));
-            pendingCount = pendingQueue.length;
-            updateCounters();
-            updatePendingBadge();
-        }
-
-        function updatePendingBadge() {
-            const badge = document.getElementById('networkBadge');
-            if (pendingQueue.length > 0) {
-                badge.className = 'network-badge show offline';
-                badge.textContent = `${pendingQueue.length} scan(s) en attente de connexion`;
-            } else {
-                badge.className = 'network-badge';
-            }
-        }
-
-        // ============================================================
-        // AFFICHAGE
-        // ============================================================
         function showResult(d) {
-            const o = document.getElementById('resultOverlay');
-            const kind = d.color === 'green' ? 'valid' : (d.color === 'orange' && d.result === 'pending' ? 'pending' : 'invalid');
-            o.className = 'result-overlay show ' + kind;
-            o.querySelector('.circle').textContent = kind === 'valid' ? '✅' : (kind === 'pending' ? '⏳' : '❌');
-            o.querySelector('.message').textContent = kind === 'valid' ? 'ACCÈS AUTORISÉ' : (kind === 'pending' ? 'EN ATTENTE' : 'ACCÈS REFUSÉ');
-            o.querySelector('.detail').textContent = d.message;
-            if (navigator.vibrate) navigator.vibrate(kind === 'valid' ? [100, 50, 200] : (kind === 'pending' ? [200, 100, 200] : 500));
+            const o=document.getElementById('resultOverlay');
+            o.className='result-overlay show '+(d.color==='green'?'valid':'invalid');
+            o.querySelector('.circle').textContent=d.color==='green'?'✅':'❌';
+            o.querySelector('.message').textContent=d.color==='green'?'ACCÈS AUTORISÉ':'ACCÈS REFUSÉ';
+            o.querySelector('.detail').textContent=d.message;
+            if(navigator.vibrate)navigator.vibrate(d.color==='green'?[100,50,200]:500);
         }
-        function hideResult() { document.getElementById('resultOverlay').classList.remove('show'); }
-        function updateCounters() {
-            document.getElementById('validCount').textContent = validCount;
-            document.getElementById('invalidCount').textContent = invalidCount;
-            document.getElementById('pendingCount').textContent = pendingQueue.length;
-        }
-        function updateHistory() {
-            document.getElementById('historyDrawer').innerHTML = history.map(h =>
-                `<div class="item ${h.result === 'valid' ? 'valid' : (h.result === 'pending' ? 'pending' : 'invalid')}">${h.result === 'valid' ? '✅' : (h.result === 'pending' ? '⏳' : '❌')} ${h.time} — ${h.msg}</div>`
-            ).join('');
-        }
-        function toggleHistory() { document.getElementById('historyDrawer').classList.toggle('show'); }
+        function hideResult(){document.getElementById('resultOverlay').classList.remove('show');}
+        function updateCounters(){document.getElementById('validCount').textContent=validCount;document.getElementById('invalidCount').textContent=invalidCount;}
+        function updateHistory(){document.getElementById('historyDrawer').innerHTML=history.map(h=>`<div class="item ${h.result==='valid'?'valid':'invalid'}">${h.result==='valid'?'✅':'❌'} ${h.time} — ${h.msg}</div>`).join('');}
+        function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
     </script>
 </body>
 </html>
