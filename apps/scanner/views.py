@@ -303,7 +303,7 @@ def scan_history(request, event_id):
     ).select_related(
         'ticket__order_item__ticket_type',
         'ticket__order_item__order__buyer'
-    ).order_by('-scanned_at')[:100]
+    ).order_by('-scanned_at')
 
     # Stats globales
     stats = {
@@ -311,6 +311,9 @@ def scan_history(request, event_id):
         'valid':    all_logs.filter(result='valid').count(),
         'rejected': all_logs.exclude(result='valid').count(),
     }
+
+    # Limiter APRES les stats
+    all_logs = all_logs[:100]
 
     return render(request, 'scanner/history.html', {
         'event':    event,

@@ -278,18 +278,21 @@ let lastScanTime = 0;
 // INITIALISATION ZXING
 // ============================================
 async function initScanner() {
-  codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-
   try {
+    codeReader = new ZXingBrowser.BrowserMultiFormatReader();
     const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
     const select  = document.getElementById('camera-select');
     select.innerHTML = '';
 
+    if (devices.length === 0) {
+      select.innerHTML = '<option>Aucune caméra détectée</option>';
+      return;
+    }
+
     devices.forEach((device, i) => {
-      const opt    = document.createElement('option');
-      opt.value    = device.deviceId;
-      opt.text     = device.label || `Caméra ${i + 1}`;
-      // Préfère la caméra arrière
+      const opt = document.createElement('option');
+      opt.value = device.deviceId;
+      opt.text  = device.label || 'Caméra ' + (i + 1);
       if (device.label.toLowerCase().includes('back') ||
           device.label.toLowerCase().includes('arrière') ||
           device.label.toLowerCase().includes('rear')) {
@@ -297,27 +300,21 @@ async function initScanner() {
       }
       select.appendChild(opt);
     });
-
-    if (devices.length === 0) {
-      select.innerHTML = '<option>Aucune caméra détectée</option>';
-    }
   } catch(e) {
     console.error('Erreur caméras:', e);
+    document.getElementById('camera-select').innerHTML = '<option>Erreur accès caméra</option>';
   }
 }
 
 // ============================================
 // DÉMARRER / ARRÊTER LE SCAN
 // ============================================
-async function toggleScanner() {
-  if (isScanning) {
-    stopScanner();
-  } else {
-    startScanner();
-  }
-}
-
 async function startScanner() {
+  if (!codeReader) {
+    showResult('red', '⚠️', 'Scanner non initialisé', 'Rechargez la page');
+    return;
+  }
+
   const deviceId = document.getElementById('camera-select').value;
   const video    = document.getElementById('video-preview');
 
@@ -329,7 +326,6 @@ async function startScanner() {
         if (result) {
           const now  = Date.now();
           const text = result.getText();
-          // Anti-doublon : ignore le même QR dans les 3 secondes
           if (text !== lastScanned || (now - lastScanTime) > 3000) {
             lastScanned  = text;
             lastScanTime = now;
@@ -346,10 +342,9 @@ async function startScanner() {
 
   } catch(e) {
     console.error('Erreur démarrage scan:', e);
-    showResult('red', '⚠️', 'Impossible d\'accéder à la caméra', e.message);
+    showResult('red', '⚠️', 'Impossible d\'accéder à la caméra', 'Vérifiez les permissions ou utilisez la saisie manuelle');
   }
 }
-
 function stopScanner() {
   if (codeReader) {
     codeReader.reset();
