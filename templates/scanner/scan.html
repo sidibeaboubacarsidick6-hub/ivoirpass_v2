@@ -18,13 +18,16 @@ body { background: #0d0d0d; }
 
 #video-preview {
   width: 100% !important;
-  height: auto !important;
-  min-height: 300px;
+  min-height: 300px !important;
   border-radius: 16px;
   border: 3px solid #1B7A3E;
   background: #000;
+  overflow: hidden;
+}
+#video-preview video {
+  width: 100% !important;
+  height: auto !important;
   display: block !important;
-  object-fit: cover;
 }
 
 .scan-overlay {
@@ -165,7 +168,7 @@ body { background: #0d0d0d; }
 
     <!-- Zone vidéo -->
     <div class="scan-container mb-4">
-      <video id="video-preview" autoplay muted playsinline></video>
+      <div id=html5QrCode = new Html5Qrcode("video-preview"); style="width:100%;min-height:300px;border-radius:16px;border:3px solid #1B7A3E;background:#000;"></div>
       <div class="scan-overlay">
         <div class="scan-frame">
           <div class="scan-frame-inner"></div>
