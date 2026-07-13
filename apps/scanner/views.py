@@ -90,7 +90,7 @@ def scanner_index(request):
     })
 
 
-@scanner_required
+
 def scan_event(request, event_id):
     """
     Interface principale de scan pour un événement.
