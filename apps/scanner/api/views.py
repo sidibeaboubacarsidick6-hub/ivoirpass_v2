@@ -12,7 +12,8 @@ vérification, pour qu'un même billet ne puisse jamais être validé deux fois
 même si deux agents le scannent à la même milliseconde.
 """
 import json
-
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from django_ratelimit.decorators import ratelimit
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -55,7 +56,8 @@ def _authenticate_agent(request):
 
 @csrf_exempt
 @require_POST
-@ratelimit(key='ip', rate='120/m', block=True)
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def scan_qr_api(request):
     """
     Scanne un QR code depuis scanner_app.
