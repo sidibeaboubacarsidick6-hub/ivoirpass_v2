@@ -3,7 +3,7 @@
 
 {% block extra_css %}
 <!-- ZXing : bibliothèque de scan QR via caméra -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.0/umd/index.min.js"></script>
 
 <style>
 /* Styles spécifiques à la page de scan */
@@ -214,7 +214,7 @@ body { background: #0d0d0d; }
             <div>
               {% if log.ticket %}
               <div style="color:white; font-size:0.85rem; font-weight:600;">
-                {{ log.ticket.buyer.get_full_name }}
+                {{ log.ticket.buyer.get_full_name|default:"Invité" }}
               </div>
               <div style="color:rgba(255,255,255,0.4); font-size:0.75rem;">
                 {{ log.ticket.ticket_type.name }} —
