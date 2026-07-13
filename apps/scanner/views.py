@@ -34,7 +34,6 @@ def scanner_required(view_func):
     return wrapper
 
 
-@scanner_required
 def scanner_index(request):
     """
     Page d'accueil du scanner.
