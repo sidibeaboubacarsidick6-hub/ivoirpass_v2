@@ -363,3 +363,4 @@ CSP_FRAME_SRC = (
     "'self'",
     "https://app.paydunya.com",
 )
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo

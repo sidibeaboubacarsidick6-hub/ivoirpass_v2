@@ -368,12 +368,25 @@ class WithdrawalRequest(models.Model):
             fail_silently=False,
         )
     def reject(self, admin_user, note=''):
-        """Rejette la demande — restitue le solde bloqué."""
         self.status       = self.Status.REJECTED
         self.admin_note   = note
         self.processed_by = admin_user
         self.processed_at = timezone.now()
         self.save()
+
+        # Email à l'organisateur
+        from django.core.mail import send_mail
+        send_mail(
+            '[IvoirPass] Reversement rejeté',
+            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
+            f"Votre demande de reversement {self.reference} "
+            f"de {self.amount} FCFA a été rejetée.\n"
+            f"Motif : {note}\n\n"
+            f"Contactez l'équipe IvoirPass pour plus d'informations.",
+            None,
+            [self.wallet.organizer.email],
+            fail_silently=False,
+        )
 class ReversalOTP(models.Model):
     """
     Code OTP pour valider une demande de reversement.
@@ -385,6 +398,7 @@ class ReversalOTP(models.Model):
         related_name='otp',
         verbose_name=_('demande de reversement')
     )
+    attempts = models.PositiveIntegerField(_('tentatives'), default=0)
     code = models.CharField(_('code OTP'), max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()

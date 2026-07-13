@@ -9,6 +9,9 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from .managers import CustomUserManager
+from django.core.validators import FileExtensionValidator, MaxValueValidator
+
+
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
@@ -121,11 +124,15 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # ============================================
     # KYC — DOCUMENTS
     # ============================================
+
+    ALLOWED_KYC_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
+
     kyc_identity_doc = models.FileField(
-        _('pièce d\'identité'),
-        upload_to='kyc/identity/%Y/%m/',
-        null=True, blank=True,
-        help_text="Carte d'identité, passeport ou carte consulaire"
+    _('pièce d\'identité'),
+    upload_to='kyc/identity/%Y/%m/',
+    null=True, blank=True,
+    validators=[FileExtensionValidator(ALLOWED_KYC_EXTENSIONS)],
+    help_text="PDF, JPG ou PNG — 5 Mo max"
     )
     kyc_proof_of_address = models.FileField(
         _('justificatif de domicile'),

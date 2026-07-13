@@ -486,6 +486,13 @@ def mark_order_shipped(request, order_type, order_id):
 
     return redirect('dashboard:physical_orders')
 
+import hmac
+
+from django.db import transaction
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
+
+
 @organizer_required
 def verify_otp(request, reference):
     """Page de validation du code OTP pour reversement."""
@@ -505,25 +512,37 @@ def verify_otp(request, reference):
     if request.method == 'POST':
         code = request.POST.get('otp_code', '').strip()
 
-        if not otp.is_valid:
-            messages.error(request, "Code expiré. Refaites votre demande.")
-            return redirect('dashboard:wallet')
+        with transaction.atomic():
+            otp = ReversalOTP.objects.select_for_update().get(pk=otp.pk)
 
-        if code == otp.code:
-            otp.is_used = True
-            otp.save()
-            messages.success(
-                request,
-                f"✅ Demande {withdrawal.reference} validée ! Traitement sous 24-48h."
-            )
-            return redirect('dashboard:wallet')
-        else:
-            messages.error(request, "Code incorrect. Veuillez réessayer.")
+            if not otp.is_valid:
+                messages.error(request, "Code expiré. Refaites votre demande.")
+                return redirect('dashboard:wallet')
 
-    return render(request, 'dashboard/verify_otp.html', {
-        'withdrawal': withdrawal,
-        'expires_at': otp.expires_at,
-    })
+            if hmac.compare_digest(code, otp.code):
+                otp.is_used = True
+                otp.save(update_fields=['is_used'])
+                messages.success(request, f"✅ Demande {withdrawal.reference} validée !")
+                return redirect('dashboard:wallet')
+
+            otp.attempts += 1
+
+            if otp.attempts >= 3:
+                otp.is_used = True
+                otp.save(update_fields=['attempts', 'is_used'])
+
+                withdrawal.status = WithdrawalRequest.Status.REJECTED
+                withdrawal.admin_note = "OTP incorrect 3 fois — demande rejetée automatiquement"
+                withdrawal.save(update_fields=['status', 'admin_note'])
+
+                messages.error(request, "❌ 3 tentatives échouées. Demande rejetée. Soumettez une nouvelle demande.")
+                return redirect('dashboard:wallet')
+
+            otp.save(update_fields=['attempts'])
+            remaining = 3 - otp.attempts
+            messages.error(request, f"Code incorrect. {remaining} tentative(s) restante(s).")
+
+    return render(request, 'dashboard/verify_otp.html', {'withdrawal': withdrawal})
 
 @organizer_required
 def audit_log(request):

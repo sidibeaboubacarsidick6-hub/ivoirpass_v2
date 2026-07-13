@@ -35,6 +35,7 @@ class CustomUserAdmin(UserAdmin):
 
         super().save_model(request, obj, form, change)
 
+        # Si vient d'être certifié
         if obj.is_organizer_verified and not was_verified:
             from django.core.mail import send_mail
             send_mail(
@@ -62,6 +63,20 @@ class CustomUserAdmin(UserAdmin):
                     )
                 except Exception:
                     pass
+
+        # Si vient d'être décertifié
+        if not obj.is_organizer_verified and was_verified:
+            from django.core.mail import send_mail
+            send_mail(
+                '[IvoirPass] Votre certification a été retirée',
+                f"Bonjour {obj.get_full_name()},\n\n"
+                f"Votre certification organisateur a été retirée.\n"
+                f"Veuillez contacter l'équipe IvoirPass pour plus d'informations.\n\n"
+                f"L'équipe IvoirPass",
+                None,
+                [obj.email],
+                fail_silently=False,
+            )
 
     # Colonnes affichées dans la liste
     list_display = (
@@ -138,14 +153,13 @@ class CustomUserAdmin(UserAdmin):
             'classes': ('wide',),
             'fields': (
                 'email', 'first_name', 'last_name',
-                'phone_number','password1', 'password2'
+                'phone_number', 'password1', 'password2'
             ),
         }),
     )
 
     # Affichage en ligne des adresses
     inlines = [UserAddressInline]
-
     def avatar_preview(self, obj):
         """Aperçu de l'avatar dans l'admin."""
         if obj.avatar:
