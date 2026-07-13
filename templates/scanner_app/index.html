@@ -169,7 +169,7 @@
                     body: JSON.stringify({ qr_data: 'check:event:exists:only', event_id: eventId })
                 });
                 const checkData = await checkRes.json();
-                if (checkData.result === 'wrong_event') {
+                if (checkData.result === 'wrong_event' && checkData.message === 'Événement introuvable') {
                     document.getElementById('eventError').textContent = 'Cet événement n\'existe pas';
                     document.getElementById('eventError').style.display = 'block';
                     return;

@@ -49,32 +49,46 @@ def scan_qr_api(request):
     )
 
     parts = qr_data.split(':')
+    ticket = None
+    result = None
+    message = ''
+    color = 'red'
+
     if len(parts) < 4:
         result, message, color = ScanLog.Result.INVALID_QR, "QR Code invalide", 'red'
-        ticket = None
     else:
         ticket_uuid = parts[0]
         ticket_number = parts[1]
+
+        # Valider le format UUID avant de requêter la base
         try:
-            ticket = Ticket.objects.select_related(
-                'order_item__ticket_type__event', 'order_item__order__buyer'
-            ).get(uuid=ticket_uuid, ticket_number=ticket_number)
-        except Ticket.DoesNotExist:
-            result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable", 'red'
+            import uuid as uuid_lib
+            uuid_lib.UUID(ticket_uuid)
+        except (ValueError, AttributeError):
+            result, message, color = ScanLog.Result.INVALID_QR, "QR Code invalide", 'red'
             ticket = None
 
-        if ticket:
-            if not ticket.verify_qr(qr_data):
-                result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié", 'red'
-            elif ticket.event.id != event.id:
-                result, message, color = ScanLog.Result.WRONG_EVENT, f"Ce billet est pour : {ticket.event.title}", 'orange'
-            elif ticket.status == Ticket.Status.VOID:
-                result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé", 'red'
-            elif ticket.status == Ticket.Status.USED:
-                result, message, color = ScanLog.Result.ALREADY_USED, f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}", 'red'
-            else:
-                result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
-                ticket.mark_as_used()
+        if result is None:
+            try:
+                ticket = Ticket.objects.select_related(
+                    'order_item__ticket_type__event', 'order_item__order__buyer'
+                ).get(uuid=ticket_uuid, ticket_number=ticket_number)
+            except Ticket.DoesNotExist:
+                result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable", 'red'
+                ticket = None
+
+            if ticket:
+                if not ticket.verify_qr(qr_data):
+                    result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié", 'red'
+                elif ticket.event.id != event.id:
+                    result, message, color = ScanLog.Result.WRONG_EVENT, f"Ce billet est pour : {ticket.event.title}", 'orange'
+                elif ticket.status == Ticket.Status.VOID:
+                    result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé", 'red'
+                elif ticket.status == Ticket.Status.USED:
+                    result, message, color = ScanLog.Result.ALREADY_USED, f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}", 'red'
+                else:
+                    result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
+                    ticket.mark_as_used()
 
     ScanLog.objects.create(session=session, ticket=ticket, qr_data_received=qr_data[:500], result=result)
 
@@ -96,3 +110,17 @@ def scan_qr_api(request):
         }
 
     return JsonResponse(response_data)
+
+
+@csrf_exempt
+@require_POST
+def check_event_exists(request):
+    """Vérifie si un événement existe (pour l'app scanner)."""
+    try:
+        body = json.loads(request.body)
+        event_id = body.get('event_id')
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({'exists': False})
+
+    exists = Event.objects.filter(pk=event_id, status='published').exists()
+    return JsonResponse({'exists': exists})
