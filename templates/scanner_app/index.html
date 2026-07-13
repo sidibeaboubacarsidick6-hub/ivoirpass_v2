@@ -29,9 +29,7 @@
         .btn-green:active { transform: scale(0.97); background: #15632e; }
         .btn-gray { background: #333; color: white; margin-top: 8px; }
         .error-msg { color: #dc3545; font-size: 0.75rem; text-align: center; margin-top: 10px; display: none; }
-        .logout-link { display: block; text-align: center; margin-top: 12px; color: #888; font-size: 0.75rem; text-decoration: none; }
 
-        /* SCAN */
         #scanScreen { display: none; height: 100vh; position: relative; background: #000; }
         #scanScreen.active { display: block; }
         #reader { width: 100%; height: 100%; }
@@ -64,7 +62,6 @@
 </head>
 <body>
 
-    <!-- LOGIN -->
     <div id="loginScreen" class="screen active">
         <div class="logo-icon">🎫</div>
         <h1>Ivoir<span>Pass</span></h1>
@@ -77,7 +74,6 @@
         </div>
     </div>
 
-    <!-- EVENT ID -->
     <div id="eventScreen" class="screen">
         <div class="logo-icon">🎯</div>
         <h1 style="margin-bottom:5px;">Événement</h1>
@@ -90,7 +86,6 @@
         </div>
     </div>
 
-    <!-- SCAN -->
     <div id="scanScreen">
         <div id="reader"></div>
         <div class="scan-header">
@@ -105,7 +100,6 @@
         </div>
     </div>
 
-    <!-- RESULT -->
     <div id="resultOverlay" class="result-overlay">
         <div class="circle"></div>
         <div class="message"></div>
@@ -116,9 +110,9 @@
         const LOGIN_URL = '/accounts/login/';
         const LOGOUT_URL = '/accounts/logout/';
         const SCAN_URL = '/api/scanner/scan/';
+        const API_KEY = 'ivoirpass-scanner-2026';
         let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
 
-        // LOGIN
         document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
         document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
 
@@ -138,12 +132,7 @@
             formData.append('csrfmiddlewaretoken', getCSRF());
 
             try {
-                const res = await fetch(LOGIN_URL, {
-                    method: 'POST',
-                    body: formData,
-                    redirect: 'follow'
-                });
-
+                const res = await fetch(LOGIN_URL, { method: 'POST', body: formData, redirect: 'follow' });
                 if (res.url && !res.url.includes('/login')) {
                     document.getElementById('loginScreen').classList.remove('active');
                     document.getElementById('eventScreen').classList.add('active');
@@ -168,10 +157,29 @@
             document.getElementById('emailInput').focus();
         }
 
-        // SCAN
-        function startScan() {
+        async function startScan() {
             eventId = parseInt(document.getElementById('eventIdInput').value);
-            if(!eventId||eventId<1){document.getElementById('eventError').style.display='block';return;}
+            if(!eventId||eventId<1){document.getElementById('eventError').textContent='ID invalide';document.getElementById('eventError').style.display='block';return;}
+
+            // Vérifier que l'événement existe avant d'ouvrir la caméra
+            try {
+                const checkRes = await fetch(SCAN_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                    body: JSON.stringify({ qr_data: 'check:event:exists:only', event_id: eventId })
+                });
+                const checkData = await checkRes.json();
+                if (checkData.result === 'wrong_event') {
+                    document.getElementById('eventError').textContent = 'Cet événement n\'existe pas';
+                    document.getElementById('eventError').style.display = 'block';
+                    return;
+                }
+            } catch(e) {
+                document.getElementById('eventError').textContent = 'Erreur de connexion';
+                document.getElementById('eventError').style.display = 'block';
+                return;
+            }
+
             document.getElementById('eventError').style.display='none';
             document.getElementById('eventScreen').classList.remove('active');
             document.getElementById('scanScreen').classList.add('active');
@@ -196,10 +204,11 @@
             if(!scanning)return;scanning=false;
             fetch(SCAN_URL,{
                 method:'POST',
-                headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},
+                headers:{'Content-Type':'application/json','X-API-Key':API_KEY},
                 body:JSON.stringify({qr_data:decodedText,event_id:eventId})
             })
             .then(r=>r.json()).then(data=>{
+                if(data.result==='unauthorized'){alert('Session expirée. Reconnectez-vous.');stopScan();return;}
                 showResult(data);
                 data.result==='valid'?validCount++:invalidCount++;
                 updateCounters();
@@ -229,7 +238,6 @@
         function updateHistory(){document.getElementById('historyDrawer').innerHTML=history.map(h=>`<div class="item ${h.result==='valid'?'valid':'invalid'}">${h.result==='valid'?'✅':'❌'} ${h.time} — ${h.msg}</div>`).join('');}
         function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
 
-        // Vérifier si déjà connecté
         async function checkSession() {
             try {
                 const res = await fetch('/dashboard/');
