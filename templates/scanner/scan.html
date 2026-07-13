@@ -3,7 +3,7 @@
 
 {% block extra_css %}
 <!-- ZXing : bibliothèque de scan QR via caméra -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.0/umd/index.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <style>
 /* Styles spécifiques à la page de scan */
@@ -269,18 +269,17 @@ const SESSION_ID = {{ session.pk }};
 const CSRF_TOKEN = "{{ csrf_token }}";
 const VALIDATE_URL = "{% url 'scanner:validate_qr' %}";
 
-let codeReader  = null;
+let html5QrCode = null;
 let isScanning  = false;
 let lastScanned = '';
 let lastScanTime = 0;
 
 // ============================================
-// INITIALISATION ZXING
+// INITIALISATION
 // ============================================
 async function initScanner() {
   try {
-    codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-    const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+    const devices = await Html5Qrcode.getCameras();
     const select  = document.getElementById('camera-select');
     select.innerHTML = '';
 
@@ -291,7 +290,7 @@ async function initScanner() {
 
     devices.forEach((device, i) => {
       const opt = document.createElement('option');
-      opt.value = device.deviceId;
+      opt.value = device.id;
       opt.text  = device.label || 'Caméra ' + (i + 1);
       if (device.label.toLowerCase().includes('back') ||
           device.label.toLowerCase().includes('arrière') ||
@@ -307,9 +306,8 @@ async function initScanner() {
 }
 
 // ============================================
-// DÉMARRER / ARRÊTER LE SCAN
+// DÉMARRER / ARRÊTER
 // ============================================
-
 async function toggleScanner() {
   if (isScanning) {
     stopScanner();
@@ -317,30 +315,25 @@ async function toggleScanner() {
     startScanner();
   }
 }
+
 async function startScanner() {
-  if (!codeReader) {
-    showResult('red', '⚠️', 'Scanner non initialisé', 'Rechargez la page');
-    return;
-  }
-
   const deviceId = document.getElementById('camera-select').value;
-  const video    = document.getElementById('video-preview');
-
+  
+  html5QrCode = new Html5Qrcode("video-preview");
+  
   try {
-    await codeReader.decodeFromVideoDevice(
-      deviceId || undefined,
-      video,
-      (result, err) => {
-        if (result) {
-          const now  = Date.now();
-          const text = result.getText();
-          if (text !== lastScanned || (now - lastScanTime) > 3000) {
-            lastScanned  = text;
-            lastScanTime = now;
-            validateQR(text);
-          }
+    await html5QrCode.start(
+      deviceId || { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        const now = Date.now();
+        if (decodedText !== lastScanned || (now - lastScanTime) > 3000) {
+          lastScanned  = decodedText;
+          lastScanTime = now;
+          validateQR(decodedText);
         }
-      }
+      },
+      () => {} // ignore scan errors
     );
 
     isScanning = true;
@@ -350,12 +343,14 @@ async function startScanner() {
 
   } catch(e) {
     console.error('Erreur démarrage scan:', e);
-    showResult('red', '⚠️', 'Impossible d\'accéder à la caméra', 'Vérifiez les permissions ou utilisez la saisie manuelle');
+    showResult('red', '⚠️', 'Impossible d\'accéder à la caméra', 'Vérifiez les permissions');
   }
 }
+
 function stopScanner() {
-  if (codeReader) {
-    codeReader.reset();
+  if (html5QrCode) {
+    html5QrCode.stop().catch(() => {});
+    html5QrCode = null;
   }
   isScanning = false;
   document.getElementById('toggle-text').textContent = 'Démarrer';
@@ -364,33 +359,31 @@ function stopScanner() {
 }
 
 // ============================================
-// VALIDATION DU QR CODE
+// VALIDATION QR
 // ============================================
 async function validateQR(qrData) {
   try {
     const res = await fetch(VALIDATE_URL, {
-      method:  'POST',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken':  CSRF_TOKEN,
+        'X-CSRFToken': CSRF_TOKEN,
       },
       body: JSON.stringify({
-        qr_data:    qrData,
-        event_id:   EVENT_ID,
+        qr_data: qrData,
+        event_id: EVENT_ID,
         session_id: SESSION_ID,
       })
     });
-
     const data = await res.json();
     handleResult(data);
-
   } catch(e) {
     showResult('red', '⚠️', 'Erreur réseau', 'Vérifiez votre connexion.');
   }
 }
 
 // ============================================
-// AFFICHAGE DU RÉSULTAT
+// AFFICHAGE RÉSULTAT
 // ============================================
 function handleResult(data) {
   const colorMap = {
@@ -398,7 +391,6 @@ function handleResult(data) {
     'red':    { bg: '#3d0d0d', icon: '❌' },
     'orange': { bg: '#3d2500', icon: '⚠️' },
   };
-
   const cfg    = colorMap[data.color] || colorMap['red'];
   const detail = data.ticket_info
     ? `${data.ticket_info.buyer_name} — ${data.ticket_info.ticket_type}`
@@ -406,17 +398,14 @@ function handleResult(data) {
 
   showResult(cfg.bg, cfg.icon, data.message, detail);
 
-  // Met à jour les compteurs
   if (data.session) {
     document.getElementById('count-total').textContent    = data.session.total_scanned;
     document.getElementById('count-valid').textContent    = data.session.total_valid;
     document.getElementById('count-rejected').textContent = data.session.total_rejected;
   }
 
-  // Ajoute dans la liste des scans récents
   addToRecentScans(data);
 
-  // Vibration (mobile)
   if (navigator.vibrate) {
     navigator.vibrate(data.color === 'green' ? [100] : [100, 50, 100]);
   }
@@ -424,18 +413,12 @@ function handleResult(data) {
 
 function showResult(bgColor, icon, message, detail) {
   const overlay = document.getElementById('result-overlay');
-
   overlay.style.background  = bgColor;
   document.getElementById('result-icon').textContent    = icon;
   document.getElementById('result-message').textContent = message;
   document.getElementById('result-detail').textContent  = detail || '';
-
   overlay.style.display = 'flex';
-
-  // Masque après 2.5 secondes
-  setTimeout(() => {
-    overlay.style.display = 'none';
-  }, 2500);
+  setTimeout(() => { overlay.style.display = 'none'; }, 2500);
 }
 
 function addToRecentScans(data) {
@@ -444,15 +427,9 @@ function addToRecentScans(data) {
   const isValid   = data.color === 'green';
 
   const info = data.ticket_info
-    ? `<div style="color:white;font-size:0.85rem;font-weight:600;">
-         ${data.ticket_info.buyer_name}
-       </div>
-       <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;">
-         ${data.ticket_info.ticket_type}
-       </div>`
-    : `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem;">
-         ${data.message}
-       </div>`;
+    ? `<div style="color:white;font-size:0.85rem;font-weight:600;">${data.ticket_info.buyer_name}</div>
+       <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;">${data.ticket_info.ticket_type}</div>`
+    : `<div style="color:rgba(255,255,255,0.5);font-size:0.85rem;">${data.message}</div>`;
 
   const div = document.createElement('div');
   div.style.cssText = 'padding:10px 16px; border-bottom:1px solid #1a1a2a;';
@@ -460,26 +437,16 @@ function addToRecentScans(data) {
     <div class="d-flex justify-content-between align-items-center">
       <div>${info}</div>
       <div class="text-end">
-        <span style="font-size:0.75rem;padding:2px 8px;border-radius:12px;
-                     font-weight:700;
-                     background:${isValid ? '#1B7A3E' : '#dc3545'};
-                     color:white;">
-          ${isValid ? '✅' : '❌'}
-        </span>
-        <div style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:2px;">
-          ${time}
-        </div>
+        <span style="font-size:0.75rem;padding:2px 8px;border-radius:12px;font-weight:700;background:${isValid ? '#1B7A3E' : '#dc3545'};color:white;">${isValid ? '✅' : '❌'}</span>
+        <div style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:2px;">${time}</div>
       </div>
     </div>`;
 
-  // Insère en tête de liste
   if (container.firstChild) {
     container.insertBefore(div, container.firstChild);
   } else {
     container.appendChild(div);
   }
-
-  // Garde seulement les 20 derniers
   while (container.children.length > 20) {
     container.removeChild(container.lastChild);
   }
@@ -496,7 +463,6 @@ function submitManual() {
     input.value = '';
   }
 }
-
 document.getElementById('manual-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitManual();
 });
