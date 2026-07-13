@@ -22,13 +22,13 @@
         #loginScreen .subtitle { font-size: 0.8rem; color: #666; margin-top: 5px; }
         
         #loginScreen .card { background: #111; border-radius: 20px; padding: 25px; width: 100%; max-width: 350px; border: 1px solid #222; }
-        #loginScreen .card .icon-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-        #loginScreen .card .icon-row .mini-icon { width: 40px; height: 40px; background: rgba(244,121,32,0.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
-        #loginScreen .card .icon-row span { font-size: 0.9rem; font-weight: 600; color: #ccc; }
-        #loginScreen .card input { width: 100%; padding: 16px; font-size: 1.3rem; text-align: center; border-radius: 14px; border: 2px solid #333; background: #0a0a0a; color: white; font-weight: 700; letter-spacing: 2px; outline: none; transition: 0.3s; }
+        #loginScreen .card .field { margin-bottom: 15px; }
+        #loginScreen .card label { display: block; font-size: 0.7rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        #loginScreen .card input { width: 100%; padding: 14px; font-size: 1rem; border-radius: 12px; border: 2px solid #333; background: #0a0a0a; color: white; outline: none; transition: 0.3s; }
         #loginScreen .card input:focus { border-color: #F47920; box-shadow: 0 0 0 4px rgba(244,121,32,0.1); }
-        #loginScreen .card .hint { font-size: 0.7rem; color: #555; text-align: center; margin-top: 10px; }
-        #loginScreen .card button { width: 100%; padding: 15px; font-size: 1rem; font-weight: 700; border: none; border-radius: 14px; background: #1B7A3E; color: white; cursor: pointer; margin-top: 15px; transition: 0.2s; }
+        #loginScreen .card input.large { font-size: 1.3rem; text-align: center; font-weight: 700; letter-spacing: 2px; }
+        #loginScreen .card .hint { font-size: 0.7rem; color: #555; margin-top: 4px; }
+        #loginScreen .card button { width: 100%; padding: 15px; font-size: 1rem; font-weight: 700; border: none; border-radius: 14px; background: #1B7A3E; color: white; cursor: pointer; margin-top: 5px; transition: 0.2s; }
         #loginScreen .card button:active { transform: scale(0.97); background: #15632e; }
         #loginScreen .card .error { color: #dc3545; font-size: 0.75rem; text-align: center; margin-top: 8px; display: none; }
 
@@ -73,17 +73,21 @@
         <div class="logo-container">
             <div class="logo-icon">🎫</div>
             <h1>Ivoir<span class="brand">Pass</span></h1>
-            <p class="subtitle">Scanner de billets</p>
+            <p class="subtitle">Scanner de billets — Accès agent</p>
         </div>
 
         <div class="card">
-            <div class="icon-row">
-                <div class="mini-icon">🎯</div>
-                <span>ID de l'événement</span>
+            <div class="field">
+                <label>🔑 Clé API</label>
+                <input type="password" id="apiKeyInput" placeholder="Entrez votre clé API" autofocus>
+                <p class="hint">Fournie par l'administrateur</p>
             </div>
-            <input type="number" id="eventIdInput" placeholder="Ex: 5" autofocus>
-            <p class="hint">Communiqué par l'organisateur</p>
-            <p class="error" id="errorMsg">Veuillez entrer un ID valide</p>
+            <div class="field">
+                <label>🎯 ID de l'événement</label>
+                <input type="number" id="eventIdInput" class="large" placeholder="Ex: 5">
+                <p class="hint">Communiqué par l'organisateur</p>
+            </div>
+            <p class="error" id="errorMsg">Clé API ou ID événement invalide</p>
             <button onclick="startScan()">🚀 Démarrer le scan</button>
         </div>
     </div>
@@ -115,17 +119,24 @@
 
     <script>
         const SCAN_URL = '/api/scanner/scan/';
-        let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
+        let html5QrCode, eventId, apiKey, validCount=0, invalidCount=0, scanning=false, history=[];
 
         document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
+        document.getElementById('apiKeyInput').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('eventIdInput').focus(); });
 
         function startScan() {
+            apiKey = document.getElementById('apiKeyInput').value.trim();
             eventId = parseInt(document.getElementById('eventIdInput').value);
-            if(!eventId||eventId<1) { document.getElementById('errorMsg').style.display='block'; return; }
+            
+            if(!apiKey || !eventId || eventId < 1) { 
+                document.getElementById('errorMsg').style.display='block'; 
+                return; 
+            }
             document.getElementById('errorMsg').style.display='none';
             document.getElementById('loginScreen').style.display='none';
             document.getElementById('scanScreen').classList.add('active');
             document.getElementById('eventIdDisplay').textContent=eventId;
+            
             html5QrCode=new Html5Qrcode("reader",{formatsToSupport:[0]});
             html5QrCode.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1},onScan,()=>{})
             .then(()=>{scanning=true}).catch(e=>{alert('Caméra: '+e.message);stopScan();});
@@ -136,15 +147,29 @@
             if(html5QrCode){html5QrCode.stop().catch(()=>{});html5QrCode=null;}
             document.getElementById('scanScreen').classList.remove('active');
             document.getElementById('loginScreen').style.display='flex';
-            document.getElementById('eventIdInput').value=''; document.getElementById('eventIdInput').focus();
+            document.getElementById('eventIdInput').value=''; 
+            document.getElementById('eventIdInput').focus();
             validCount=0;invalidCount=0;history=[];
             updateCounters(); updateHistory();
         }
 
         function onScan(decodedText) {
             if(!scanning)return; scanning=false;
-            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
+            fetch(SCAN_URL,{
+                method:'POST',
+                headers:{
+                    'Content-Type':'application/json',
+                    'X-API-Key': apiKey,
+                    'X-CSRFToken': getCSRF()
+                },
+                body:JSON.stringify({qr_data:decodedText, event_id:eventId})
+            })
             .then(r=>r.json()).then(data=>{
+                if(data.result === 'unauthorized') {
+                    alert('Clé API invalide. Reconnectez-vous.');
+                    stopScan();
+                    return;
+                }
                 showResult(data);
                 data.result==='valid'?validCount++:invalidCount++;
                 updateCounters();
