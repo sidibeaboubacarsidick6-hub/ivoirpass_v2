@@ -146,7 +146,6 @@
         const LOGOUT_URL = '/accounts/logout/';
         const SCAN_URL = '/api/scanner/scan/';
         const CHECK_URL = '/api/scanner/check-event/';
-        const API_KEY = 'ivoirpass-scanner-2026';
         let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
 
         document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
@@ -220,7 +219,7 @@
 
         function onScan(decodedText) {
             if(!scanning)return;scanning=false;
-            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':API_KEY},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
+            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
             .then(r=>r.json()).then(data=>{
                 if(data.result==='unauthorized'){alert('Session expirée.');stopScan();return;}
                 showResult(data);

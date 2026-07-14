@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import HttpResponse
 from django.utils import timezone
+from django.db import transaction
 
 from apps.events.models import Event, TicketType
 from .models import Order, OrderItem, Ticket
@@ -115,30 +116,49 @@ def checkout(request):
         items.append({**item, 'subtotal': subtotal, 'ticket_type_obj': tt})
 
     if request.method == 'POST':
-        order = Order.objects.create(
-            buyer=request.user,
-            subtotal=total,
-            commission=0,
-            total=total,
-            status=Order.Status.PENDING,
-        )
+        # Verrouille chaque type de billet le temps de vérifier ET de
+        # décrémenter le stock — empêche deux acheteurs de valider
+        # simultanément le(s) dernier(s) billet(s) disponible(s) (survente).
+        with transaction.atomic():
+            locked_types = {
+                tt.pk: TicketType.objects.select_for_update().select_related('event').get(pk=tt.pk)
+                for tt in {item['ticket_type_obj'].pk: item['ticket_type_obj'] for item in items}.values()
+            }
 
-        for item_data in items:
-            tt = item_data['ticket_type_obj']
-            OrderItem.objects.create(
-                order=order,
-                ticket_type=tt,
-                quantity=item_data['quantity'],
-                unit_price=tt.price,
+            for item_data in items:
+                tt_locked = locked_types[item_data['ticket_type_obj'].pk]
+                if tt_locked.quantity > 0 and tt_locked.quantity_sold + item_data['quantity'] > tt_locked.quantity:
+                    messages.error(
+                        request,
+                        f"Stock insuffisant pour « {tt_locked.name} » — "
+                        f"il ne reste que {max(0, tt_locked.quantity - tt_locked.quantity_sold)} billet(s)."
+                    )
+                    return redirect('tickets:cart')
+
+            order = Order.objects.create(
+                buyer=request.user,
+                subtotal=total,
+                commission=0,
+                total=total,
+                status=Order.Status.PENDING,
             )
-            tt.quantity_sold += item_data['quantity']
-            tt.save(update_fields=['quantity_sold'])
-            tt.event.tickets_sold += item_data['quantity']
-            tt.event.save(update_fields=['tickets_sold'])
 
-            if tt.quantity > 0 and tt.quantity_sold >= tt.quantity:
-                tt.event.status = 'completed'
-                tt.event.save(update_fields=['status'])
+            for item_data in items:
+                tt = locked_types[item_data['ticket_type_obj'].pk]
+                OrderItem.objects.create(
+                    order=order,
+                    ticket_type=tt,
+                    quantity=item_data['quantity'],
+                    unit_price=tt.price,
+                )
+                tt.quantity_sold += item_data['quantity']
+                tt.save(update_fields=['quantity_sold'])
+                tt.event.tickets_sold += item_data['quantity']
+                tt.event.save(update_fields=['tickets_sold'])
+
+                if tt.quantity > 0 and tt.quantity_sold >= tt.quantity:
+                    tt.event.status = 'completed'
+                    tt.event.save(update_fields=['status'])
 
         save_cart(request, {})
 
@@ -247,16 +267,36 @@ def guest_checkout(request, slug):
             subtotal=total, total=total, status=GuestOrder.Status.PENDING,
         )
 
-        for item in selected_items:
-            GuestOrderItem.objects.create(
-                order=order, ticket_type=item['ticket_type'],
-                quantity=item['quantity'], unit_price=item['unit_price'],
-            )
-            tt = item['ticket_type']
-            tt.quantity_sold += item['quantity']
-            tt.event.tickets_sold += item['quantity']
-            tt.save(update_fields=['quantity_sold'])
-            tt.event.save(update_fields=['tickets_sold'])
+        # Verrouille chaque type de billet le temps de vérifier ET de
+        # décrémenter le stock — empêche la survente si plusieurs acheteurs
+        # (avec ou sans compte) valident en même temps.
+        with transaction.atomic():
+            locked_types = {
+                item['ticket_type'].pk: TicketType.objects.select_for_update().select_related('event').get(pk=item['ticket_type'].pk)
+                for item in selected_items
+            }
+
+            for item in selected_items:
+                tt_locked = locked_types[item['ticket_type'].pk]
+                if tt_locked.quantity > 0 and tt_locked.quantity_sold + item['quantity'] > tt_locked.quantity:
+                    order.delete()
+                    messages.error(
+                        request,
+                        f"Stock insuffisant pour « {tt_locked.name} » — "
+                        f"il ne reste que {max(0, tt_locked.quantity - tt_locked.quantity_sold)} billet(s)."
+                    )
+                    return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})
+
+            for item in selected_items:
+                GuestOrderItem.objects.create(
+                    order=order, ticket_type=item['ticket_type'],
+                    quantity=item['quantity'], unit_price=item['unit_price'],
+                )
+                tt = locked_types[item['ticket_type'].pk]
+                tt.quantity_sold += item['quantity']
+                tt.event.tickets_sold += item['quantity']
+                tt.save(update_fields=['quantity_sold'])
+                tt.event.save(update_fields=['tickets_sold'])
 
         if total == 0:
             order.mark_as_paid(payment_method='free', payment_reference=f'FREE-{order.order_number}')

@@ -8,8 +8,22 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from .managers import CustomUserManager
 from django.core.validators import FileExtensionValidator, MaxValueValidator
+
+
+KYC_MAX_FILE_SIZE_MB = 5
+KYC_MAX_FILE_SIZE_BYTES = KYC_MAX_FILE_SIZE_MB * 1024 * 1024
+
+
+def validate_kyc_file_size(file):
+    """Refuse tout fichier KYC de plus de 5 Mo (identité, domicile, pro)."""
+    if file.size > KYC_MAX_FILE_SIZE_BYTES:
+        raise ValidationError(
+            f"Le fichier est trop volumineux ({file.size / (1024 * 1024):.1f} Mo). "
+            f"Taille maximale autorisée : {KYC_MAX_FILE_SIZE_MB} Mo."
+        )
 
 
 
@@ -131,20 +145,22 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     _('pièce d\'identité'),
     upload_to='kyc/identity/%Y/%m/',
     null=True, blank=True,
-    validators=[FileExtensionValidator(ALLOWED_KYC_EXTENSIONS)],
+    validators=[FileExtensionValidator(ALLOWED_KYC_EXTENSIONS), validate_kyc_file_size],
     help_text="PDF, JPG ou PNG — 5 Mo max"
     )
     kyc_proof_of_address = models.FileField(
         _('justificatif de domicile'),
         upload_to='kyc/address/%Y/%m/',
         null=True, blank=True,
-        help_text="Facture électricité, eau, ou attestation de domicile"
+        validators=[FileExtensionValidator(ALLOWED_KYC_EXTENSIONS), validate_kyc_file_size],
+        help_text="Facture électricité, eau, ou attestation de domicile — PDF, JPG ou PNG, 5 Mo max"
     )
     kyc_business_doc = models.FileField(
         _('document professionnel'),
         upload_to='kyc/business/%Y/%m/',
         null=True, blank=True,
-        help_text="RCCM, attestation fiscale, ou déclaration d'activité"
+        validators=[FileExtensionValidator(ALLOWED_KYC_EXTENSIONS), validate_kyc_file_size],
+        help_text="RCCM, attestation fiscale, ou déclaration d'activité — PDF, JPG ou PNG, 5 Mo max"
     )
     kyc_submitted_at = models.DateTimeField(
         _('KYC soumis le'),
