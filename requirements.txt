@@ -61,3 +61,4 @@ tzdata==2026.2
 urllib3==2.7.0
 vine==5.1.0
 wcwidth==0.8.1
+sentry-sdk==2.19.2

@@ -45,3 +45,4 @@ htmlcov/
 # apps/*/migrations/backups/
 *.sql
 backup_avant_migration.sql
+celerybeat-schedule

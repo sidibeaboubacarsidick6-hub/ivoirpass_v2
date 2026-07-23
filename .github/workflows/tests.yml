@@ -1,0 +1,56 @@
+name: Tests
+
+# Lance la suite de tests à chaque push et à chaque pull request,
+# sur toutes les branches. Aucune dépendance à Postgres/Redis réels :
+# utilise config/settings/testlocal.py (SQLite en mémoire, Celery
+# synchrone, email en mémoire) — rapide, aucun service externe à
+# configurer dans la CI.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Mettre en cache les dépendances pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lancer les migrations (base de test)
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.testlocal
+        run: python manage.py migrate --noinput
+
+      - name: Lancer la suite de tests
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.testlocal
+        run: python manage.py test tests -v 2
+
+      - name: Vérifier qu'aucun secret n'est commité
+        run: |
+          if git log --all --diff-filter=A --name-only | grep -iE '\.sql$|\.env$'; then
+            echo "::error::Un fichier .sql ou .env a été commité dans l'historique — vérifie manuellement."
+            exit 1
+          else
+            echo "OK — aucun fichier .sql/.env détecté dans l'historique des ajouts."
+          fi

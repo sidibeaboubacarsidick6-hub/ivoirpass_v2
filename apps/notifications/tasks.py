@@ -10,6 +10,24 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def _log_and_report(message, exc=None):
+    """
+    Journalise une erreur ET la remonte à Sentry (si configuré), pour que
+    les échecs attrapés silencieusement (try/except qui ne font que
+    logger.error) déclenchent quand même une vraie alerte en production.
+    Sans impact si SENTRY_DSN n'est pas défini (Sentry alors inactif).
+    """
+    logger.error(message)
+    try:
+        import sentry_sdk
+        if exc is not None:
+            sentry_sdk.capture_exception(exc)
+        else:
+            sentry_sdk.capture_message(message, level='error')
+    except ImportError:
+        pass
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_email_async(self, subject, html_body, text_body, recipient_list,
                      from_email=None, reply_to=None):
@@ -138,7 +156,7 @@ def notify_admins_async(self, notification_type, title, message, reference=''):
                 )
                 logger.info(f"Notification admin envoyee a {len(recipient_list)} admin(s)")
             except Exception as e:
-                logger.error(f"Erreur envoi email admin: {e}")
+                _log_and_report(f"Erreur envoi email admin: {e}", exc=e)
 
     except Exception as exc:
         logger.error(f"Erreur notification admin: {exc}")

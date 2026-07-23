@@ -121,3 +121,39 @@ ADMINS = [
 # RATE LIMITING
 # ============================================
 RATELIMIT_ENABLE = True
+
+# ============================================
+# SENTRY — Alertes en temps réel sur les erreurs
+#
+# Sans ceci, une erreur qui plante silencieusement (ex: un webhook qui
+# échoue, un email qui ne part pas) ne se voit que dans les logs du
+# serveur, que personne ne regarde en continu. Avec Sentry, une alerte
+# arrive automatiquement (email/Slack) dès qu'une erreur se produit,
+# qu'elle soit "fatale" (erreur 500) ou juste attrapée et journalisée
+# quelque part dans le code (voir sentry_sdk.capture_exception ajouté
+# dans apps/notifications/tasks.py pour les échecs d'email silencieux).
+#
+# SENTRY_DSN vide (valeur par défaut) = Sentry désactivé, aucun impact
+# sur le fonctionnement du site tant que la variable n'est pas définie.
+# ============================================
+SENTRY_DSN = config('SENTRY_DSN', default='')
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(),
+            CeleryIntegration(),
+            LoggingIntegration(level=None, event_level='ERROR'),
+        ],
+        environment=config('SENTRY_ENVIRONMENT', default='production'),
+        # Garde une trace de 100% des erreurs, mais échantillonne les
+        # traces de performance pour ne pas surcharger le quota gratuit.
+        traces_sample_rate=0.1,
+        send_default_pii=False,  # ne jamais envoyer de données personnelles à Sentry
+    )
