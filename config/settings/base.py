@@ -364,3 +364,45 @@ CSP_FRAME_SRC = (
     "https://app.paydunya.com",
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo
+
+# ============================================
+# SENTRY — Alertes en temps réel sur les erreurs
+#
+# Ici dans base.py (et non production.py) pour pouvoir tester Sentry
+# aussi en local avec config.settings.development, pas seulement en
+# vraie production. Le comportement reste identique partout : désactivé
+# tant que SENTRY_DSN n'est pas défini dans le .env, aucun impact sinon.
+#
+# Sans ceci, une erreur qui plante silencieusement (ex: un webhook qui
+# échoue, un email qui ne part pas) ne se voit que dans les logs du
+# serveur, que personne ne regarde en continu. Avec Sentry, une alerte
+# arrive automatiquement dès qu'une erreur se produit, qu'elle soit
+# "fatale" (erreur 500) ou juste attrapée et journalisée quelque part
+# dans le code (voir sentry_sdk.capture_exception dans
+# apps/notifications/tasks.py pour les échecs d'email silencieux).
+# ============================================
+SENTRY_DSN = config('SENTRY_DSN', default='')
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(),
+            CeleryIntegration(),
+            LoggingIntegration(level=None, event_level='ERROR'),
+        ],
+        environment=config('SENTRY_ENVIRONMENT', default='development'),
+        # Garde une trace de 100% des erreurs, mais échantillonne les
+        # traces de performance pour ne pas surcharger le quota gratuit.
+        traces_sample_rate=0.1,
+        # Volontairement False (contrairement à l'exemple par défaut de
+        # Sentry qui suggère True) : on évite d'envoyer des données
+        # personnelles des utilisateurs (IP, emails, etc.) à un service
+        # tiers par précaution, même si Sentry est fiable.
+        send_default_pii=False,
+    )
