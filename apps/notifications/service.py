@@ -71,10 +71,25 @@ class NotificationService:
         try:
             email.send()
             logger.info(f"Email tickets envoyé à {order.buyer.email}")
-            return True
         except Exception as e:
             logger.error(f"Erreur envoi email tickets : {e}")
             return False
+
+        # SMS de confirmation, en plus de l'email — silencieux si le
+        # numéro est absent ou si l'envoi échoue (l'email reste le canal
+        # principal, le SMS ne doit jamais bloquer la confirmation).
+        if getattr(order.buyer, 'phone_number', None):
+            try:
+                from apps.notifications.sms import send_sms
+                send_sms(
+                    order.buyer.phone_number,
+                    f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
+                    f"Commande {order.order_number}. Billets envoyés par email."
+                )
+            except Exception as e:
+                logger.error(f"Erreur envoi SMS confirmation billet {order.order_number}: {e}")
+
+        return True
 
     @classmethod
     def ticket_confirmed(cls, order):
@@ -122,10 +137,22 @@ class NotificationService:
 
         try:
             email.send()
-            return True
         except Exception as e:
             logger.error(f"Erreur envoi email guest : {e}")
             return False
+
+        if getattr(order, 'phone', None):
+            try:
+                from apps.notifications.sms import send_sms
+                send_sms(
+                    order.phone,
+                    f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
+                    f"Commande {order.order_number}. Billets envoyés par email."
+                )
+            except Exception as e:
+                logger.error(f"Erreur envoi SMS confirmation billet invité {order.order_number}: {e}")
+
+        return True
 
     @classmethod
     def welcome(cls, user):

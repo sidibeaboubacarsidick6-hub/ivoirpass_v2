@@ -327,15 +327,13 @@ class WithdrawalRequest(models.Model):
 
         with transaction.atomic():
             # Débiter le wallet en premier — si ça échoue, tout est annulé
-            # (y compris balance_pending) et le statut n'est jamais touché.
+            # (y compris balance_pending, géré directement dans debit()) et
+            # le statut n'est jamais touché.
             self.wallet.debit(
                 amount=self.amount,
                 description=f"Reversement {self.reference}",
                 reference=self.reference,
             )
-
-            self.wallet.balance_pending = max(0, self.wallet.balance_pending - self.amount)
-            self.wallet.save(update_fields=['balance_pending'])
 
             self.status       = self.Status.PROCESSED
             self.admin_note   = note

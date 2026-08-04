@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db import transaction
 from apps.events.models import Event
-from apps.tickets.models import Ticket
+from apps.tickets.models import Ticket, GuestTicket
 from .models import ScanSession, ScanLog
 
 
@@ -116,34 +116,60 @@ def validate_qr(request):
         ticket_number = parts[1]
 
         with transaction.atomic():
+            # Un billet peut appartenir à un compte normal (Ticket) OU avoir
+            # été acheté sans compte (GuestTicket) — il faut chercher dans
+            # les deux, sinon tout billet "invité" est signalé introuvable
+            # alors qu'il est parfaitement valide.
+            is_guest_ticket = False
             try:
                 ticket = Ticket.objects.select_for_update().select_related(
                     'order_item__ticket_type__event', 'order_item__order__buyer'
                 ).get(uuid=ticket_uuid, ticket_number=ticket_number)
             except Ticket.DoesNotExist:
-                result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable.", 'red'
+                try:
+                    ticket = GuestTicket.objects.select_for_update().select_related(
+                        'order_item__ticket_type__event', 'order_item__order'
+                    ).get(uuid=ticket_uuid, ticket_number=ticket_number)
+                    is_guest_ticket = True
+                except GuestTicket.DoesNotExist:
+                    result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable.", 'red'
 
             if ticket:
                 if not ticket.verify_qr(qr_data):
                     result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié.", 'red'
                 elif ticket.event.id != event.id:
                     result, message, color = ScanLog.Result.WRONG_EVENT, f"Billet pour : {ticket.event.title}", 'orange'
-                elif ticket.status == Ticket.Status.VOID:
+                elif ticket.status == 'void':
                     result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé.", 'red'
-                elif ticket.status == Ticket.Status.USED:
+                elif ticket.status == 'used':
                     result, message, color = ScanLog.Result.ALREADY_USED, f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}.", 'red'
                 else:
                     result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
-                    ticket.mark_as_used(scanned_by=request.user)
+                    if is_guest_ticket:
+                        ticket.mark_as_used()  # GuestTicket n'a pas de champ scanned_by (pas de compte)
+                        buyer_name = f"{ticket.order_item.order.first_name} {ticket.order_item.order.last_name}"
+                        buyer_email = ticket.order_item.order.email
+                    else:
+                        ticket.mark_as_used(scanned_by=request.user)
+                        buyer_name = ticket.buyer.get_full_name()
+                        buyer_email = ticket.buyer.email
                     ticket_info = {
                         'ticket_number': ticket.ticket_number,
                         'ticket_type':   ticket.ticket_type.name,
-                        'buyer_name':    ticket.buyer.get_full_name(),
-                        'buyer_email':   ticket.buyer.email,
+                        'buyer_name':    buyer_name,
+                        'buyer_email':   buyer_email,
                         'event_title':   ticket.event.title,
                     }
 
-    ScanLog.objects.create(session=session, ticket=ticket, qr_data_received=qr_data[:500], result=result)
+    # ScanLog.ticket ne référence que le modèle Ticket (comptes normaux) —
+    # pour un GuestTicket, on ne lie pas cette ligne à un ticket précis,
+    # mais le scan est bien validé/enregistré dans les compteurs de session.
+    ScanLog.objects.create(
+        session=session,
+        ticket=(ticket if ticket and not is_guest_ticket else None),
+        qr_data_received=qr_data[:500],
+        result=result,
+    )
 
     session.total_scanned += 1
     if result == ScanLog.Result.VALID:

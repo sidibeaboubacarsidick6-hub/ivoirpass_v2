@@ -79,7 +79,7 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
     list_display = ('reference', 'get_organizer', 'amount', 'payout_method', 'payout_phone', 'status_badge', 'created_at')
     list_filter = ('status', 'payout_method')
     search_fields = ('reference', 'wallet__organizer__email', 'payout_phone')
-    readonly_fields = ('reference', 'amount_net', 'created_at', 'processed_at')
+    readonly_fields = ('reference', 'amount_net', 'created_at', 'processed_at', 'status')
     actions = ['approve_requests', 'process_requests', 'reject_requests']
 
     def get_organizer(self, obj):

@@ -14,7 +14,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db import transaction
-from apps.tickets.models import Ticket
+from apps.tickets.models import Ticket, GuestTicket
 from apps.events.models import Event
 from apps.scanner.models import ScanSession, ScanLog
 
@@ -68,6 +68,7 @@ def scan_qr_api(request):
 
     parts = qr_data.split(':')
     ticket = None
+    is_guest_ticket = False
     result = None
     message = ''
     color = 'red'
@@ -93,23 +94,43 @@ def scan_qr_api(request):
                         'order_item__ticket_type__event', 'order_item__order__buyer'
                     ).get(uuid=ticket_uuid, ticket_number=ticket_number)
                 except Ticket.DoesNotExist:
-                    result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable", 'red'
-                    ticket = None
+                    # Un billet acheté sans compte (invité) vit dans GuestTicket,
+                    # pas dans Ticket — sans ce fallback, il est toujours signalé
+                    # "introuvable" alors qu'il est parfaitement valide.
+                    try:
+                        ticket = GuestTicket.objects.select_for_update().select_related(
+                            'order_item__ticket_type__event', 'order_item__order'
+                        ).get(uuid=ticket_uuid, ticket_number=ticket_number)
+                        is_guest_ticket = True
+                    except GuestTicket.DoesNotExist:
+                        result, message, color = ScanLog.Result.NOT_FOUND, "Ticket introuvable", 'red'
+                        ticket = None
 
                 if ticket:
                     if not ticket.verify_qr(qr_data):
                         result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié", 'red'
                     elif ticket.event.id != event.id:
                         result, message, color = ScanLog.Result.WRONG_EVENT, f"Ce billet est pour : {ticket.event.title}", 'orange'
-                    elif ticket.status == Ticket.Status.VOID:
+                    elif ticket.status == 'void':
                         result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé", 'red'
-                    elif ticket.status == Ticket.Status.USED:
+                    elif ticket.status == 'used':
                         result, message, color = ScanLog.Result.ALREADY_USED, f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}", 'red'
                     else:
                         result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
-                        ticket.mark_as_used(scanned_by=agent)
+                        if is_guest_ticket:
+                            ticket.mark_as_used()
+                        else:
+                            ticket.mark_as_used(scanned_by=agent)
 
-    ScanLog.objects.create(session=session, ticket=ticket, qr_data_received=qr_data[:500], result=result)
+    # ScanLog.ticket ne référence que le modèle Ticket (comptes normaux) —
+    # pour un GuestTicket, la ligne n'est pas liée à un ticket précis, mais
+    # le scan est bien validé et compté dans les statistiques de session.
+    ScanLog.objects.create(
+        session=session,
+        ticket=(ticket if ticket and not is_guest_ticket else None),
+        qr_data_received=qr_data[:500],
+        result=result,
+    )
 
     session.total_scanned += 1
     if result == ScanLog.Result.VALID:
@@ -120,11 +141,15 @@ def scan_qr_api(request):
 
     response_data = {'result': result, 'message': message, 'color': color}
     if ticket and result == ScanLog.Result.VALID:
-        buyer = ticket.order_item.order.buyer if ticket.order_item.order.buyer else None
+        if is_guest_ticket:
+            buyer_name = f"{ticket.order_item.order.first_name} {ticket.order_item.order.last_name}"
+        else:
+            buyer = ticket.order_item.order.buyer if ticket.order_item.order.buyer else None
+            buyer_name = buyer.get_full_name() if buyer else 'Invité'
         response_data['ticket_info'] = {
             'ticket_number': ticket.ticket_number,
             'ticket_type': ticket.order_item.ticket_type.name,
-            'buyer_name': buyer.get_full_name() if buyer else 'Invité',
+            'buyer_name': buyer_name,
             'event_title': ticket.event.title,
         }
 
