@@ -11,6 +11,8 @@ app = Celery('ivoirpass')
 # Charger la configuration depuis settings.py (préfixe CELERY_)
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
+app.conf.broker_connection_retry_on_startup = True   # ✅ corrigé
+
 # Auto-découverte des tâches dans toutes les apps
 app.autodiscover_tasks()
 
