@@ -164,6 +164,9 @@ def checkout(request):
 
         if all_free:
             order.mark_as_paid(payment_method='free', payment_reference=f"FREE-{order.order_number}")
+            # Envoi asynchrone des billets par email (commande gratuite, utilisateur connecté)
+            from apps.notifications.tasks import send_ticket_email_async
+            send_ticket_email_async.delay(str(order.uuid))
             messages.success(request, "🎉 Inscription confirmée !")
             return redirect('tickets:confirmation', order_number=order.order_number)
         else:
@@ -300,11 +303,9 @@ def guest_checkout(request, slug):
 
         if total == 0:
             order.mark_as_paid(payment_method='free', payment_reference=f'FREE-{order.order_number}')
-            try:
-                from apps.notifications.service import NotificationService
-                NotificationService.guest_tickets_confirmed(order)
-            except Exception:
-                pass
+            # Envoi asynchrone des billets par email (commande gratuite, invité)
+            from apps.notifications.tasks import send_guest_ticket_email_async
+            send_guest_ticket_email_async.delay(str(order.uuid))
             return redirect('tickets:guest_confirmation', order_number=order.order_number)
         return redirect('tickets:guest_payment', order_number=order.order_number)
 
@@ -388,6 +389,9 @@ def guest_payment_return(request, order_number):
         
         if result.get('success') and result.get('status') == 'completed':
             order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            # Envoi asynchrone des billets par email (commande payante, invité)
+            from apps.notifications.tasks import send_guest_ticket_email_async
+            send_guest_ticket_email_async.delay(str(order.uuid))
             messages.success(request, f"🎉 Paiement confirmé !")
             return redirect('tickets:guest_confirmation', order_number=order_number)
 
@@ -425,6 +429,9 @@ def guest_webhook(request):
             try:
                 order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
                 order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                # Envoi asynchrone des billets par email (commande payante, invité — via webhook)
+                from apps.notifications.tasks import send_guest_ticket_email_async
+                send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
                 pass
         return HttpResponse('OK', status=200)

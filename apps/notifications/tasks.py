@@ -58,7 +58,7 @@ def send_email_async(self, subject, html_body, text_body, recipient_list,
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_ticket_email_async(self, order_uuid):
     """
-    Envoi des billets par email après paiement.
+    Envoi des billets par email après paiement — commande utilisateur connecté (Order).
     """
     from apps.tickets.models import Order
     from apps.notifications.service import NotificationService
@@ -74,6 +74,28 @@ def send_ticket_email_async(self, order_uuid):
         return None
     except Exception as exc:
         logger.error(f"Erreur envoi billets {order_uuid}: {exc}")
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def send_guest_ticket_email_async(self, guest_order_uuid):
+    """
+    Envoi des billets par email après paiement — commande invité (GuestOrder).
+    """
+    from apps.tickets.models import GuestOrder
+    from apps.notifications.service import NotificationService
+
+    try:
+        order = GuestOrder.objects.get(uuid=guest_order_uuid)
+        NotificationService.guest_tickets_confirmed(order)
+        logger.info(f"Billets invité envoyés pour commande {order.order_number}")
+        return f"Guest tickets sent for {order.order_number}"
+
+    except GuestOrder.DoesNotExist:
+        logger.error(f"Commande invité {guest_order_uuid} introuvable")
+        return None
+    except Exception as exc:
+        logger.error(f"Erreur envoi billets invité {guest_order_uuid}: {exc}")
         raise self.retry(exc=exc)
 
 
@@ -118,6 +140,8 @@ def generate_qr_codes_async(self, ticket_uuids):
     except Exception as exc:
         logger.error(f"Erreur génération QR codes: {exc}")
         raise self.retry(exc=exc)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def notify_admins_async(self, notification_type, title, message, reference=''):
     """
