@@ -345,7 +345,7 @@ def withdraw_request(request):
                 try:
                     from apps.notifications.sms import send_sms
                     send_sms(
-                        to=request.user.phone_number,
+                        phone_number=request.user.phone_number,
                         message=f'IvoirPass - Code reversement : {otp.code}'
                     )
                 except Exception:
