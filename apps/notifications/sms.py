@@ -51,11 +51,30 @@ class OrangeSMSService:
             bool : True si envoi réussi
         """
         try:
-            token  = cls._get_token()
-            sender = settings.ORANGE_SMS_SENDER_NAME
+            token = cls._get_token()
+            # senderAddress DOIT être un numéro de téléphone (celui assigné à
+            # ton compte développeur Orange, visible sur ton tableau de bord
+            # developer.orange.com dans les détails de ton abonnement SMS API)
+            # — PAS le nom de la marque. Orange exige que ce numéro soit
+            # STRICTEMENT identique dans l'URL et dans le corps de la requête,
+            # sinon il rejette avec l'erreur SVC0004.
+            # senderName (optionnel) porte le nom affiché ("IvoirPass").
+            sender_address = settings.ORANGE_SMS_SENDER_ADDRESS
+            sender_name    = settings.ORANGE_SMS_SENDER_NAME
+
+            if not sender_address:
+                logger.error(
+                    "ORANGE_SMS_SENDER_ADDRESS non configuré — Orange exige un "
+                    "numéro de téléphone expéditeur (pas juste un nom de marque). "
+                    "Vérifie ce numéro sur https://developer.orange.com dans les "
+                    "détails de ton abonnement SMS API CI."
+                )
+                return False
+
+            sender_tel = f"tel:{sender_address}"
 
             response = requests.post(
-                cls.SEND_URL.format(sender=sender),
+                cls.SEND_URL.format(sender=sender_tel),
                 headers={
                     'Authorization': f'Bearer {token}',
                     'Content-Type':  'application/json',
@@ -63,7 +82,8 @@ class OrangeSMSService:
                 json={
                     "outboundSMSMessageRequest": {
                         "address":               f"tel:{phone_number}",
-                        "senderAddress":         f"tel:{sender}",
+                        "senderAddress":         sender_tel,
+                        "senderName":            sender_name,
                         "outboundSMSTextMessage": {
                             "message": message[:160]
                         }

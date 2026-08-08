@@ -26,6 +26,7 @@ class Command(BaseCommand):
         self.stdout.write(f"ORANGE_SMS_CLIENT_ID     : {'défini (' + str(len(settings.ORANGE_SMS_CLIENT_ID)) + ' caractères)' if settings.ORANGE_SMS_CLIENT_ID else '(VIDE — PROBLÈME)'}")
         self.stdout.write(f"ORANGE_SMS_CLIENT_SECRET : {'défini (' + str(len(settings.ORANGE_SMS_CLIENT_SECRET)) + ' caractères)' if settings.ORANGE_SMS_CLIENT_SECRET else '(VIDE — PROBLÈME)'}")
         self.stdout.write(f"ORANGE_SMS_SENDER_NAME   : {settings.ORANGE_SMS_SENDER_NAME}")
+        self.stdout.write(f"ORANGE_SMS_SENDER_ADDRESS: {settings.ORANGE_SMS_SENDER_ADDRESS or '(VIDE — PROBLÈME, requis par Orange)'}")
         self.stdout.write("=" * 60)
         self.stdout.write("")
 
@@ -39,6 +40,14 @@ class Command(BaseCommand):
         if not settings.ORANGE_SMS_CLIENT_ID or not settings.ORANGE_SMS_CLIENT_SECRET:
             self.stdout.write(self.style.ERROR(
                 "Clés Orange manquantes dans le .env — impossible d'envoyer."
+            ))
+            return
+
+        if not settings.ORANGE_SMS_SENDER_ADDRESS:
+            self.stdout.write(self.style.ERROR(
+                "ORANGE_SMS_SENDER_ADDRESS manquant dans le .env — Orange exige "
+                "un numéro de téléphone expéditeur (visible sur ton tableau de "
+                "bord developer.orange.com), pas juste un nom de marque."
             ))
             return
 

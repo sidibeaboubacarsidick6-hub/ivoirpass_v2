@@ -44,6 +44,7 @@ THIRD_PARTY_APPS = [
     'django_filters',
     'crispy_forms',
     'crispy_bootstrap5',
+    'django_celery_beat',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -292,6 +293,14 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Planificateur basé sur la base de données (django-celery-beat) au lieu
+# du fichier "celerybeat-schedule" par défaut (shelve/gdbm), qui plante
+# régulièrement en cas d'arrêt brutal (Ctrl+C) — surtout sous WSL, où le
+# verrouillage de fichier gdbm est peu fiable. Continue de lire
+# CELERY_BEAT_SCHEDULE ci-dessus normalement, en plus de permettre de
+# gérer les tâches planifiées depuis l'admin Django si besoin plus tard.
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
 # ============================================
 # MODÈLE UTILISATEUR PERSONNALISÉ
 # ============================================
@@ -323,6 +332,10 @@ SMS_ENABLED = config('SMS_ENABLED', default=False, cast=bool)
 ORANGE_SMS_CLIENT_ID     = config('ORANGE_SMS_CLIENT_ID',     default='')
 ORANGE_SMS_CLIENT_SECRET = config('ORANGE_SMS_CLIENT_SECRET', default='')
 ORANGE_SMS_SENDER_NAME   = config('ORANGE_SMS_SENDER_NAME',   default='IvoirPass')
+# Numéro de téléphone attribué par Orange à ton compte développeur (PAS le
+# nom de marque) — visible sur https://developer.orange.com dans les
+# détails de ton abonnement SMS API CI. Format : +225XXXXXXXX
+ORANGE_SMS_SENDER_ADDRESS = config('ORANGE_SMS_SENDER_ADDRESS', default='')
 
 # Twilio
 TWILIO_ACCOUNT_SID  = config('TWILIO_ACCOUNT_SID',  default='')
