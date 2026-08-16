@@ -44,7 +44,7 @@
           <!-- QR Code -->
           <div class="text-center my-4">
             {% if ticket.qr_code_image %}
-              <img src="{{ ticket.qr_code_image.url }}"
+              <img src="{{ ticket.qr_code_image.url }}" alt="QR code du billet"
                    width="180" height="180"
                    class="rounded-3 border border-2 border-success" />
             {% else %}

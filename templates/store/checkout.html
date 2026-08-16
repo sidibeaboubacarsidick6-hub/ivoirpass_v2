@@ -16,7 +16,7 @@
 
       <div class="ip-card p-4 mb-4">
         <div class="d-flex gap-3 align-items-center">
-          {% if product.cover_image %}<img src="{{ product.cover_image.url }}" width="70" height="70" class="rounded-3" />{% endif %}
+          {% if product.cover_image %}<img src="{{ product.cover_image.url }}" alt="{{ product.name }}" width="70" height="70" class="rounded-3" />{% endif %}
           <div>
             <div class="fw-bold">{{ product.name }}</div>
             {% if product.author %}<div class="text-muted small">{{ product.author }}</div>{% endif %}

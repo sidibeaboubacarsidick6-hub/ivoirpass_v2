@@ -67,7 +67,7 @@
             <!-- QR Code -->
             <div class="col-4 text-center">
               {% if ticket.qr_code_image %}
-                <img src="{{ ticket.qr_code_image.url }}"
+                <img src="{{ ticket.qr_code_image.url }}" alt="QR code du billet"
                      width="110" height="110"
                      class="rounded-3 border border-2 border-success" />
               {% else %}

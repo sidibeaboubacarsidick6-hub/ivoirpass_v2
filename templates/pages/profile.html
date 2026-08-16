@@ -14,7 +14,7 @@
         <!-- Avatar -->
         <div class="position-relative d-inline-block mb-3">
           {% if user.avatar %}
-            <img src="{{ user.avatar.url }}" width="100" height="100"
+            <img src="{{ user.avatar.url }}" alt="Photo de profil" width="100" height="100"
                  class="rounded-circle object-fit-cover border border-3 border-white shadow" />
           {% else %}
             <div style="width:100px; height:100px; border-radius:50%;
@@ -198,7 +198,7 @@
             <div class="row g-3">
               {% if user.organization_logo %}
               <div class="col-12">
-                <img src="{{ user.organization_logo.url }}" height="60"
+                <img src="{{ user.organization_logo.url }}" alt="Logo de {{ user.business_name|default:user.get_full_name }}" height="60"
                      class="rounded-3 border" />
               </div>
               {% endif %}

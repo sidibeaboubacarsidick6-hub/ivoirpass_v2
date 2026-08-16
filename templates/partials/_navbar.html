@@ -5,7 +5,7 @@
 
     <!-- Logo -->
     <a class="navbar-brand" href="{% url 'home' %}">
-      <img src="{% static 'images/favicon.png' %}"
+      <img src="{% static 'images/favicon.png' %}" alt="Logo IvoirPass"
            height="36" class="me-2"
            style="vertical-align:middle;" />
       <span class="brand-ivoir">Ivoir</span><span class="brand-pass">Pass</span>
@@ -58,7 +58,7 @@
                   @keydown.escape="open = false"
                   type="button">
             {% if user.avatar %}
-              <img src="{{ user.avatar.url }}" width="28" height="28"
+              <img src="{{ user.avatar.url }}" alt="Photo de profil" width="28" height="28"
                    class="rounded-circle" style="object-fit:cover;" />
             {% else %}
               <span style="width:28px; height:28px; border-radius:50%;

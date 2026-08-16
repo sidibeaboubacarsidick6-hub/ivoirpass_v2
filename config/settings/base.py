@@ -45,6 +45,7 @@ THIRD_PARTY_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'django_celery_beat',
+    'drf_spectacular',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -177,6 +178,25 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    # Protection par défaut contre l'abus de l'API — s'applique à tout
+    # nouvel endpoint API ajouté à l'avenir, même si personne ne pense à
+    # ajouter un @ratelimit manuel dessus.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+        'user': '300/min',
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'IvoirPass V2 API',
+    'DESCRIPTION': "API de billetterie et scanner IvoirPass — authentification JWT, scan de billets en temps réel.",
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 # ============================================
@@ -201,11 +221,21 @@ CRISPY_TEMPLATE_PACK = 'bootstrap5'
 # ============================================
 # ALLAUTH — Authentification
 # ============================================
-ACCOUNT_EMAIL_REQUIRED          = True
 ACCOUNT_UNIQUE_EMAIL            = True
-ACCOUNT_USERNAME_REQUIRED       = False
-ACCOUNT_AUTHENTICATION_METHOD  = 'email'
+ACCOUNT_LOGIN_METHODS           = {'email'}
+ACCOUNT_SIGNUP_FIELDS           = ['email*', 'password1*', 'password2*']
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+
+# Limites de débit explicites (plutôt que de dépendre des valeurs par
+# défaut d'allauth, qui peuvent changer d'une version à l'autre sans
+# qu'on le sache) — protège contre le brute-force sur les mots de passe.
+ACCOUNT_RATE_LIMITS = {
+    'login_failed': '5/5m/ip,10/5m/key',
+    'signup': '10/h/ip',
+    'change_password': '5/m/user',
+    'reset_password': '5/h/ip,5/h/key',
+    'reset_password_from_key': '5/m/ip',
+}
 
 
 # ✅ Vérification email OBLIGATOIRE
@@ -291,7 +321,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.dashboard.tasks.generate_bceao_report',
         'schedule': crontab(hour=8, day_of_month=1),  # 1er de chaque mois à 8h
     },
+    'backup-database-nightly': {
+        'task': 'apps.core.tasks.backup_database',
+        'schedule': crontab(hour=3, minute=0),  # 3h du matin, faible trafic
+    },
 }
+
+# Nombre de jours de rétention des sauvegardes automatiques avant
+# suppression (voir apps/core/tasks.py::backup_database)
+BACKUP_RETENTION_DAYS = config('BACKUP_RETENTION_DAYS', default=7, cast=int)
 
 # Planificateur basé sur la base de données (django-celery-beat) au lieu
 # du fichier "celerybeat-schedule" par défaut (shelve/gdbm), qui plante

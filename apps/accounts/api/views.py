@@ -53,6 +53,7 @@ class ChangePasswordAPIView(APIView):
     Changement de mot de passe pour l'utilisateur connecté.
     """
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ChangePasswordSerializer
 
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data)

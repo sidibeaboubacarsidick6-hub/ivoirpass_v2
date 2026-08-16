@@ -301,7 +301,7 @@
             <td class="ps-4">
               <div class="d-flex align-items-center gap-2">
                 {% if product.cover_image %}
-                  <img src="{{ product.cover_image.url }}" width="36" height="36"
+                  <img src="{{ product.cover_image.url }}" alt="{{ product.name }}" width="36" height="36"
                        class="rounded-2" style="object-fit:cover;" />
                 {% endif %}
                 <div class="fw-semibold small">{{ product.name|truncatechars:25 }}</div>

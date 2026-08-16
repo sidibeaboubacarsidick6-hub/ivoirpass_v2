@@ -121,7 +121,7 @@
             <div class="col-md-6">
               <label class="form-label fw-semibold small">{{ form.cover_image.label }}</label>
               {% if product.cover_image %}
-                <img src="{{ product.cover_image.url }}"
+                <img src="{{ product.cover_image.url }}" alt="{{ product.name }}"
                      class="rounded-2 mb-2 d-block"
                      style="max-height:80px;" />
               {% endif %}

@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Agents scanner — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 700px;">
+
+  <div class="mb-4">
+    <h4 class="fw-bold mb-0">
+      <i class="bi bi-qr-code-scan me-2 text-green"></i>Agents scanner
+    </h4>
+    <p class="text-muted small mb-0">
+      Choisis les comptes agents scanner autorisés à scanner les billets de
+      « <strong>{{ event.title }}</strong> ». Un agent non coché ci-dessous
+      ne pourra pas scanner cet événement.
+    </p>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <form method="post">
+        {% csrf_token %}
+
+        {% if all_agents %}
+          <div class="list-group mb-4">
+            {% for agent in all_agents %}
+              <label class="list-group-item d-flex align-items-center gap-3">
+                <input type="checkbox" name="agents" value="{{ agent.id }}"
+                       class="form-check-input m-0"
+                       {% if agent.id in assigned_ids %}checked{% endif %}>
+                <div>
+                  <div class="fw-semibold">{{ agent.get_full_name|default:agent.email }}</div>
+                  <div class="text-muted small">{{ agent.email }}</div>
+                </div>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-4">
+            Aucun compte avec le rôle "agent scanner" n'existe encore.
+            Crée-en un via l'administration Django (/admin/) avant de
+            pouvoir l'assigner ici.
+          </p>
+        {% endif %}
+
+        <button type="submit" class="btn btn-orange">
+          <i class="bi bi-check-lg me-2"></i>Enregistrer l'assignation
+        </button>
+        <a href="{% url 'events:my_events' %}" class="btn btn-outline-secondary ms-2">
+          Retour
+        </a>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

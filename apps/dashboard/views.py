@@ -754,23 +754,8 @@ def submit_dispute(request):
             description=request.POST.get('description', ''),
         )
 
-        # Notification en base de données
-        from apps.notifications.models import AdminNotification
-
-        AdminNotification.objects.create(
-            type='fraud_alert',
-            title=f'Nouveau litige : {dispute.get_type_display()}',
-            message=(
-                f"Référence : {dispute.reference}\n"
-                f"Type : {dispute.get_type_display()}\n"
-                f"Sujet : {dispute.subject}\n"
-                f"Email : {dispute.email}\n"
-                f"Commande : {dispute.order_number or 'N/A'}"
-            ),
-            reference=dispute.reference,
-        )
-
-        # Notification asynchrone aux administrateurs
+        # Notification aux administrateurs (crée l'entrée AdminNotification
+        # ET envoie l'email — un seul appel, plus de doublon en base).
         from apps.notifications.tasks import notify_admins_async
 
         notify_admins_async.delay(

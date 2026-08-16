@@ -108,10 +108,10 @@
         </h5>
         <div class="d-flex align-items-center gap-3">
           {% if event.organizer.organization_logo %}
-            <img src="{{ event.organizer.organization_logo.url }}"
+            <img src="{{ event.organizer.organization_logo.url }}" alt="Logo de {{ event.organizer.business_name|default:event.organizer.get_full_name }}"
                  width="60" height="60" class="rounded-3 object-fit-cover border" />
           {% elif event.organizer.avatar %}
-            <img src="{{ event.organizer.avatar.url }}"
+            <img src="{{ event.organizer.avatar.url }}" alt="Photo de {{ event.organizer.get_full_name }}"
                  width="60" height="60" class="rounded-circle object-fit-cover" />
           {% else %}
             <div style="width:60px; height:60px; border-radius:50%;
@@ -147,7 +147,7 @@
             <a href="{{ ev.get_absolute_url }}" class="text-decoration-none">
               <div class="ip-card p-3">
                 {% if ev.cover_image %}
-                  <img src="{{ ev.cover_image.url }}" class="rounded-2 mb-2 w-100"
+                  <img src="{{ ev.cover_image.url }}" alt="{{ event.title|default:ev.title }}" class="rounded-2 mb-2 w-100"
                        style="height:100px; object-fit:cover;" />
                 {% endif %}
                 <div class="fw-bold small text-dark">{{ ev.title }}</div>

@@ -282,3 +282,33 @@ def event_delete(request, slug):
             event.delete()
             messages.success(request, f"Événement « {title} » supprimé.")
     return redirect('events:my_events')
+
+
+@organizer_required
+def assign_scanner_agents(request, slug):
+    """
+    Permet à l'organisateur d'assigner des agents scanner (comptes avec
+    le rôle 'scanner') à cet événement précis — sans assignation, un
+    agent scanner ne peut plus scanner l'événement (voir Event.scanner_agents).
+    """
+    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+    from apps.accounts.models import CustomUser
+
+    all_agents = CustomUser.objects.filter(role='scanner', is_active=True).order_by('email')
+
+    if request.method == 'POST':
+        selected_ids = request.POST.getlist('agents')
+        event.scanner_agents.set(CustomUser.objects.filter(id__in=selected_ids, role='scanner'))
+        messages.success(
+            request,
+            f"{event.scanner_agents.count()} agent(s) assigné(s) à « {event.title} »."
+        )
+        return redirect('events:assign_scanner_agents', slug=event.slug)
+
+    assigned_ids = set(event.scanner_agents.values_list('id', flat=True))
+
+    return render(request, 'events/assign_scanner_agents.html', {
+        'event': event,
+        'all_agents': all_agents,
+        'assigned_ids': assigned_ids,
+    })

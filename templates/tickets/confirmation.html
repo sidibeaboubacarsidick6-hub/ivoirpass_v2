@@ -54,7 +54,7 @@
           </div>
           <div class="col-md-4 text-center mt-3 mt-md-0">
             {% if ticket.qr_code_image %}
-              <img src="{{ ticket.qr_code_image.url }}"
+              <img src="{{ ticket.qr_code_image.url }}" alt="QR code du billet"
                    width="120" height="120"
                    class="rounded-3 border" />
             {% endif %}

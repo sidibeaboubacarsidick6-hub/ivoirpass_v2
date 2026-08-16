@@ -4,7 +4,7 @@ Ajoute le nom de l'acheteur et la référence de commande dans les PDF.
 """
 import io
 import os
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from django.conf import settings

@@ -108,6 +108,7 @@ class ScanGuestTicketAPITests(TestCase):
             status='published',
         )
         self.ticket_type = TicketType.objects.create(event=self.event, name='Standard', price=5000, quantity=100)
+        self.event.scanner_agents.add(self.agent)
 
         order = GuestOrder.objects.create(
             first_name='Awa', last_name='Traore', email='awa@test.com',

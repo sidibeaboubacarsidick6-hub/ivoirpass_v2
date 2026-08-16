@@ -242,7 +242,7 @@
               <label class="form-label fw-semibold small">{{ form.cover_image.label }}</label>
               {% if event.cover_image %}
                 <div class="mb-2">
-                  <img src="{{ event.cover_image.url }}" class="rounded-2"
+                  <img src="{{ event.cover_image.url }}" alt="{{ event.title|default:ev.title }}" class="rounded-2"
                        style="max-height:100px;" />
                 </div>
               {% endif %}

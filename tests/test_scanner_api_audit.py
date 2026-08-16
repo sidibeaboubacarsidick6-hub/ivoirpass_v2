@@ -52,6 +52,7 @@ class ScannerMobileAPITests(TestCase):
         )
         self.buyer = CustomUser.objects.create_user(email='buyer-api@test.com', password='Pass123!')
         self.event, self.ticket = _setup_event_and_ticket(self.organizer, self.buyer)
+        self.event.scanner_agents.add(self.scanner_agent)
 
     def _post(self, ticket, event, client):
         return client.post(

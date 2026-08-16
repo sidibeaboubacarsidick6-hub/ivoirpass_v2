@@ -9,6 +9,7 @@ urlpatterns = [
     path('creer/',                 views.event_create, name='create'),
     path('<slug:slug>/modifier/',  views.event_edit,   name='edit'),
     path('<slug:slug>/supprimer/', views.event_delete, name='delete'),
+    path('<slug:slug>/agents-scanner/', views.assign_scanner_agents, name='assign_scanner_agents'),
 
     # ✅ Routes dynamiques EN DERNIER
     path('',                       views.event_list,   name='list'),

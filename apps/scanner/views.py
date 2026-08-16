@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Q
 from apps.events.models import Event
 from apps.tickets.models import Ticket, GuestTicket
 from .models import ScanSession, ScanLog
@@ -42,7 +43,13 @@ def scanner_index(request):
     elif user.is_organizer:
         events = Event.objects.filter(organizer=user, status='published').order_by('start_date')
     else:
-        events = Event.objects.filter(status='published').order_by('start_date')
+        # Agent scanner : uniquement les événements auxquels il a été
+        # explicitement assigné par l'organisateur (voir Event.scanner_agents),
+        # plus les événements de son propre compte s'il en organise aussi.
+        events = Event.objects.filter(
+            Q(scanner_agents=user) | Q(organizer=user),
+            status='published',
+        ).distinct().order_by('start_date')
 
     ongoing  = events.filter(start_date__lte=now, end_date__gte=now)
     upcoming = events.filter(start_date__gt=now)[:10]
@@ -66,8 +73,15 @@ def scan_event(request, event_id):
     """Interface principale de scan pour un événement."""
     if request.user.is_platform_admin:
         event = get_object_or_404(Event, pk=event_id)
-    else:
+    elif request.user.is_organizer:
         event = get_object_or_404(Event, pk=event_id, organizer=request.user)
+    else:
+        # Agent scanner : uniquement s'il a été explicitement assigné à
+        # cet événement par l'organisateur.
+        event = get_object_or_404(
+            Event.objects.filter(Q(scanner_agents=request.user) | Q(organizer=request.user)),
+            pk=event_id,
+        )
 
     session, _ = ScanSession.objects.get_or_create(
         agent=request.user, event=event,

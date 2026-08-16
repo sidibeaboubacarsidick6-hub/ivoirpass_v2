@@ -3,11 +3,13 @@ IvoirPass V2 — URLs principales
 """
 from apps.dashboard.admin import bceao_report_view
 from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from apps.accounts import views as accounts_views
 from apps.dashboard.admin import bceao_report_view, export_admin_csv, export_admin_excel
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
 admin.site.site_header = "IvoirPass V2 — Administration"
@@ -21,6 +23,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('allauth.urls')),
     path('redirect/', accounts_views.post_login_redirect, name='post_login'),
+
+    # Documentation API (Swagger) — réservée au staff, comme les autres
+    # vues qui exposent des détails techniques de la plateforme.
+    path('api/schema/', staff_member_required(SpectacularAPIView.as_view()), name='schema'),
+    path('api/docs/', staff_member_required(SpectacularSwaggerView.as_view(url_name='schema')), name='swagger-ui'),
 
     # Alias global home (sans namespace)
     path('', accounts_views.home, name='home'),

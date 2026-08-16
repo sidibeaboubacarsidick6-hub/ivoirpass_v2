@@ -210,11 +210,12 @@ class AdminNotificationEmailTests(TestCase):
         self.assertEqual(msg.to, ["admin@ivoirpass.test"])
         self.assertIn("Billet non reçu", msg.body)
 
-        # Bug détecté : la vue crée l'AdminNotification directement PUIS
-        # appelle notify_admins_async qui en crée une deuxième pour le même litige.
-        notif_count_after = AdminNotification.objects.filter(type='fraud_alert').count()
-        if notif_count_after == 2:
-            print("  [INFO] Doublon confirmé : 2 AdminNotification créées pour 1 seul litige "
-                  "(apps/dashboard/views.py:submit_dispute crée la notification en base "
-                  "ET appelle notify_admins_async qui en recrée une autre).")
-        self.assertGreaterEqual(notif_count_after, 1)
+        # Non-régression : une seule AdminNotification par litige (le
+        # doublon détecté précédemment — création directe ET via la tâche
+        # asynchrone — a été corrigé, il ne reste que le passage par
+        # notify_admins_async).
+        notif_count_after = AdminNotification.objects.filter(type='fraud_alert', reference__isnull=False).count()
+        self.assertEqual(
+            notif_count_after, 1,
+            f"Une seule notification attendue par litige, {notif_count_after} trouvée(s)"
+        )

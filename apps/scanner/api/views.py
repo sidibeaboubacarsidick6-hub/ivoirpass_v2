@@ -52,13 +52,25 @@ def scan_qr_api(request):
     except Event.DoesNotExist:
         return JsonResponse({'result': 'wrong_event', 'message': 'Événement introuvable'})
 
-    # Un organisateur ne peut scanner que ses propres événements
-    # (les agents scanner et admins plateforme peuvent scanner tout événement publié).
-    if agent.is_organizer and not agent.is_platform_admin and event.organizer_id != agent.id:
-        return JsonResponse(
-            {'result': 'unauthorized', 'message': "Vous n'êtes pas l'organisateur de cet événement"},
-            status=403,
-        )
+    # Un organisateur ne peut scanner que ses propres événements.
+    # Un agent scanner ne peut scanner que les événements auxquels il a
+    # été explicitement assigné (Event.scanner_agents) — avant, un agent
+    # scanner pouvait scanner n'importe quel événement publié sur toute
+    # la plateforme, ce qui est corrigé ici.
+    if agent.is_platform_admin:
+        pass  # accès total
+    elif agent.is_organizer:
+        if event.organizer_id != agent.id:
+            return JsonResponse(
+                {'result': 'unauthorized', 'message': "Vous n'êtes pas l'organisateur de cet événement"},
+                status=403,
+            )
+    else:
+        if not event.scanner_agents.filter(pk=agent.id).exists():
+            return JsonResponse(
+                {'result': 'unauthorized', 'message': "Vous n'êtes pas assigné à cet événement"},
+                status=403,
+            )
 
     session, _ = ScanSession.objects.get_or_create(
         event=event, agent=agent,

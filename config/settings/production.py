@@ -54,13 +54,22 @@ DEFAULT_FROM_EMAIL = f'IvoirPass <{config("EMAIL_HOST_USER", default="noreply@iv
 # ============================================
 import os
 
-LOG_DIR = '/var/log/ivoirpass'
+# Configurable via .env pour s'adapter à l'environnement de déploiement
+# (volume Docker monté, chemin serveur classique, etc.) — avec un repli
+# garanti dans le projet lui-même si le chemin préféré n'est pas
+# accessible, plutôt qu'un échec silencieux qui ferait perdre les logs
+# de niveau WARNING sans que personne ne s'en aperçoive.
+LOG_DIR = config('LOG_DIR', default='/var/log/ivoirpass')
 
-# Crée le dossier de logs s'il n'existe pas (ignore l'erreur si pas de permission)
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
+    if not os.access(LOG_DIR, os.W_OK):
+        raise PermissionError(f"{LOG_DIR} non accessible en écriture")
 except (PermissionError, OSError):
-    pass
+    # Repli : dossier logs/ à la racine du projet, toujours accessible
+    # à l'utilisateur qui fait tourner l'application.
+    LOG_DIR = str(BASE_DIR / 'logs')
+    os.makedirs(LOG_DIR, exist_ok=True)
 
 LOGGING = {
     'version': 1,
@@ -97,18 +106,19 @@ LOGGING = {
     },
 }
 
-# Ajouter le handler fichier uniquement si le dossier existe
-if os.path.exists(LOG_DIR) and os.access(LOG_DIR, os.W_OK):
-    LOGGING['handlers']['file'] = {
-        'level': 'WARNING',
-        'class': 'logging.handlers.RotatingFileHandler',
-        'filename': os.path.join(LOG_DIR, 'django.log'),
-        'maxBytes': 10 * 1024 * 1024,
-        'backupCount': 5,
-        'formatter': 'verbose',
-    }
-    for logger in LOGGING['loggers'].values():
-        logger['handlers'].append('file')
+# Le handler fichier est toujours actif : LOG_DIR est garanti exister et
+# être accessible en écriture à ce stade (voir le bloc plus haut, avec
+# son repli automatique vers BASE_DIR/logs en cas d'échec).
+LOGGING['handlers']['file'] = {
+    'level': 'WARNING',
+    'class': 'logging.handlers.RotatingFileHandler',
+    'filename': os.path.join(LOG_DIR, 'django.log'),
+    'maxBytes': 10 * 1024 * 1024,
+    'backupCount': 5,
+    'formatter': 'verbose',
+}
+for logger in LOGGING['loggers'].values():
+    logger['handlers'].append('file')
 
 # ============================================
 # ADMINS (emails erreurs 500)

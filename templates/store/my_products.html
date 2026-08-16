@@ -67,7 +67,7 @@
             <td class="ps-4">
               <div class="d-flex align-items-center gap-2">
                 {% if product.cover_image %}
-                  <img src="{{ product.cover_image.url }}"
+                  <img src="{{ product.cover_image.url }}" alt="{{ product.name }}"
                        width="40" height="40"
                        class="rounded-2 object-fit-cover" />
                 {% else %}

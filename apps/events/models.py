@@ -125,6 +125,19 @@ class Event(models.Model):
         limit_choices_to={'role': 'organizer'}
     )
 
+    # Agents scanner explicitement assignés à cet événement par
+    # l'organisateur. Un compte avec le rôle 'scanner' non assigné à un
+    # événement ne peut plus le scanner (voir apps/scanner/views.py et
+    # apps/scanner/api/views.py) — avant, tout agent scanner pouvait
+    # scanner n'importe quel événement publié sur la plateforme.
+    scanner_agents = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='assigned_events',
+        blank=True,
+        limit_choices_to={'role': 'scanner'},
+        verbose_name=_('agents scanner assignés'),
+    )
+
     # ============================================
     # DATES ET HORAIRES
     # ============================================

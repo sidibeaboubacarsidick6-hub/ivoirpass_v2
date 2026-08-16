@@ -147,7 +147,7 @@
       <div class="ip-card p-4 sticky-top" style="top:80px;">
         <h6 class="fw-bold mb-3 small text-uppercase text-muted">Récapitulatif</h6>
         {% if event.cover_image %}
-          <img src="{{ event.cover_image.url }}" class="rounded-3 w-100 mb-3"
+          <img src="{{ event.cover_image.url }}" alt="{{ event.title|default:ev.title }}" class="rounded-3 w-100 mb-3"
                style="height:120px; object-fit:cover;" />
         {% endif %}
         <div class="fw-bold mb-1">{{ event.title }}</div>
