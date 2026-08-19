@@ -147,7 +147,7 @@
             <a href="{{ ev.get_absolute_url }}" class="text-decoration-none">
               <div class="ip-card p-3">
                 {% if ev.cover_image %}
-                  <img src="{{ ev.cover_image.url }}" alt="{{ event.title|default:ev.title }}" class="rounded-2 mb-2 w-100"
+                  <img src="{{ ev.cover_image.url }}" alt="{{ ev.title }}" class="rounded-2 mb-2 w-100"
                        style="height:100px; object-fit:cover;" />
                 {% endif %}
                 <div class="fw-bold small text-dark">{{ ev.title }}</div>

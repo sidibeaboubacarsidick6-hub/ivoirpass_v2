@@ -102,7 +102,7 @@
             <!-- Image -->
             <div style="position:relative; height:190px; overflow:hidden;">
               {% if event.cover_image %}
-                <img src="{{ event.cover_image.url }}" alt="{{ event.title|default:ev.title }}"
+                <img src="{{ event.cover_image.url }}" alt="{{ event.title }}"
                      class="card-img-top" style="height:190px; object-fit:cover;" />
               {% else %}
                 <div style="height:190px;

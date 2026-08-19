@@ -16,7 +16,7 @@
     <div class="col-md-6 col-lg-4">
       <div class="ip-card p-3">
         {% if ticket.event.cover_image %}
-          <img src="{{ ticket.event.cover_image.url }}" alt="{{ event.title|default:ev.title }}"
+          <img src="{{ ticket.event.cover_image.url }}" alt="{{ ticket.event.title }}"
                class="rounded-2 w-100 mb-2"
                style="height:100px; object-fit:cover;" />
         {% endif %}

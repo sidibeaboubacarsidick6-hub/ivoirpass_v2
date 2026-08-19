@@ -65,7 +65,7 @@
             <td class="ps-4">
               <div class="d-flex align-items-center gap-3">
                 {% if event.cover_image %}
-                  <img src="{{ event.cover_image.url }}" alt="{{ event.title|default:ev.title }}" width="50" height="50"
+                  <img src="{{ event.cover_image.url }}" alt="{{ event.title }}" width="50" height="50"
                        class="rounded-2 object-fit-cover" />
                 {% else %}
                   <div style="width:50px; height:50px; border-radius:8px;
