@@ -335,8 +335,8 @@ def generate_guest_ticket_pdf(ticket):
             qr_img = ImageReader(ticket.qr_code_image.path)
             qr_x   = width/2 - qr_size/2
             c.drawImage(qr_img, qr_x, y - qr_size, qr_size, qr_size)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Erreur inclusion QR Code (guest, {ticket.ticket_number}): {e}")
 
     c.setFont("Helvetica-Bold", 9)
     c.setFillColor(DARK)

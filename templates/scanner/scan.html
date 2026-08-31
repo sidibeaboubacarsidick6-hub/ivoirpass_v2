@@ -326,11 +326,11 @@ async function startScanner() {
   
   html5QrCode = new Html5Qrcode("video-preview");
       // Forcer l'affichage de la vidéo
-    setTimeout(() => {
-      const video = document.getElementById('video-preview');
+        setTimeout(() => {
+      const video = document.querySelector('#video-preview video');
       if (video) {
         video.style.display = 'block';
-        video.play();
+        video.play().catch(e => console.warn('Lecture vidéo différée:', e));
       }
     }, 500);
   
