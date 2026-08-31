@@ -80,7 +80,8 @@
           </button>
 
           <!-- Dropdown organisateur -->
-          <div x-show="open"
+          <div class="ip-user-dropdown"
+               x-show="open"
                x-transition:enter="transition ease-out duration-150"
                x-transition:enter-start="opacity-0"
                x-transition:enter-end="opacity-100"
@@ -88,10 +89,6 @@
                x-transition:leave-start="opacity-100"
                x-transition:leave-end="opacity-0"
                @click.outside="open = false"
-               style="position:absolute; top:calc(100% + 8px); right:0;
-                      min-width:240px; background:white; border-radius:12px;
-                      border:1px solid #e5e7eb;
-                      box-shadow:0 10px 40px rgba(0,0,0,0.15); z-index:9999;"
                x-cloak>
 
             <!-- Header -->
