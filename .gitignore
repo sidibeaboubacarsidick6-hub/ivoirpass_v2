@@ -46,3 +46,6 @@ htmlcov/
 *.sql
 backup_avant_migration.sql
 celerybeat-schedule
+.env
+.env.preprod
+staticfiles/
