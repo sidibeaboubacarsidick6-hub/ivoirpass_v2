@@ -48,15 +48,22 @@ def dashboard_index(request):
 
     wallet, _ = OrganizerWallet.objects.get_or_create(organizer=user)
 
-    # Revenus billetterie — brut et net
+    # Revenus billetterie - brut et net (comptes connectes + invites)
+    from apps.tickets.models import GuestOrder, GuestOrderItem
     ticket_items = OrderItem.objects.filter(
         ticket_type__event__organizer=user,
         order__status=Order.Status.PAID,
     )
-    tickets_gross = ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0
-
+    guest_ticket_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=user,
+        order__status=GuestOrder.Status.PAID,
+    )
+    tickets_gross = (ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0) + (guest_ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0)
     tickets_net = 0
     for item in ticket_items.select_related('ticket_type__event'):
+        rate = float(item.ticket_type.event.commission_rate) / 100
+        tickets_net += float(item.subtotal) * (1 - rate)
+    for item in guest_ticket_items.select_related('ticket_type__event'):
         rate = float(item.ticket_type.event.commission_rate) / 100
         tickets_net += float(item.subtotal) * (1 - rate)
 
@@ -84,9 +91,11 @@ def dashboard_index(request):
     sales_by_day = []
     for i in range(29, -1, -1):
         day = now - timedelta(days=i)
-        day_sales = ticket_items.filter(
+        day_sales = (ticket_items.filter(
             order__paid_at__date=day.date()
-        ).aggregate(t=Sum('subtotal'))['t'] or 0
+        ).aggregate(t=Sum('subtotal'))['t'] or 0) + (guest_ticket_items.filter(
+            order__paid_at__date=day.date()
+        ).aggregate(t=Sum('subtotal'))['t'] or 0)
         sales_by_day.append({
             'date':   day.strftime('%d/%m'),
             'amount': int(day_sales),
@@ -167,25 +176,39 @@ def event_stats(request, slug):
         delta = (end - start).days + 1
         for i in range(min(delta, 30)):
             day     = start + timedelta(days=i)
-            day_qty = OrderItem.objects.filter(
+            from apps.tickets.models import GuestOrderItem, GuestOrder
+            day_qty = (OrderItem.objects.filter(
                 ticket_type__event=event,
                 order__status=Order.Status.PAID,
                 order__paid_at__date=day
-            ).aggregate(t=Sum('quantity'))['t'] or 0
+            ).aggregate(t=Sum('quantity'))['t'] or 0) + (GuestOrderItem.objects.filter(
+                ticket_type__event=event,
+                order__status=GuestOrder.Status.PAID,
+                order__paid_at__date=day
+            ).aggregate(t=Sum('quantity'))['t'] or 0)
             sales_timeline.append({
                 'date': day.strftime('%d/%m'),
                 'qty':  day_qty,
             })
 
     # Stats participants
+    from apps.tickets.models import GuestTicket, GuestOrder
+
     total_participants = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
+    ).count() + GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
     ).count()
 
     scanned_count = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
+        status='used'
+    ).count() + GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
         status='used'
     ).count()
 
@@ -575,12 +598,18 @@ def export_sales_csv(request):
     writer.writerow(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut', 'Commission', 'Net'])
 
     # Ventes billetterie
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user,
         order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user,
+        order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         rate = float(item.ticket_type.event.commission_rate) / 100
         net = int(float(item.subtotal) * (1 - rate))
         writer.writerow([
@@ -619,11 +648,16 @@ def export_sales_excel(request):
     ws.title = "Ventes"
     ws.append(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut (FCFA)', 'Commission', 'Net (FCFA)'])
 
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user, order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         rate = float(item.ticket_type.event.commission_rate) / 100
         ws.append([
             'Billet', item.order.order_number,
@@ -690,11 +724,16 @@ def export_sales_pdf(request):
     p.setFont("Helvetica", 8)
     total_net = 0
 
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user, order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         if y < 30*mm:
             p.showPage()
             y = height - 20*mm
