@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ivoirpass_preprod_db
+      POSTGRES_USER: ivoirpass_preprod_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - preprod_postgres_data:/var/lib/postgresql/data
+    # Pas de "ports:" ici volontairement : la base n'est joignable
+    # que depuis les autres conteneurs de ce fichier, jamais depuis
+    # l'extérieur ni même depuis l'hôte.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ivoirpass_preprod_user -d ivoirpass_preprod_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - preprod_net
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    env_file:
+      - .env.preprod
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      - preprod_logs:/var/log/ivoirpass
+    ports:
+      # Publié UNIQUEMENT sur localhost — Nginx proxy vers ce port,
+      # jamais accessible directement depuis Internet.
+      - "127.0.0.1:8100:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - preprod_net
+
+  celery:
+    build: .
+    restart: unless-stopped
+    command: celery -A config worker -l info
+    env_file:
+      - .env.preprod
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./media:/app/media
+      - preprod_logs:/var/log/ivoirpass
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - preprod_net
+
+  celery-beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A config beat -l info
+    env_file:
+      - .env.preprod
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./media:/app/media
+      - preprod_logs:/var/log/ivoirpass
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - preprod_net
+
+networks:
+  preprod_net:
+    name: preprod_ivoirpass_net
+
+volumes:
+  preprod_postgres_data:
+  preprod_logs:
