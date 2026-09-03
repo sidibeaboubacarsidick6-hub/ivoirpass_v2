@@ -8,11 +8,12 @@ DEBUG = True
 
 # Tous les hôtes autorisés en dev
 # Autorise toutes les origines ngrok
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev', 'prepod.ivoirpass.com']
 
 CSRF_TRUSTED_ORIGINS = [
     "https://revengeless-unfervent-deandrea.ngrok-free.dev" ,
     "https://*.ngrok-free.dev",
+    "https://prepod.ivoirpass.com",
 ]
 
 # CORS - uniquement les origines autorisées (dev local + ngrok)

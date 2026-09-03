@@ -22,7 +22,7 @@ ACCOUNT_ADAPTER = 'apps.accounts.adapters.NoPublicSignupAdapter'
 # ============================================
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev', 'prepodivoirpass.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev', 'prepod.ivoirpass.com']
 
 # ============================================
 # APPLICATIONS INSTALLÉES
