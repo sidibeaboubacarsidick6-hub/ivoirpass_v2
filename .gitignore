@@ -46,6 +46,10 @@ htmlcov/
 *.sql
 backup_avant_migration.sql
 celerybeat-schedule
+
 .env
 .env.preprod
 staticfiles/
+patch_billets_par_jour/
+patch_billets_par_jour.zip
+

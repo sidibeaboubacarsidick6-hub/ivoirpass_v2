@@ -24,6 +24,13 @@
           <div class="text-center text-orange mb-3">
             {{ ticket.event.start_date|date:"d F Y — H\hi" }}
           </div>
+          {% if ticket.ticket_type.valid_date %}
+          <div class="text-center mb-3">
+            <span class="badge bg-orange-subtle text-orange">
+              <i class="bi bi-calendar-day me-1"></i>Valable uniquement le {{ ticket.ticket_type.valid_date|date:"l d F Y" }}
+            </span>
+          </div>
+          {% endif %}
 
           <!-- Infos -->
           <div class="border rounded-3 p-3 mb-3 bg-light">

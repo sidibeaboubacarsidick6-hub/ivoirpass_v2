@@ -407,6 +407,16 @@ class TicketType(models.Model):
         decimal_places=0,
         help_text="0 pour gratuit"
     )
+    valid_date = models.DateField(
+        _('jour de validité'),
+        null=True,
+        blank=True,
+        help_text=(
+            "Si l'événement dure plusieurs jours et que ce ticket ne "
+            "donne accès qu'à un jour précis (ex: samedi), indiquez-le ici. "
+            "Laisser vide si le ticket est valable sur toute la durée de l'événement."
+        )
+    )
     quantity = models.PositiveIntegerField(
         _('quantité disponible'),
         default=0,
@@ -475,3 +485,16 @@ class TicketType(models.Model):
         if self.sale_end and now > self.sale_end:
             return False
         return True
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if self.valid_date and self.event_id:
+            event_start = self.event.start_date.date()
+            event_end = self.event.end_date.date()
+            if not (event_start <= self.valid_date <= event_end):
+                raise ValidationError({
+                    'valid_date': f"Cette date doit être comprise entre le "
+                                   f"{event_start.strftime('%d/%m/%Y')} et le "
+                                   f"{event_end.strftime('%d/%m/%Y')}."
+                })

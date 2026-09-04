@@ -128,8 +128,13 @@ def generate_ticket_pdf(ticket):
     p.setFont("Helvetica", 11)
     y_pos = height - 80 * mm
 
+    ticket_date = (
+        ticket.ticket_type.valid_date.strftime("%d %B %Y")
+        if ticket.ticket_type.valid_date
+        else ticket.event.start_date.strftime("%d %B %Y à %H:%M")
+    )
     details = [
-        ("📅 Date", ticket.event.start_date.strftime("%d %B %Y à %H:%M")),
+        ("📅 Date", ticket_date),
         ("📍 Lieu", ticket.event.venue_name or ticket.event.venue_city or "En ligne"),
         ("🎟️ Type", ticket.ticket_type.name),
         ("👤 Acheteur", ticket.buyer.get_full_name() or ticket.buyer.email),
@@ -299,8 +304,12 @@ def generate_guest_ticket_pdf(ticket):
     col1_x = 30*mm
     col2_x = width / 2
 
-    info_block("Date", event.start_date.strftime("%d %B %Y"), col1_x, y)
-    info_block("Heure", event.start_date.strftime("%H h %M"), col2_x, y)
+    if ticket_type.valid_date:
+        info_block("Date", ticket_type.valid_date.strftime("%d %B %Y"), col1_x, y)
+        info_block("Jour", ticket_type.valid_date.strftime("%A").capitalize(), col2_x, y)
+    else:
+        info_block("Date", event.start_date.strftime("%d %B %Y"), col1_x, y)
+        info_block("Heure", event.start_date.strftime("%H h %M"), col2_x, y)
     y -= 38
 
     info_block("Lieu", event.venue_name or event.venue_city or "—", col1_x, y)

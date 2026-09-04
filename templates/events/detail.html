@@ -191,6 +191,11 @@
               {% if ticket.is_free %}Gratuit{% else %}{{ ticket.price|floatformat:0 }} FCFA{% endif %}
             </div>
           </div>
+          {% if ticket.valid_date %}
+            <span class="badge bg-orange-subtle text-orange small mb-2">
+              <i class="bi bi-calendar-day me-1"></i>Valable le {{ ticket.valid_date|date:"l d F" }}
+            </span>
+          {% endif %}
           {% if ticket.description %}
             <div class="text-muted small mb-2">{{ ticket.description }}</div>
           {% endif %}

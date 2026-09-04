@@ -153,6 +153,11 @@ def validate_qr(request):
                     result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié.", 'red'
                 elif ticket.event.id != event.id:
                     result, message, color = ScanLog.Result.WRONG_EVENT, f"Billet pour : {ticket.event.title}", 'orange'
+                elif ticket.ticket_type.valid_date and ticket.ticket_type.valid_date != timezone.now().date():
+                    result, message, color = ScanLog.Result.WRONG_EVENT, (
+                        f"Ce billet n'est valable que le "
+                        f"{ticket.ticket_type.valid_date.strftime('%d/%m/%Y')}."
+                    ), 'orange'
                 elif ticket.status == 'void':
                     result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé.", 'red'
                 elif ticket.status == 'used':
