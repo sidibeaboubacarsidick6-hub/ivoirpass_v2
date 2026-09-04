@@ -19,6 +19,19 @@ services:
     networks:
       - preprod_net
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - preprod_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - preprod_net
+
   web:
     build: .
     restart: unless-stopped
@@ -82,3 +95,4 @@ networks:
 volumes:
   preprod_postgres_data:
   preprod_logs:
+  preprod_redis_data:

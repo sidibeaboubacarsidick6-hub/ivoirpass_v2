@@ -1,8 +1,6 @@
 Bonjour {{ user.first_name|default:user.email }},
 
-Bienvenue sur IvoirPass ! 🎉
-
-Votre compte organisateur a bien été créé. Pour l'activer, confirmez votre adresse email :
+Pour accéder à votre espace organisateur IvoirPass, merci de confirmer votre adresse email :
 
 {{ activate_url }}
 
@@ -12,6 +10,8 @@ Une fois confirmé, vous pourrez :
 ✅ Créer et publier des événements
 ✅ Vendre des produits culturels
 ✅ Accéder à votre dashboard et wallet
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email en toute sécurité.
 
 ---
 IvoirPass — La plateforme culturelle ivoirienne

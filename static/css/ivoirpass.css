@@ -669,6 +669,34 @@ a:hover { color: var(--ip-orange); }
   top: 0 !important;
 }
 
+/* Dropdown utilisateur — classe CSS */
+.ip-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+}
+
+/* Mobile — repositionner le dropdown */
+@media (max-width: 576px) {
+  .ip-user-dropdown {
+    position: fixed !important;
+    top: 50% !important;
+    left: 8px !important;
+    right: 8px !important;
+    transform: translateY(-50%) !important;
+    min-width: auto !important;
+    width: calc(100vw - 16px) !important;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
 /* ============================================
    FIN DU FICHIER
    ============================================ */

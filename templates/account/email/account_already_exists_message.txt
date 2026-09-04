@@ -1,0 +1,14 @@
+Bonjour,
+
+Vous recevez cet email car une tentative d'inscription a été faite avec l'adresse email :
+{{ email }}
+
+Or, un compte existe déjà avec cette adresse. Si vous avez oublié vos identifiants, vous pouvez réinitialiser votre mot de passe ici :
+
+{{ password_reset_url }}
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email en toute sécurité.
+
+---
+IvoirPass — La plateforme culturelle ivoirienne
+MKS Soft Technologies | Abidjan, Côte d'Ivoire
