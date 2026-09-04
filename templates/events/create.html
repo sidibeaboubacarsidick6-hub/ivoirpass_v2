@@ -402,6 +402,18 @@
                     {% endfor %}
                   {% endif %}
                 </div>
+                                <div class="col-md-4">
+                  <label class="form-label small fw-semibold">Jour de validité (optionnel)</label>
+                  {{ ticket_form.valid_date }}
+                  <div class="text-muted small mt-1">Laisser vide si valable toute la durée de l'événement</div>
+                  {% if ticket_form.valid_date.errors %}
+                    {% for error in ticket_form.valid_date.errors %}
+                    <div class="text-danger small mt-1">
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
                 <div class="col-md-4 d-flex align-items-end">
                   <div class="form-check">
                     {{ ticket_form.is_visible }}
