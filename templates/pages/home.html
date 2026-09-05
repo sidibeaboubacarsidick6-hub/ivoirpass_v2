@@ -11,8 +11,9 @@
    ============================================ */
 .hero-carousel {
   position: relative;
-  width: 340px;
-  height: 280px;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 420 / 340;
   margin: auto;
 }
 
@@ -48,13 +49,13 @@
 
 .hero-card img {
   width: 100%;
-  height: 160px;
+  height: 62%;
   object-fit: cover;
 }
 
 .hero-card-no-img {
   width: 100%;
-  height: 160px;
+  height: 62%;
   background: linear-gradient(135deg, rgba(27,122,62,0.3), rgba(244,121,32,0.3));
   display: flex;
   align-items: center;
@@ -118,8 +119,9 @@
 
 /* Placeholder si aucun événement */
 .hero-placeholder {
-  width: 340px;
-  height: 280px;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 420 / 340;
   margin: auto;
   background: rgba(255,255,255,0.06);
   border-radius: 20px;
@@ -168,7 +170,7 @@
       </div>
 
       <!-- Carousel droite -->
-      <div class="col-lg-5 d-none d-lg-block text-center">
+      <div class="col-lg-5 text-center mt-4 mt-lg-0">
 
         {% if featured_events %}
         <div x-data="heroCarousel({{ featured_events|length }})" x-init="init()">
@@ -184,7 +186,7 @@
 
                 {% if event.cover_image %}
                   <img src="{{ event.cover_image.url }}"
-                       alt="{{ event.title }}" />
+                       alt="{{ event.title }}" loading="lazy" />
                 {% else %}
                   <div class="hero-card-no-img">
                     <i class="bi {{ event.category.icon|default:'bi-calendar-event' }}"

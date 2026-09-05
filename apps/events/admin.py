@@ -3,7 +3,7 @@ IvoirPass V2 — Administration des événements
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Category, Event, TicketType
+from .models import Category, Event, TicketType, EventFAQ, EventGalleryItem, EventPartner
 
 
 @admin.register(Category)
@@ -31,6 +31,26 @@ class TicketTypeInline(admin.TabularInline):
     readonly_fields = ('quantity_sold',)
 
 
+class EventFAQInline(admin.TabularInline):
+    model = EventFAQ
+    extra = 1
+    fields = ('question', 'answer', 'order')
+
+
+class EventGalleryItemInline(admin.TabularInline):
+    model = EventGalleryItem
+    extra = 1
+    fields = ('image', 'title', 'subtitle', 'time', 'order')
+    verbose_name = "Photo galerie ou entrée de programme"
+    verbose_name_plural = "Galerie / Programme (renseigner 'heure' pour une entrée de programme)"
+
+
+class EventPartnerInline(admin.TabularInline):
+    model = EventPartner
+    extra = 1
+    fields = ('name', 'logo', 'website_url', 'order')
+
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = (
@@ -46,7 +66,7 @@ class EventAdmin(admin.ModelAdmin):
         'updated_at', 'published_at', 'cover_preview'
     )
     date_hierarchy = 'start_date'
-    inlines = [TicketTypeInline]
+    inlines = [TicketTypeInline, EventGalleryItemInline, EventFAQInline, EventPartnerInline]
 
     fieldsets = (
         ('Informations principales', {

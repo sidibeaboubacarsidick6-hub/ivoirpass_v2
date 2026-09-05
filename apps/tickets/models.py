@@ -134,6 +134,16 @@ class Order(models.Model):
         for item in self.items.all():
             item.tickets.update(status='void')
 
+        from apps.dashboard.models import AuditLog
+        from apps.dashboard.services import log_action
+        log_action(
+            action=AuditLog.Action.ORDER_REFUNDED,
+            description=f"Commande {self.order_number} remboursée" + (f" — {reason}" if reason else ""),
+            user=self.buyer,
+            obj=self,
+            metadata={'reason': reason[:200]} if reason else None,
+        )
+
         return True
 
     @property

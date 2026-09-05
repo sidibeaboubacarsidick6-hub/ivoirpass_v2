@@ -9,6 +9,8 @@ from django.utils import timezone
 from django.db import transaction
 
 from apps.events.models import Event, TicketType
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action, get_client_ip
 from .models import Order, OrderItem, Ticket
 from .utils import generate_ticket_pdf
 
@@ -160,10 +162,34 @@ def checkout(request):
                     tt.event.status = 'completed'
                     tt.event.save(update_fields=['status'])
 
+        log_action(
+            action=AuditLog.Action.ORDER_CREATED,
+            description=f"Commande {order.order_number} créée ({len(items)} ligne(s))",
+            user=request.user,
+            obj=order,
+            metadata={'total': str(total), 'is_free': all_free, 'items_count': len(items)},
+            ip_address=get_client_ip(request),
+        )
+
         save_cart(request, {})
 
         if all_free:
             order.mark_as_paid(payment_method='free', payment_reference=f"FREE-{order.order_number}")
+            log_action(
+                action=AuditLog.Action.PAYMENT_SUCCESS,
+                description=f"Commande {order.order_number} confirmée (gratuite, aucun paiement requis)",
+                user=request.user,
+                model_name='Payment', object_id=order.order_number,
+                metadata={'provider': 'free', 'amount': '0'},
+                ip_address=get_client_ip(request),
+            )
+            log_action(
+                action=AuditLog.Action.TICKET_CREATED,
+                description=f"Billets générés pour la commande gratuite {order.order_number}",
+                user=request.user,
+                obj=order,
+                ip_address=get_client_ip(request),
+            )
             # Envoi asynchrone des billets par email (commande gratuite, utilisateur connecté)
             from apps.notifications.tasks import send_ticket_email_async
             send_ticket_email_async.delay(str(order.uuid))
@@ -301,8 +327,23 @@ def guest_checkout(request, slug):
                 tt.save(update_fields=['quantity_sold'])
                 tt.event.save(update_fields=['tickets_sold'])
 
+        log_action(
+            action=AuditLog.Action.ORDER_CREATED,
+            description=f"Commande invité {order.order_number} créée ({email})",
+            obj=order,
+            metadata={'total': str(total), 'is_free': total == 0, 'email': email},
+            ip_address=get_client_ip(request),
+        )
+
         if total == 0:
             order.mark_as_paid(payment_method='free', payment_reference=f'FREE-{order.order_number}')
+            log_action(
+                action=AuditLog.Action.PAYMENT_SUCCESS,
+                description=f"Commande invité {order.order_number} confirmée (gratuite)",
+                model_name='Payment', object_id=order.order_number,
+                metadata={'provider': 'free', 'amount': '0'},
+                ip_address=get_client_ip(request),
+            )
             # Envoi asynchrone des billets par email (commande gratuite, invité)
             from apps.notifications.tasks import send_guest_ticket_email_async
             send_guest_ticket_email_async.delay(str(order.uuid))
@@ -389,6 +430,13 @@ def guest_payment_return(request, order_number):
         
         if result.get('success') and result.get('status') == 'completed':
             order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            log_action(
+                action=AuditLog.Action.PAYMENT_SUCCESS,
+                description=f"Paiement confirmé (retour) pour la commande invité {order_number}",
+                model_name='Payment', object_id=order_number,
+                metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                ip_address=get_client_ip(request),
+            )
             # Envoi asynchrone des billets par email (commande payante, invité)
             from apps.notifications.tasks import send_guest_ticket_email_async
             send_guest_ticket_email_async.delay(str(order.uuid))
@@ -416,6 +464,19 @@ def guest_webhook(request):
     import json
     from django.http import HttpResponse
     from .models import GuestOrder
+    from apps.payments.paydunya import PayDunyaService
+
+    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA — sans ce contrôle, n'importe qui
+    # pouvait POSTer un faux JSON prétendant qu'une commande invité est
+    # payée et obtenir des billets gratuits (faille corrigée ici).
+    if not PayDunyaService.verify_webhook_signature(request):
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description="Webhook invité rejeté : signature PayDunya invalide",
+            model_name='Payment', object_id='',
+            ip_address=get_client_ip(request),
+        )
+        return HttpResponse('FORBIDDEN', status=403)
 
     try:
         data = json.loads(request.body)
@@ -425,15 +486,42 @@ def guest_webhook(request):
         token = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_order_number', '')
 
+        # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR — on ne fait jamais confiance
+        # au seul contenu du POST reçu : on redemande le statut réel
+        # directement à l'API PayDunya avant de considérer le paiement
+        # comme confirmé (même logique que le webhook du flux "compte").
+        if status == 'completed' and token:
+            verify_result = PayDunyaService.verify_payment(token)
+            if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
+                log_action(
+                    action=AuditLog.Action.PAYMENT_FAILED,
+                    description=f"Webhook invité : vérification serveur-à-serveur échouée pour {order_number}",
+                    model_name='Payment', object_id=order_number,
+                    ip_address=get_client_ip(request),
+                )
+                return HttpResponse('OK', status=200)
+
         if status == 'completed' and order_number:
             try:
                 order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
                 order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                log_action(
+                    action=AuditLog.Action.PAYMENT_SUCCESS,
+                    description=f"Paiement confirmé (webhook) pour la commande invité {order_number}",
+                    model_name='Payment', object_id=order_number,
+                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                    ip_address=get_client_ip(request),
+                )
                 # Envoi asynchrone des billets par email (commande payante, invité — via webhook)
                 from apps.notifications.tasks import send_guest_ticket_email_async
                 send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
-                pass
+                log_action(
+                    action=AuditLog.Action.PAYMENT_FAILED,
+                    description=f"Webhook invité : commande {order_number} introuvable ou déjà traitée",
+                    model_name='Payment', object_id=order_number,
+                    ip_address=get_client_ip(request),
+                )
         return HttpResponse('OK', status=200)
     except:
         return HttpResponse('OK', status=200)

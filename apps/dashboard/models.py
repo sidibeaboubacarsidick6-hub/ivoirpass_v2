@@ -438,13 +438,33 @@ class AuditLog(models.Model):
         PAYOUT = 'payout', _('Reversement')
         EXPORT = 'export', _('Export données')
         SCAN = 'scan', _('Scan QR')
+        # --- Commandes ---
+        ORDER_CREATED = 'order_created', _('Commande créée')
+        ORDER_CANCELLED = 'order_cancelled', _('Commande annulée')
+        ORDER_REFUNDED = 'order_refunded', _('Commande remboursée')
+        # --- Paiements ---
+        PAYMENT_INITIATED = 'payment_initiated', _('Paiement initié')
+        PAYMENT_SUCCESS = 'payment_success', _('Paiement réussi')
+        PAYMENT_FAILED = 'payment_failed', _('Paiement échoué')
+        PAYMENT_CANCELLED = 'payment_cancelled', _('Paiement annulé')
+        # --- Billets ---
+        TICKET_CREATED = 'ticket_created', _('Billet(s) généré(s)')
+        TICKET_SCANNED = 'ticket_scanned', _('Billet scanné')
+        # --- Emails ---
+        EMAIL_SENT = 'email_sent', _('Email envoyé')
+        EMAIL_FAILED = 'email_failed', _('Email échoué')
         OTHER = 'other', _('Autre')
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='audit_logs', verbose_name=_('utilisateur'))
-    action = models.CharField(_('action'), max_length=20, choices=Action.choices)
+    action = models.CharField(_('action'), max_length=30, choices=Action.choices)
     model_name = models.CharField(_('modèle'), max_length=100, blank=True)
     object_id = models.CharField(_('ID objet'), max_length=100, blank=True)
     description = models.TextField(_('description'))
+    # Contexte structuré supplémentaire (montant, devise, moyen de paiement,
+    # raison d'échec...) — JAMAIS de secrets/tokens/mots de passe ici, voir
+    # apps.dashboard.services.log_action qui filtre les clés sensibles avant
+    # écriture.
+    metadata = models.JSONField(_('métadonnées'), null=True, blank=True)
     ip_address = models.GenericIPAddressField(_('adresse IP'), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -456,6 +476,10 @@ class AuditLog(models.Model):
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['action']),
             models.Index(fields=['-created_at']),
+            # Permet de reconstruire rapidement l'historique complet d'un
+            # objet précis (une commande, un paiement...) quel que soit son
+            # modèle d'origine (Order ou GuestOrder par exemple).
+            models.Index(fields=['model_name', 'object_id', '-created_at'], name='dashboard_auditlog_obj_idx'),
         ]
 
     def __str__(self):

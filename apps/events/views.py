@@ -86,10 +86,18 @@ def event_detail(request, slug):
         category=event.category
     ).exclude(pk=event.pk).order_by('-start_date')[:3]
 
+    gallery_items = event.gallery_items.all()
+
     return render(request, 'events/detail.html', {
         'event':          event,
         'ticket_types':   ticket_types,
         'similar_events': similar_events,
+        # Le même modèle EventGalleryItem sert les photos (sans heure) et
+        # le programme (avec heure) — on sépare ici juste pour l'affichage.
+        'program_items':  gallery_items.filter(time__isnull=False),
+        'photo_items':    gallery_items.filter(time__isnull=True),
+        'faqs':           event.faqs.all(),
+        'partners':       event.partners.all(),
     })
 
 

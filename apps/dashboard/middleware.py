@@ -2,6 +2,7 @@
 IvoirPass V2 — Middleware de journalisation d'audit
 """
 from .models import AuditLog
+from .services import log_action, get_client_ip
 
 
 class AuditLogMiddleware:
@@ -15,18 +16,17 @@ class AuditLogMiddleware:
 
         # Logger les connexions
         if request.path == '/accounts/login/' and request.method == 'POST' and request.user.is_authenticated:
-            AuditLog.objects.create(
-                user=request.user,
+            log_action(
                 action=AuditLog.Action.LOGIN,
                 description=f"Connexion de {request.user.email}",
-                ip_address=self.get_client_ip(request),
+                user=request.user,
+                ip_address=get_client_ip(request),
             )
 
         return response
 
     @staticmethod
     def get_client_ip(request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            return x_forwarded_for.split(',')[0].strip()
-        return request.META.get('REMOTE_ADDR', '')
+        # Conservé pour compatibilité si du code externe l'appelait déjà ;
+        # la logique vit désormais dans apps.dashboard.services.get_client_ip.
+        return get_client_ip(request)

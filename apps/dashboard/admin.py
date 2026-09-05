@@ -158,16 +158,27 @@ class DisputeAdmin(admin.ModelAdmin):
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ('created_at', 'user', 'action_badge', 'model_name', 'description_truncated', 'ip_address')
+    list_display = ('created_at', 'user', 'action_badge', 'model_name', 'object_id', 'description_truncated', 'ip_address')
     list_filter = ('action', 'model_name', 'user')
-    search_fields = ('user__email', 'description', 'ip_address')
-    readonly_fields = ('user', 'action', 'model_name', 'object_id', 'description', 'ip_address', 'created_at')
+    search_fields = ('user__email', 'description', 'ip_address', 'object_id')
+    readonly_fields = ('user', 'action', 'model_name', 'object_id', 'description', 'metadata', 'ip_address', 'created_at')
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
     list_per_page = 50
 
     def action_badge(self, obj):
-        colors = {'create': '#1B7A3E', 'update': '#0dcaf0', 'delete': '#dc3545', 'publish': '#1B7A3E', 'unpublish': '#6c757d', 'login': '#6c757d', 'logout': '#6c757d', 'payout': '#F47920', 'export': '#6c757d', 'scan': '#1B7A3E', 'other': '#6c757d'}
+        colors = {
+            'create': '#1B7A3E', 'update': '#0dcaf0', 'delete': '#dc3545',
+            'publish': '#1B7A3E', 'unpublish': '#6c757d', 'login': '#6c757d',
+            'logout': '#6c757d', 'payout': '#F47920', 'export': '#6c757d',
+            'scan': '#1B7A3E',
+            'order_created': '#1B7A3E', 'order_cancelled': '#dc3545', 'order_refunded': '#F47920',
+            'payment_initiated': '#0dcaf0', 'payment_success': '#1B7A3E',
+            'payment_failed': '#dc3545', 'payment_cancelled': '#6c757d',
+            'ticket_created': '#1B7A3E', 'ticket_scanned': '#1B7A3E',
+            'email_sent': '#0dcaf0', 'email_failed': '#dc3545',
+            'other': '#6c757d',
+        }
         color = colors.get(obj.action, '#6c757d')
         return format_html('<span style="background:{};color:white;padding:2px 8px;border-radius:12px;font-size:0.78rem;">{}</span>', color, obj.get_action_display())
     action_badge.short_description = "Action"

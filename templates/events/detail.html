@@ -35,6 +35,130 @@
   </div>
 </div>
 
+<!-- Compte à rebours -->
+{% if event.status == 'cancelled' %}
+  <div class="py-3" style="background:#f8d7da;">
+    <div class="container text-center fw-bold text-danger">
+      <i class="bi bi-x-octagon-fill me-2"></i>Cet événement a été annulé
+    </div>
+  </div>
+{% elif event.status == 'postponed' %}
+  <div class="py-3" style="background:#fff3cd;">
+    <div class="container text-center fw-bold" style="color:#856404;">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>Cet événement a été reporté — nouvelle date à venir
+    </div>
+  </div>
+{% else %}
+  <div id="ip-countdown-wrapper" class="py-4" style="background:linear-gradient(135deg,#0f2e1c,#1B7A3E);"
+       data-start="{{ event.start_date|date:'c' }}" data-end="{{ event.end_date|date:'c' }}">
+    <div class="container">
+      <div id="ip-countdown-ongoing" class="text-center text-white fw-bold d-none" style="font-size:1.1rem;">
+        <i class="bi bi-broadcast me-2"></i>🔴 En ce moment même !
+      </div>
+      <div id="ip-countdown-past" class="text-center text-white fw-bold d-none" style="font-size:1.1rem;">
+        <i class="bi bi-check-circle me-2"></i>Cet événement est terminé
+      </div>
+      <div id="ip-countdown-live" class="d-none">
+        <div class="text-center text-white-50 small fw-semibold mb-2" style="letter-spacing:1px; text-transform:uppercase;">
+          Début dans
+        </div>
+        <div class="d-flex justify-content-center gap-2 gap-md-4 flex-wrap">
+          <div class="ip-countdown-unit">
+            <div class="ip-countdown-number" id="ip-cd-days">--</div>
+            <div class="ip-countdown-label">Jours</div>
+          </div>
+          <div class="ip-countdown-unit">
+            <div class="ip-countdown-number" id="ip-cd-hours">--</div>
+            <div class="ip-countdown-label">Heures</div>
+          </div>
+          <div class="ip-countdown-unit">
+            <div class="ip-countdown-number" id="ip-cd-minutes">--</div>
+            <div class="ip-countdown-label">Minutes</div>
+          </div>
+          <div class="ip-countdown-unit">
+            <div class="ip-countdown-number" id="ip-cd-seconds">--</div>
+            <div class="ip-countdown-label">Secondes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <style>
+    .ip-countdown-unit {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      min-width: 78px;
+      padding: 10px 6px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .ip-countdown-number {
+      font-size: clamp(1.6rem, 5vw, 2.4rem);
+      font-weight: 800;
+      color: #fff;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .ip-countdown-label {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.65);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+    @media (max-width: 480px) {
+      .ip-countdown-unit { min-width: 64px; padding: 8px 4px; }
+    }
+  </style>
+  <script>
+    (function () {
+      const wrapper = document.getElementById('ip-countdown-wrapper');
+      if (!wrapper) return;
+      const startDate = new Date(wrapper.dataset.start);
+      const endDate = wrapper.dataset.end ? new Date(wrapper.dataset.end) : null;
+
+      const liveEl = document.getElementById('ip-countdown-live');
+      const ongoingEl = document.getElementById('ip-countdown-ongoing');
+      const pastEl = document.getElementById('ip-countdown-past');
+
+      function render() {
+        const now = new Date();
+
+        if (endDate && now > endDate) {
+          liveEl.classList.add('d-none');
+          ongoingEl.classList.add('d-none');
+          pastEl.classList.remove('d-none');
+          return;
+        }
+        if (now >= startDate) {
+          liveEl.classList.add('d-none');
+          pastEl.classList.add('d-none');
+          ongoingEl.classList.remove('d-none');
+          return;
+        }
+
+        const diff = startDate - now;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+
+        document.getElementById('ip-cd-days').textContent = String(days).padStart(2, '0');
+        document.getElementById('ip-cd-hours').textContent = String(hours).padStart(2, '0');
+        document.getElementById('ip-cd-minutes').textContent = String(minutes).padStart(2, '0');
+        document.getElementById('ip-cd-seconds').textContent = String(seconds).padStart(2, '0');
+        liveEl.classList.remove('d-none');
+        ongoingEl.classList.add('d-none');
+        pastEl.classList.add('d-none');
+      }
+
+      render();
+      setInterval(render, 1000);
+    })();
+  </script>
+{% endif %}
+
 <div class="container py-5">
   <div class="row g-4">
 
@@ -101,6 +225,46 @@
         </div>
       </div>
 
+      <!-- Programme -->
+      {% if program_items %}
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-list-check me-2"></i>Programme
+        </h5>
+        <div class="d-flex flex-column gap-3">
+          {% for item in program_items %}
+          <div class="d-flex gap-3 align-items-start">
+            <div class="fw-bold text-orange" style="min-width:70px;">{{ item.time|time:"H\hi" }}</div>
+            <div>
+              <div class="fw-semibold">{{ item.title }}</div>
+              {% if item.subtitle %}<div class="text-muted small">{{ item.subtitle }}</div>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Galerie -->
+      {% if photo_items %}
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-images me-2"></i>Galerie
+        </h5>
+        <div class="row g-2">
+          {% for item in photo_items %}
+          {% if item.image %}
+          <div class="col-4 col-md-3">
+            <img src="{{ item.image.url }}" alt="{{ item.title|default:event.title }}" loading="lazy"
+                 class="rounded-3 w-100" style="height:110px; object-fit:cover;">
+            {% if item.title %}<div class="text-muted small mt-1 text-truncate">{{ item.title }}</div>{% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Organisateur -->
       <div class="ip-card p-4 mb-4">
         <h5 class="fw-bold mb-3 text-green">
@@ -134,6 +298,51 @@
           </div>
         </div>
       </div>
+
+      <!-- FAQ -->
+      {% if faqs %}
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-question-circle me-2"></i>Questions fréquentes
+        </h5>
+        <div class="accordion" id="eventFaqAccordion">
+          {% for faq in faqs %}
+          <div class="accordion-item border-0 border-bottom">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent px-0" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#faq{{ forloop.counter }}">
+                {{ faq.question }}
+              </button>
+            </h2>
+            <div id="faq{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#eventFaqAccordion">
+              <div class="accordion-body px-0 text-muted" style="white-space:pre-line;">{{ faq.answer }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Partenaires -->
+      {% if partners %}
+      <div class="ip-card p-4 mb-4">
+        <h5 class="fw-bold mb-3 text-green">
+          <i class="bi bi-handshake me-2"></i>Partenaires
+        </h5>
+        <div class="d-flex flex-wrap align-items-center gap-4">
+          {% for partner in partners %}
+            {% if partner.website_url %}<a href="{{ partner.website_url }}" target="_blank" rel="noopener">{% endif %}
+            {% if partner.logo %}
+              <img src="{{ partner.logo.url }}" alt="{{ partner.name }}" loading="lazy"
+                   style="height:44px; object-fit:contain;" title="{{ partner.name }}">
+            {% else %}
+              <span class="text-muted small fw-semibold">{{ partner.name }}</span>
+            {% endif %}
+            {% if partner.website_url %}</a>{% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Événements similaires -->
       {% if similar_events %}
@@ -191,11 +400,6 @@
               {% if ticket.is_free %}Gratuit{% else %}{{ ticket.price|floatformat:0 }} FCFA{% endif %}
             </div>
           </div>
-          {% if ticket.valid_date %}
-            <span class="badge bg-orange-subtle text-orange small mb-2">
-              <i class="bi bi-calendar-day me-1"></i>Valable le {{ ticket.valid_date|date:"l d F" }}
-            </span>
-          {% endif %}
           {% if ticket.description %}
             <div class="text-muted small mb-2">{{ ticket.description }}</div>
           {% endif %}

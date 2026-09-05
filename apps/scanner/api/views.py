@@ -17,6 +17,8 @@ from django.db import transaction
 from apps.tickets.models import Ticket, GuestTicket
 from apps.events.models import Event
 from apps.scanner.models import ScanSession, ScanLog
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action
 
 
 def _check_agent(request):
@@ -142,6 +144,15 @@ def scan_qr_api(request):
         ticket=(ticket if ticket and not is_guest_ticket else None),
         qr_data_received=qr_data[:500],
         result=result,
+    )
+
+    log_action(
+        action=AuditLog.Action.TICKET_SCANNED,
+        description=f"Scan billet {ticket.ticket_number if ticket else qr_data[:30]} — {result} — {event.title}",
+        user=agent,
+        model_name='GuestTicket' if is_guest_ticket else 'Ticket',
+        object_id=ticket.ticket_number if ticket else '',
+        metadata={'result': result, 'event': event.title},
     )
 
     session.total_scanned += 1

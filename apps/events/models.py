@@ -498,3 +498,108 @@ class TicketType(models.Model):
                                    f"{event_start.strftime('%d/%m/%Y')} et le "
                                    f"{event_end.strftime('%d/%m/%Y')}."
                 })
+
+
+class EventFAQ(models.Model):
+    """
+    Question fréquente affichée sur la landing page d'un événement.
+    Ex: "Puis-je me faire rembourser ?", "Le lieu est-il accessible en PMR ?"
+    """
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='faqs',
+        verbose_name=_('événement')
+    )
+    question = models.CharField(_('question'), max_length=300)
+    answer = models.TextField(_('réponse'))
+    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
+    class Meta:
+        verbose_name = _('question fréquente')
+        verbose_name_plural = _('questions fréquentes')
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.question}"
+
+
+class EventGalleryItem(models.Model):
+    """
+    Élément de la galerie / programme d'un événement.
+
+    Un seul modèle sert les deux usages pour rester simple : une photo de
+    galerie (avec `image`, sans `time`) et une entrée de programme/lineup
+    (avec `time` et éventuellement `subtitle` pour l'intervenant, sans
+    `image` obligatoire) se distinguent seulement par les champs
+    renseignés, pas par des tables séparées.
+    """
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='gallery_items',
+        verbose_name=_('événement')
+    )
+    image = models.ImageField(
+        _('image'),
+        upload_to='events/gallery/%Y/%m/',
+        null=True, blank=True,
+        help_text="Laisser vide pour une entrée de programme sans visuel."
+    )
+    title = models.CharField(
+        _('titre'),
+        max_length=200,
+        blank=True,
+        help_text="Légende de la photo, ou titre du passage (ex: 'Concert live')."
+    )
+    subtitle = models.CharField(
+        _('sous-titre'),
+        max_length=200,
+        blank=True,
+        help_text="Ex: nom de l'artiste/intervenant pour une entrée de programme."
+    )
+    time = models.TimeField(
+        _('heure'),
+        null=True, blank=True,
+        help_text="Renseigné uniquement pour une entrée de programme (ex: 20h00)."
+    )
+    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
+    class Meta:
+        verbose_name = _('élément galerie / programme')
+        verbose_name_plural = _('galerie / programme')
+        ordering = ['order', 'time', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.title or self.subtitle or '#' + str(self.pk)}"
+
+    @property
+    def is_program_entry(self):
+        """Distingue une entrée de programme (a une heure) d'une simple photo."""
+        return self.time is not None
+
+
+class EventPartner(models.Model):
+    """Partenaire / sponsor affiché sur la landing page d'un événement."""
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='partners',
+        verbose_name=_('événement')
+    )
+    name = models.CharField(_('nom'), max_length=150)
+    logo = models.ImageField(
+        _('logo'),
+        upload_to='events/partners/%Y/%m/',
+        null=True, blank=True,
+    )
+    website_url = models.URLField(_('site web'), blank=True)
+    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
+    class Meta:
+        verbose_name = _('partenaire')
+        verbose_name_plural = _('partenaires')
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.name}"

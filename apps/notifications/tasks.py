@@ -55,25 +55,53 @@ def send_email_async(self, subject, html_body, text_body, recipient_list,
         raise self.retry(exc=exc)
 
 
+def _log_email_result(action_success, description_success, description_failure, obj, success, error=None):
+    """Petit raccourci pour journaliser succès/échec d'envoi d'email dans
+    AuditLog, sans jamais faire échouer la tâche Celery appelante."""
+    from apps.dashboard.models import AuditLog
+    from apps.dashboard.services import log_action
+    if success:
+        log_action(action=action_success, description=description_success, obj=obj)
+    else:
+        log_action(
+            action=AuditLog.Action.EMAIL_FAILED,
+            description=description_failure,
+            obj=obj,
+            metadata={'error': str(error)[:200]} if error else None,
+        )
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_ticket_email_async(self, order_uuid):
     """
     Envoi des billets par email après paiement — commande utilisateur connecté (Order).
     """
+    from apps.dashboard.models import AuditLog
     from apps.tickets.models import Order
     from apps.notifications.service import NotificationService
 
     try:
         order = Order.objects.get(uuid=order_uuid)
-        NotificationService.ticket_confirmed(order)
-        logger.info(f"Billets envoyés pour commande {order.order_number}")
-        return f"Tickets sent for {order.order_number}"
-
     except Order.DoesNotExist:
         logger.error(f"Commande {order_uuid} introuvable")
         return None
+
+    try:
+        NotificationService.ticket_confirmed(order)
+        logger.info(f"Billets envoyés pour commande {order.order_number}")
+        _log_email_result(
+            AuditLog.Action.EMAIL_SENT,
+            f"Email de billets envoyé pour la commande {order.order_number}",
+            None, order, success=True,
+        )
+        return f"Tickets sent for {order.order_number}"
     except Exception as exc:
-        logger.error(f"Erreur envoi billets {order_uuid}: {exc}")
+        logger.error(f"Erreur envoi billets {order.order_number}: {exc}")
+        _log_email_result(
+            None, None,
+            f"Échec de l'envoi des billets par email pour la commande {order.order_number}",
+            order, success=False, error=exc,
+        )
         raise self.retry(exc=exc)
 
 
@@ -82,20 +110,32 @@ def send_guest_ticket_email_async(self, guest_order_uuid):
     """
     Envoi des billets par email après paiement — commande invité (GuestOrder).
     """
+    from apps.dashboard.models import AuditLog
     from apps.tickets.models import GuestOrder
     from apps.notifications.service import NotificationService
 
     try:
         order = GuestOrder.objects.get(uuid=guest_order_uuid)
-        NotificationService.guest_tickets_confirmed(order)
-        logger.info(f"Billets invité envoyés pour commande {order.order_number}")
-        return f"Guest tickets sent for {order.order_number}"
-
     except GuestOrder.DoesNotExist:
         logger.error(f"Commande invité {guest_order_uuid} introuvable")
         return None
+
+    try:
+        NotificationService.guest_tickets_confirmed(order)
+        logger.info(f"Billets invité envoyés pour commande {order.order_number}")
+        _log_email_result(
+            AuditLog.Action.EMAIL_SENT,
+            f"Email de billets envoyé pour la commande invité {order.order_number}",
+            None, order, success=True,
+        )
+        return f"Guest tickets sent for {order.order_number}"
     except Exception as exc:
-        logger.error(f"Erreur envoi billets invité {guest_order_uuid}: {exc}")
+        logger.error(f"Erreur envoi billets invité {order.order_number}: {exc}")
+        _log_email_result(
+            None, None,
+            f"Échec de l'envoi des billets par email pour la commande invité {order.order_number}",
+            order, success=False, error=exc,
+        )
         raise self.retry(exc=exc)
 
 
@@ -104,20 +144,32 @@ def send_download_link_email_async(self, order_uuid):
     """
     Envoi des liens de téléchargement par email.
     """
+    from apps.dashboard.models import AuditLog
     from apps.store.models import ProductOrder
     from apps.store.utils import send_download_link_email
-    
+
     try:
         order = ProductOrder.objects.get(uuid=order_uuid)
-        send_download_link_email(order)
-        logger.info(f"Liens téléchargement envoyés pour {order.order_number}")
-        return f"Download links sent for {order.order_number}"
-        
     except ProductOrder.DoesNotExist:
         logger.error(f"Commande boutique {order_uuid} introuvable")
         return None
+
+    try:
+        send_download_link_email(order)
+        logger.info(f"Liens téléchargement envoyés pour {order.order_number}")
+        _log_email_result(
+            AuditLog.Action.EMAIL_SENT,
+            f"Email des liens de téléchargement envoyé pour la commande {order.order_number}",
+            None, order, success=True,
+        )
+        return f"Download links sent for {order.order_number}"
     except Exception as exc:
-        logger.error(f"Erreur envoi liens {order_uuid}: {exc}")
+        logger.error(f"Erreur envoi liens {order.order_number}: {exc}")
+        _log_email_result(
+            None, None,
+            f"Échec de l'envoi des liens de téléchargement pour la commande {order.order_number}",
+            order, success=False, error=exc,
+        )
         raise self.retry(exc=exc)
 
 

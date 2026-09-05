@@ -35,6 +35,19 @@ def organizer_required(view_func):
     return wrapper
 
 
+def platform_admin_required(view_func):
+    """Réservé aux comptes avec le rôle ADMIN (super-admins IvoirPass) —
+    distinct de `organizer_required`, qui laisse aussi passer les
+    organisateurs pour leurs propres pages."""
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_platform_admin:
+            messages.error(request, "Section réservée aux administrateurs IvoirPass.")
+            return redirect('accounts:profile')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
 @organizer_required
 def dashboard_index(request):
     user   = request.user
@@ -340,13 +353,14 @@ def withdraw_request(request):
 
             # Audit log — création de la demande de reversement
             from .models import AuditLog
-            AuditLog.objects.create(
-                user=request.user,
+            from .services import log_action, get_client_ip
+            log_action(
                 action=AuditLog.Action.PAYOUT,
-                model_name='WithdrawalRequest',
-                object_id=wr.reference,
                 description=f"Demande reversement {wr.amount} FCFA via {wr.get_payout_method_display()}",
-                ip_address=request.META.get('REMOTE_ADDR', ''),
+                user=request.user,
+                obj=wr,
+                metadata={'amount': str(wr.amount), 'payout_method': wr.payout_method},
+                ip_address=get_client_ip(request),
             )
 
             # Générer l'OTP
@@ -583,6 +597,64 @@ def audit_log(request):
     return render(request, 'dashboard/audit_log.html', {
         'page_obj': page_obj,
     })
+
+
+@platform_admin_required
+def audit_log_admin(request):
+    """
+    Journal d'activité global — réservé aux super-admins IvoirPass.
+    Contrairement à `audit_log` (organisateur), montre TOUTES les actions
+    de la plateforme (paiements, commandes, billets, scans, emails,
+    connexions, reversements...), avec recherche et filtres.
+    """
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+
+    logs = AuditLog.objects.select_related('user').all()
+
+    action = request.GET.get('action', '').strip()
+    if action:
+        logs = logs.filter(action=action)
+
+    model_name = request.GET.get('model', '').strip()
+    if model_name:
+        logs = logs.filter(model_name=model_name)
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        logs = logs.filter(
+            Q(description__icontains=q) |
+            Q(object_id__icontains=q) |
+            Q(user__email__icontains=q)
+        )
+
+    date_from = request.GET.get('date_from', '').strip()
+    if date_from:
+        logs = logs.filter(created_at__date__gte=date_from)
+
+    date_to = request.GET.get('date_to', '').strip()
+    if date_to:
+        logs = logs.filter(created_at__date__lte=date_to)
+
+    logs = logs.order_by('-created_at')
+
+    paginator = Paginator(logs, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'dashboard/audit_log_admin.html', {
+        'page_obj': page_obj,
+        'actions': AuditLog.Action.choices,
+        'model_names': (
+            AuditLog.objects.exclude(model_name='')
+            .order_by('model_name').values_list('model_name', flat=True).distinct()
+        ),
+        'filters': {
+            'action': action, 'model': model_name, 'q': q,
+            'date_from': date_from, 'date_to': date_to,
+        },
+    })
+
 
 @organizer_required
 def export_sales_csv(request):

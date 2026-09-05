@@ -14,6 +14,8 @@ from django.db import transaction
 from django.db.models import Q
 from apps.events.models import Event
 from apps.tickets.models import Ticket, GuestTicket
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action
 from .models import ScanSession, ScanLog
 
 
@@ -153,11 +155,6 @@ def validate_qr(request):
                     result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié.", 'red'
                 elif ticket.event.id != event.id:
                     result, message, color = ScanLog.Result.WRONG_EVENT, f"Billet pour : {ticket.event.title}", 'orange'
-                elif ticket.ticket_type.valid_date and ticket.ticket_type.valid_date != timezone.now().date():
-                    result, message, color = ScanLog.Result.WRONG_EVENT, (
-                        f"Ce billet n'est valable que le "
-                        f"{ticket.ticket_type.valid_date.strftime('%d/%m/%Y')}."
-                    ), 'orange'
                 elif ticket.status == 'void':
                     result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé.", 'red'
                 elif ticket.status == 'used':
@@ -188,6 +185,19 @@ def validate_qr(request):
         ticket=(ticket if ticket and not is_guest_ticket else None),
         qr_data_received=qr_data[:500],
         result=result,
+    )
+
+    # Entrée dans le journal d'audit global — ScanLog reste la source de
+    # détail (compteurs de session, historique fin du scanner), mais un
+    # résumé apparaît aussi ici pour que le scan soit visible dans le même
+    # journal que les paiements/commandes/emails.
+    log_action(
+        action=AuditLog.Action.TICKET_SCANNED,
+        description=f"Scan billet {ticket.ticket_number if ticket else qr_data[:30]} — {result} — {event.title}",
+        user=request.user,
+        model_name='GuestTicket' if is_guest_ticket else 'Ticket',
+        object_id=ticket.ticket_number if ticket else '',
+        metadata={'result': result, 'event': event.title},
     )
 
     session.total_scanned += 1
