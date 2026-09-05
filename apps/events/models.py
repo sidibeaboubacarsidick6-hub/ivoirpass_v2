@@ -515,6 +515,7 @@ class EventFAQ(models.Model):
     answer = models.TextField(_('réponse'))
     order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
 
+
     class Meta:
         verbose_name = _('question fréquente')
         verbose_name_plural = _('questions fréquentes')
@@ -563,7 +564,12 @@ class EventGalleryItem(models.Model):
         null=True, blank=True,
         help_text="Renseigné uniquement pour une entrée de programme (ex: 20h00)."
     )
-    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+    order = models.PositiveIntegerField(
+        _('ordre d\'affichage'),
+        default=0,
+        blank=True
+    )
+
 
     class Meta:
         verbose_name = _('élément galerie / programme')
@@ -595,6 +601,7 @@ class EventPartner(models.Model):
     )
     website_url = models.URLField(_('site web'), blank=True)
     order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
 
     class Meta:
         verbose_name = _('partenaire')

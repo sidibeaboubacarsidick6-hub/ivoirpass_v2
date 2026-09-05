@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from .models import Event, Category, TicketType
-from .forms import EventForm, TicketTypeFormSet
+from .forms import EventForm, TicketTypeFormSet, EventFAQFormSet, EventGalleryItemFormSet, EventPartnerFormSet
 
 
 # ============================================
@@ -137,14 +137,21 @@ def my_events(request):
 @organizer_required
 def event_create(request):
     """Créer un nouvel événement."""
-    form    = EventForm()
-    formset = TicketTypeFormSet()
+    form            = EventForm()
+    formset         = TicketTypeFormSet()
+    faq_formset     = EventFAQFormSet()
+    gallery_formset = EventGalleryItemFormSet()
+    partner_formset = EventPartnerFormSet()
 
     if request.method == 'POST':
-        form    = EventForm(request.POST, request.FILES)
-        formset = TicketTypeFormSet(request.POST)
+        form            = EventForm(request.POST, request.FILES)
+        formset         = TicketTypeFormSet(request.POST)
+        faq_formset     = EventFAQFormSet(request.POST)
+        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES)
+        partner_formset = EventPartnerFormSet(request.POST, request.FILES)
 
-        if form.is_valid() and formset.is_valid():
+        if (form.is_valid() and formset.is_valid() and faq_formset.is_valid()
+                and gallery_formset.is_valid() and partner_formset.is_valid()):
             # ============================================
             # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
             # ============================================
@@ -167,8 +174,11 @@ def event_create(request):
                         "votre profil avant de publier un événement payant."
                     )
                     return render(request, 'events/create.html', {
-                        'form':    form,
-                        'formset': formset,
+                        'form':            form,
+                        'formset':         formset,
+                        'faq_formset':     faq_formset,
+                        'gallery_formset': gallery_formset,
+                        'partner_formset': partner_formset,
                         'action':  'Créer',
                     })
 
@@ -178,6 +188,13 @@ def event_create(request):
 
             formset.instance = event
             formset.save()
+
+            faq_formset.instance = event
+            faq_formset.save()
+            gallery_formset.instance = event
+            gallery_formset.save()
+            partner_formset.instance = event
+            partner_formset.save()
 
             prices = event.ticket_types.values_list('price', flat=True)
             if prices:
@@ -190,8 +207,11 @@ def event_create(request):
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'events/create.html', {
-        'form':    form,
-        'formset': formset,
+        'form':            form,
+        'formset':         formset,
+        'faq_formset':     faq_formset,
+        'gallery_formset': gallery_formset,
+        'partner_formset': partner_formset,
         'action':  'Créer',
     })
 
@@ -200,14 +220,21 @@ def event_create(request):
 def event_edit(request, slug):
     """Modifier un événement existant."""
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
-    form    = EventForm(instance=event)
-    formset = TicketTypeFormSet(instance=event)
+    form            = EventForm(instance=event)
+    formset         = TicketTypeFormSet(instance=event)
+    faq_formset     = EventFAQFormSet(instance=event)
+    gallery_formset = EventGalleryItemFormSet(instance=event)
+    partner_formset = EventPartnerFormSet(instance=event)
 
     if request.method == 'POST':
-        form    = EventForm(request.POST, request.FILES, instance=event)
-        formset = TicketTypeFormSet(request.POST, instance=event)
+        form            = EventForm(request.POST, request.FILES, instance=event)
+        formset         = TicketTypeFormSet(request.POST, instance=event)
+        faq_formset     = EventFAQFormSet(request.POST, instance=event)
+        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES, instance=event)
+        partner_formset = EventPartnerFormSet(request.POST, request.FILES, instance=event)
 
-        if form.is_valid() and formset.is_valid():
+        if (form.is_valid() and formset.is_valid() and faq_formset.is_valid()
+                and gallery_formset.is_valid() and partner_formset.is_valid()):
             # ============================================
             # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
             # ============================================
@@ -228,14 +255,20 @@ def event_edit(request, slug):
                         "avant de publier un événement payant."
                     )
                     return render(request, 'events/create.html', {
-                        'form':    form,
-                        'formset': formset,
+                        'form':            form,
+                        'formset':         formset,
+                        'faq_formset':     faq_formset,
+                        'gallery_formset': gallery_formset,
+                        'partner_formset': partner_formset,
                         'event':   event,
                         'action':  'Modifier',
                     })
 
             event = form.save()
             formset.save()
+            faq_formset.save()
+            gallery_formset.save()
+            partner_formset.save()
 
             prices = event.ticket_types.values_list('price', flat=True)
             if prices:
@@ -248,8 +281,11 @@ def event_edit(request, slug):
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'events/create.html', {
-        'form':    form,
-        'formset': formset,
+        'form':            form,
+        'formset':         formset,
+        'faq_formset':     faq_formset,
+        'gallery_formset': gallery_formset,
+        'partner_formset': partner_formset,
         'event':   event,
         'action':  'Modifier',
     })

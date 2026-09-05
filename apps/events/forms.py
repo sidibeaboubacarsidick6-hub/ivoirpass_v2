@@ -3,7 +3,7 @@ IvoirPass V2 — Formulaires des événements
 """
 from django import forms
 from django.forms import inlineformset_factory
-from .models import Event, TicketType, Category
+from .models import Event, TicketType, Category, EventFAQ, EventGalleryItem, EventPartner
 
 
 class EventForm(forms.ModelForm):
@@ -192,6 +192,90 @@ TicketTypeFormSet = inlineformset_factory(
         'valid_date': forms.DateInput(
             attrs={'class': 'form-control form-control-sm', 'type': 'date'},
         ),
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+
+# Formset FAQ (facultatif — l'organisateur peut n'en ajouter aucune)
+EventFAQFormSet = inlineformset_factory(
+    Event,
+    EventFAQ,
+    fields=['question', 'answer', 'order'],
+    widgets={
+        'question': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Ex: Puis-je me faire rembourser ?',
+        }),
+        'answer': forms.Textarea(attrs={
+            'class': 'form-control form-control-sm',
+            'rows': 2,
+            'placeholder': 'Réponse à la question',
+        }),
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+# Formset Galerie / Programme (facultatif — un seul modèle sert les deux usages :
+# renseigner "heure" pour une entrée de programme, la laisser vide pour une photo)
+EventGalleryItemFormSet = inlineformset_factory(
+    Event,
+    EventGalleryItem,
+    fields=['image', 'title', 'subtitle', 'time', 'order'],
+    widgets={
+        'image': forms.FileInput(attrs={
+            'class': 'form-control form-control-sm',
+            'accept': 'image/*',
+        }),
+        'title': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': "Légende photo ou titre du passage",
+        }),
+        'subtitle': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': "Nom de l'artiste/intervenant (programme uniquement)",
+        }),
+        'time': forms.TimeInput(
+            attrs={'class': 'form-control form-control-sm', 'type': 'time'},
+            format='%H:%M',
+        ),
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+# Formset Partenaires (facultatif)
+EventPartnerFormSet = inlineformset_factory(
+    Event,
+    EventPartner,
+    fields=['name', 'logo', 'website_url', 'order'],
+    widgets={
+        'name': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Nom du partenaire',
+        }),
+        'logo': forms.FileInput(attrs={
+            'class': 'form-control form-control-sm',
+            'accept': 'image/*',
+        }),
+        'website_url': forms.URLInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'https://...',
+        }),
         'order': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
             'min': '0',

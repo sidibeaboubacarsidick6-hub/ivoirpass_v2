@@ -439,6 +439,156 @@
           </button>
         </div>
 
+        <!-- Section FAQ (facultatif) -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-question-circle me-2 text-green"></i>
+            Questions fréquentes
+            <span class="text-muted fw-normal">(optionnel)</span>
+          </h6>
+
+          {{ faq_formset.management_form }}
+
+          <div id="faq-formset">
+            {% for faq_form in faq_formset %}
+            <div class="extra-form border rounded-3 p-3 mb-3 bg-light">
+              {{ faq_form.id }}
+              <div class="row g-2">
+                <div class="col-md-8">
+                  <label class="form-label small fw-semibold">Question</label>
+                  {{ faq_form.question }}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Ordre</label>
+                  {{ faq_form.order }}
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                  {% if faq_form.instance.pk %}
+                  <div class="form-check">
+                    {{ faq_form.DELETE }}
+                    <label class="form-check-label text-danger small">Supprimer</label>
+                  </div>
+                  {% endif %}
+                </div>
+                <div class="col-12">
+                  <label class="form-label small fw-semibold">Réponse</label>
+                  {{ faq_form.answer }}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn btn-outline-success btn-sm mt-2"
+                  onclick="addExtraForm('faq-formset', 'faqs')">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter une question
+          </button>
+        </div>
+
+        <!-- Section Galerie / Programme (facultatif) -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-images me-2 text-green"></i>
+            Galerie / Programme
+            <span class="text-muted fw-normal">(optionnel)</span>
+          </h6>
+          <div class="text-muted small mb-3">
+            Ajoutez des photos, ou renseignez une heure pour créer une entrée de programme (ex: "20h00 — Concert live").
+          </div>
+
+          {{ gallery_formset.management_form }}
+
+          <div id="gallery-formset">
+            {% for gallery_form in gallery_formset %}
+            <div class="extra-form border rounded-3 p-3 mb-3 bg-light">
+              {{ gallery_form.id }}
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold">Image</label>
+                  {{ gallery_form.image }}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Titre / légende</label>
+                  {{ gallery_form.title }}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Intervenant (programme)</label>
+                  {{ gallery_form.subtitle }}
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold">Heure (programme)</label>
+                  {{ gallery_form.time }}
+                </div>
+                <div class="col-md-1">
+                  <label class="form-label small fw-semibold">Ordre</label>
+                  {{ gallery_form.order }}
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                  {% if gallery_form.instance.pk %}
+                  <div class="form-check">
+                    {{ gallery_form.DELETE }}
+                    <label class="form-check-label text-danger small">Supprimer</label>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn btn-outline-success btn-sm mt-2"
+                  onclick="addExtraForm('gallery-formset', 'gallery_items')">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter une photo / entrée de programme
+          </button>
+        </div>
+
+        <!-- Section Partenaires (facultatif) -->
+        <div class="ip-card p-4 mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-handshake me-2 text-green"></i>
+            Partenaires
+            <span class="text-muted fw-normal">(optionnel)</span>
+          </h6>
+
+          {{ partner_formset.management_form }}
+
+          <div id="partner-formset">
+            {% for partner_form in partner_formset %}
+            <div class="extra-form border rounded-3 p-3 mb-3 bg-light">
+              {{ partner_form.id }}
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold">Nom</label>
+                  {{ partner_form.name }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold">Logo</label>
+                  {{ partner_form.logo }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold">Site web</label>
+                  {{ partner_form.website_url }}
+                </div>
+                <div class="col-md-1">
+                  <label class="form-label small fw-semibold">Ordre</label>
+                  {{ partner_form.order }}
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                  {% if partner_form.instance.pk %}
+                  <div class="form-check">
+                    {{ partner_form.DELETE }}
+                    <label class="form-check-label text-danger small">Suppr.</label>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn btn-outline-success btn-sm mt-2"
+                  onclick="addExtraForm('partner-formset', 'partners')">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter un partenaire
+          </button>
+        </div>
+
       </div>
 
       <!-- Colonne latérale : statut -->
@@ -504,7 +654,7 @@
           </div>
 
           <!-- Bloc d'erreurs global amélioré -->
-          {% if form.errors or formset.errors %}
+          {% if form.errors or formset.errors or faq_formset.errors or gallery_formset.errors or partner_formset.errors %}
           <div class="alert ip-alert alert-danger mt-3 mb-0">
             <i class="bi bi-exclamation-triangle me-2"></i>
             <strong>Erreurs à corriger :</strong>
@@ -518,6 +668,27 @@
                 {% for field, errors in form_errors.items %}
                   {% for error in errors %}
                   <li>Ticket — {{ field|title }} : {{ error }}</li>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+              {% for form_errors in faq_formset.errors %}
+                {% for field, errors in form_errors.items %}
+                  {% for error in errors %}
+                  <li>FAQ — {{ field|title }} : {{ error }}</li>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+              {% for form_errors in gallery_formset.errors %}
+                {% for field, errors in form_errors.items %}
+                  {% for error in errors %}
+                  <li>Galerie/Programme — {{ field|title }} : {{ error }}</li>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+              {% for form_errors in partner_formset.errors %}
+                {% for field, errors in form_errors.items %}
+                  {% for error in errors %}
+                  <li>Partenaire — {{ field|title }} : {{ error }}</li>
                   {% endfor %}
                 {% endfor %}
               {% endfor %}
@@ -562,6 +733,32 @@ function addTicketForm() {
   }
 
   formset.appendChild(newForm);
+  totalForms.value = formCount + 1;
+}
+
+function addExtraForm(containerId, prefix) {
+  const container  = document.getElementById(containerId);
+  const totalForms = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
+  const formCount  = parseInt(totalForms.value);
+
+  const firstForm = container.querySelector('.extra-form');
+  const newForm   = firstForm.cloneNode(true);
+
+  newForm.innerHTML = newForm.innerHTML.replace(
+    new RegExp(`${prefix}-\\d+`, 'g'),
+    `${prefix}-${formCount}`
+  );
+
+  newForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(el => {
+    if (el.type === 'checkbox') { el.checked = false; } else { el.value = ''; }
+  });
+
+  const deleteCheck = newForm.querySelector('[id*="DELETE"]');
+  if (deleteCheck) {
+    deleteCheck.closest('.form-check')?.remove();
+  }
+
+  container.appendChild(newForm);
   totalForms.value = formCount + 1;
 }
 </script>
