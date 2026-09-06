@@ -28,6 +28,7 @@ def save_cart(request, cart):
 
 
 def add_to_cart(request, ticket_type_id):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     ticket_type = get_object_or_404(TicketType, pk=ticket_type_id)
     event = ticket_type.event
 
@@ -65,6 +66,7 @@ def add_to_cart(request, ticket_type_id):
 
 
 def remove_from_cart(request, ticket_type_id):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     cart = get_cart(request)
     key = str(ticket_type_id)
     if key in cart:
@@ -75,6 +77,7 @@ def remove_from_cart(request, ticket_type_id):
 
 
 def cart_view(request):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     cart = get_cart(request)
     items = []
     total = 0
@@ -96,6 +99,7 @@ def cart_view(request):
 
 @login_required
 def checkout(request):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     cart = get_cart(request)
 
     if not cart:
@@ -211,6 +215,7 @@ def checkout(request):
 
 
 def order_confirmation(request, order_number):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     order = get_object_or_404(Order, order_number=order_number, buyer=request.user, status=Order.Status.PAID)
     tickets = Ticket.objects.filter(order_item__order=order)
     return render(request, 'tickets/confirmation.html', {'order': order, 'tickets': tickets})
@@ -218,6 +223,7 @@ def order_confirmation(request, order_number):
 
 @login_required
 def my_tickets(request):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     tickets = Ticket.objects.filter(
         order_item__order__buyer=request.user,
         order_item__order__status=Order.Status.PAID
@@ -236,6 +242,7 @@ def my_tickets(request):
 
 @login_required
 def ticket_detail(request, ticket_number):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     ticket = get_object_or_404(
         Ticket.objects.select_related(
             'order_item__ticket_type__event',
@@ -248,6 +255,7 @@ def ticket_detail(request, ticket_number):
 
 @login_required
 def download_ticket_pdf(request, ticket_number):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     ticket = get_object_or_404(Ticket, ticket_number=ticket_number, order_item__order__buyer=request.user)
     pdf_bytes = generate_ticket_pdf(ticket)
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
