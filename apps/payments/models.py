@@ -4,6 +4,7 @@ IvoirPass V2 — Modèle de transaction de paiement
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from django.db.models import Q
 
 
 class Payment(models.Model):
@@ -28,12 +29,22 @@ class Payment(models.Model):
         DJAMO    = 'djamo',    'Djamo'
         CARD     = 'card',     'Carte Bancaire'
 
-    # Liaison commande
+    # Liaison commande — l'une des deux FK est renseignée, jamais les deux
+    # (contrainte en base ci-dessous). "order" pour les comptes (flux
+    # historique), "guest_order" pour les achats sans compte (flux actuel).
     order = models.ForeignKey(
         'tickets.Order',
         on_delete=models.CASCADE,
         related_name='payments',
-        verbose_name=_('commande')
+        verbose_name=_('commande'),
+        null=True, blank=True,
+    )
+    guest_order = models.ForeignKey(
+        'tickets.GuestOrder',
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name=_('commande invité'),
+        null=True, blank=True,
     )
 
     # Identifiants PayDunya
@@ -91,11 +102,19 @@ class Payment(models.Model):
         indexes = [
             models.Index(fields=['paydunya_token']),
             models.Index(fields=['order', 'status']),
+            models.Index(fields=['guest_order', 'status']),
             models.Index(fields=['status']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(order__isnull=False, guest_order__isnull=True) |
+                    Q(order__isnull=True, guest_order__isnull=False)
+                ),
+                name='payment_exactly_one_of_order_or_guest_order',
+            ),
         ]
 
     def __str__(self):
-        return (
-            f"Paiement {self.order.order_number} — "
-            f"{self.amount} FCFA ({self.get_status_display()})"
-        )
+        ref = self.order.order_number if self.order_id else self.guest_order.order_number
+        return f"Paiement {ref} — {self.amount} FCFA ({self.get_status_display()})"

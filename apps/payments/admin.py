@@ -8,22 +8,29 @@ from .models import Payment
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = (
-        'order', 'amount', 'provider',
+        'commande', 'amount', 'provider',
         'status', 'paydunya_token', 'created_at'
     )
     list_filter  = ('status', 'provider', 'currency')
     search_fields = (
         'order__order_number',
+        'guest_order__order_number',
         'paydunya_token',
-        'order__buyer__email'
+        'order__buyer__email',
+        'guest_order__email',
     )
     readonly_fields = (
         'paydunya_token', 'paydunya_invoice_token',
         'raw_response', 'created_at', 'updated_at', 'completed_at'
     )
+
+    def commande(self, obj):
+        return obj.order.order_number if obj.order_id else obj.guest_order.order_number
+    commande.short_description = 'Commande'
+
     fieldsets = (
         ('Commande', {
-            'fields': ('order', 'amount', 'currency')
+            'fields': ('order', 'guest_order', 'amount', 'currency')
         }),
         ('PayDunya', {
             'fields': (

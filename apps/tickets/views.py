@@ -371,6 +371,18 @@ def guest_payment_initiate(request, order_number):
     if order.status == GuestOrder.Status.PAID:
         return redirect('tickets:guest_confirmation', order_number=order_number)
 
+    from apps.payments.models import Payment
+    payment, _created = Payment.objects.get_or_create(
+        guest_order=order,
+        defaults={'amount': order.total, 'provider': Payment.Provider.PAYDUNYA},
+    )
+    if payment.status != Payment.Status.PENDING:
+        # Nouvelle tentative après un échec/annulation précédent — on
+        # réutilise la même ligne plutôt que d'en créer une nouvelle.
+        payment.status = Payment.Status.PENDING
+        payment.amount = order.total
+        payment.save(update_fields=['status', 'amount'])
+
     base_url = settings.PAYDUNYA_BASE_URL
     return_url = f"{base_url}/billets/guest/retour/{order.order_number}/"
     cancel_url = f"{base_url}/billets/guest/annulation/{order.order_number}/"
@@ -409,10 +421,17 @@ def guest_payment_initiate(request, order_number):
             request.session[f'guest_paydunya_token_{order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
+            payment.paydunya_token = token
+            payment.raw_response = data
+            payment.save(update_fields=['paydunya_token', 'raw_response'])
             return redirect(data['response_text'])
         else:
+            payment.status = Payment.Status.FAILED
+            payment.save(update_fields=['status'])
             messages.error(request, f"Erreur PayDunya : {data.get('response_text')}")
     except Exception as e:
+        payment.status = Payment.Status.FAILED
+        payment.save(update_fields=['status'])
         messages.error(request, f"Erreur connexion : {e}")
 
     return redirect('events:detail', slug=order.guest_items.first().ticket_type.event.slug)
@@ -438,6 +457,12 @@ def guest_payment_return(request, order_number):
         
         if result.get('success') and result.get('status') == 'completed':
             order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            from apps.payments.models import Payment
+            Payment.objects.filter(guest_order=order).update(
+                status=Payment.Status.COMPLETED,
+                completed_at=timezone.now(),
+                raw_response=result,
+            )
             log_action(
                 action=AuditLog.Action.PAYMENT_SUCCESS,
                 description=f"Paiement confirmé (retour) pour la commande invité {order_number}",
@@ -513,6 +538,12 @@ def guest_webhook(request):
             try:
                 order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
                 order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                from apps.payments.models import Payment
+                Payment.objects.filter(guest_order=order).update(
+                    status=Payment.Status.COMPLETED,
+                    completed_at=timezone.now(),
+                    raw_response=data,
+                )
                 log_action(
                     action=AuditLog.Action.PAYMENT_SUCCESS,
                     description=f"Paiement confirmé (webhook) pour la commande invité {order_number}",
