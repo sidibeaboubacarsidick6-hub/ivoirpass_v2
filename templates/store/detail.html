@@ -339,7 +339,7 @@
                     {% endif %}
 
                     <!-- Formulaire d'achat pour utilisateur authentifié -->
-                    {% if user.is_authenticated %}
+                    {% if False %}{# Achat compte désactivé — tunnel invité uniquement, voir {% else %} ci-dessous #}
                         <form method="POST" action="{% url 'store:buy' product.slug %}">
                             {% csrf_token %}
                             

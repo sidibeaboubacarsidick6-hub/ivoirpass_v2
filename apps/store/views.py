@@ -18,6 +18,8 @@ from django.views.decorators.http import require_POST
 from .models import Product, ProductCategory, ProductOrder, DownloadLink
 from .models import GuestProductOrder, GuestDownloadLink
 from .forms import ProductForm
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action, get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,7 @@ def store_detail(request, slug):
 
 @login_required
 def buy_product(request, slug):
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     product = get_object_or_404(
         Product,
         slug=slug,
@@ -243,6 +246,7 @@ def buy_product(request, slug):
 @login_required
 def store_payment_initiate(request, order_number):
     """Initie le paiement PayDunya pour une commande boutique."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     order = get_object_or_404(
         ProductOrder,
         order_number=order_number,
@@ -334,6 +338,7 @@ def store_payment_initiate(request, order_number):
 @login_required
 def store_payment_status(request, order_number):
     """Vérifie le statut du paiement (AJAX)."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     from apps.payments.paydunya import PayDunyaService
     
     order = get_object_or_404(
@@ -414,6 +419,7 @@ def store_payment_status(request, order_number):
 @login_required
 def store_payment_return(request, order_number):
     """Retour après paiement PayDunya boutique."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     from apps.payments.paydunya import PayDunyaService
 
     order = get_object_or_404(
@@ -509,6 +515,7 @@ def store_payment_return(request, order_number):
 @login_required
 def store_payment_cancel(request, order_number):
     """Annulation paiement boutique."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     order = get_object_or_404(
         ProductOrder,
         order_number=order_number,
@@ -523,6 +530,7 @@ def store_payment_cancel(request, order_number):
 @login_required
 def my_orders(request):
     """Liste des commandes de l'acheteur."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     orders = ProductOrder.objects.filter(
         buyer=request.user
     ).select_related('product').order_by('-created_at')
@@ -535,6 +543,7 @@ def my_orders(request):
 @login_required
 def order_detail(request, order_number):
     """Détail d'une commande boutique."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     order = get_object_or_404(
         ProductOrder,
         order_number=order_number,
@@ -551,6 +560,7 @@ def order_detail(request, order_number):
 @login_required
 def download_file(request, token):
     """Téléchargement sécurisé avec filigrane numérique."""
+    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
     link = get_object_or_404(DownloadLink, token=token)
 
     if link.order.buyer != request.user:
@@ -882,6 +892,14 @@ def guest_buy_product(request, slug):
             order.delivery_instructions = request.POST.get('delivery_instructions', '').strip()
             order.save()
 
+        log_action(
+            action=AuditLog.Action.ORDER_CREATED,
+            description=f"Commande boutique invité {order.order_number} créée ({email})",
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={'total': str(total), 'product': product.name, 'quantity': quantity},
+            ip_address=get_client_ip(request),
+        )
+
         return redirect('store:guest_payment', order_number=order.order_number)
 
     return render(request, 'store/guest_checkout.html', {'product': product})
@@ -951,11 +969,32 @@ def guest_store_payment_initiate(request, order_number):
             request.session[f'guest_store_token_{order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
+            log_action(
+                action=AuditLog.Action.PAYMENT_INITIATED,
+                description=f"Paiement initié pour la commande boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'amount': str(order.total), 'provider': 'paydunya'},
+                ip_address=get_client_ip(request),
+            )
             return redirect(data['response_text'])
         else:
+            log_action(
+                action=AuditLog.Action.PAYMENT_FAILED,
+                description=f"Échec d'initiation du paiement boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'reason': str(data.get('response_text', ''))[:200]},
+                ip_address=get_client_ip(request),
+            )
             messages.error(request, f"Erreur PayDunya : {data.get('response_text')}")
 
     except Exception as e:
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Erreur connexion PayDunya (boutique invité) {order_number}",
+            model_name='GuestProductOrder', object_id=order_number,
+            metadata={'reason': str(e)[:200]},
+            ip_address=get_client_ip(request),
+        )
         messages.error(request, f"Erreur connexion : {e}")
 
     return redirect('store:detail', slug=order.product.slug)
@@ -982,6 +1021,13 @@ def guest_store_payment_return(request, order_number):
 
         if result.get('success') and status == 'completed':
             order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            log_action(
+                action=AuditLog.Action.PAYMENT_SUCCESS,
+                description=f"Paiement confirmé (retour) pour la commande boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                ip_address=get_client_ip(request),
+            )
 
             try:
                 from apps.notifications.service import NotificationService
@@ -1018,6 +1064,12 @@ def guest_store_webhook(request):
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Guest store webhook rejeté : signature PayDunya invalide")
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description="Webhook boutique invité rejeté : signature PayDunya invalide",
+            model_name='GuestProductOrder', object_id='',
+            ip_address=get_client_ip(request),
+        )
         return HttpResponse('FORBIDDEN', status=403)
 
     try:
@@ -1042,10 +1094,22 @@ def guest_store_webhook(request):
                     status=GuestProductOrder.Status.PENDING
                 )
                 order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                log_action(
+                    action=AuditLog.Action.PAYMENT_SUCCESS,
+                    description=f"Paiement confirmé (webhook) pour la commande boutique invité {order_number}",
+                    model_name='GuestProductOrder', object_id=order_number,
+                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                    ip_address=get_client_ip(request),
+                )
                 from apps.notifications.service import NotificationService
                 NotificationService.guest_store_order_confirmed(order)
             except GuestProductOrder.DoesNotExist:
-                pass
+                log_action(
+                    action=AuditLog.Action.PAYMENT_FAILED,
+                    description=f"Webhook boutique invité : commande {order_number} introuvable ou déjà traitée",
+                    model_name='GuestProductOrder', object_id=order_number,
+                    ip_address=get_client_ip(request),
+                )
 
         return HttpResponse('OK', status=200)
     except Exception as e:
@@ -1094,5 +1158,11 @@ def guest_store_payment_cancel(request, order_number):
     order = get_object_or_404(GuestProductOrder, order_number=order_number)
     order.status = GuestProductOrder.Status.CANCELLED
     order.save(update_fields=['status'])
+    log_action(
+        action=AuditLog.Action.PAYMENT_CANCELLED,
+        description=f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}",
+        model_name='GuestProductOrder', object_id=order_number,
+        ip_address=get_client_ip(request),
+    )
     messages.warning(request, "Commande annulée.")
     return redirect('store:detail', slug=order.product.slug)
