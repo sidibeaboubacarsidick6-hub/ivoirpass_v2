@@ -165,20 +165,10 @@
           </div>
           {% endif %}
           <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label small">Pièce d'identité</label>
               {{ organizer_form.kyc_identity_doc }}
               {% if user.kyc_identity_doc %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Justificatif de domicile</label>
-              {{ organizer_form.kyc_proof_of_address }}
-              {% if user.kyc_proof_of_address %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Document professionnel</label>
-              {{ organizer_form.kyc_business_doc }}
-              {% if user.kyc_business_doc %}<small class="text-green">✅ Déjà fourni</small>{% endif %}
             </div>
           </div>
         </div>
