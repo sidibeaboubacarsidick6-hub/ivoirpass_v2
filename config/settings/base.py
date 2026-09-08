@@ -356,6 +356,8 @@ PAYDUNYA_MODE        = config('PAYDUNYA_MODE',         default='test')
 PAYDUNYA_BASE_URL    = config('PAYDUNYA_BASE_URL',     default='http://localhost:8000')
 
 # URL de l'API PayDunya selon le mode
+PAYDUNYA_DISBURSEMENT_API_BASE = config('PAYDUNYA_DISBURSEMENT_API_BASE', default='https://app.paydunya.com/api/v2')
+
 PAYDUNYA_API_BASE = (
     'https://app.paydunya.com/sandbox-api/v1'
     if PAYDUNYA_MODE == 'test'

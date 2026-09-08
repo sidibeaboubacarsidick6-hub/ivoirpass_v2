@@ -98,24 +98,57 @@ class OrganizerWallet(models.Model):
             reference   = reference,
         )
 
-    def debit(self, amount, description='', reference=''):
-        """Débite le wallet lors d'un reversement."""
+    def reserve(self, amount, description='', reference=''):
+        """Réserve un montant disponible pour un reversement en cours."""
         if amount > self.balance_available:
             raise ValueError("Solde insuffisant pour ce reversement.")
         self.balance_available -= amount
-        self.balance_withdrawn += amount
-        self.balance_pending = max(0, self.balance_pending - amount)
-        self.save(update_fields=[
-            'balance_available', 'balance_withdrawn', 'balance_pending', 'updated_at'   
-        ])
+        self.balance_pending += amount
+        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
         WalletTransaction.objects.create(
-            wallet        = self,
-            type          = WalletTransaction.Type.DEBIT,
-            amount        = amount,
-            balance_after = self.balance_available,
-            description   = description,
-            reference     = reference,
+            wallet=self,
+            type=WalletTransaction.Type.ADJUSTMENT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Montant réservé pour reversement',
+            reference=reference,
         )
+
+    def complete_reserved(self, amount, description='', reference=''):
+        """Finalise un reversement déjà réservé après confirmation provider."""
+        if amount > self.balance_pending:
+            raise ValueError("Montant réservé insuffisant pour finaliser ce reversement.")
+        self.balance_pending -= amount
+        self.balance_withdrawn += amount
+        self.save(update_fields=['balance_withdrawn', 'balance_pending', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.DEBIT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Reversement confirmé',
+            reference=reference,
+        )
+
+    def release_reserved(self, amount, description='', reference=''):
+        """Libère un montant réservé après échec/annulation définitive."""
+        if amount > self.balance_pending:
+            raise ValueError("Montant réservé insuffisant pour libération.")
+        self.balance_pending -= amount
+        self.balance_available += amount
+        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.ADJUSTMENT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Montant libéré après échec du reversement',
+            reference=reference,
+        )
+
+    def debit(self, amount, description='', reference=''):
+        """Compatibilité legacy : finalise un montant déjà réservé."""
+        return self.complete_reserved(amount, description=description, reference=reference)
 
 
 class WalletTransaction(models.Model):
@@ -182,10 +215,12 @@ class WithdrawalRequest(models.Model):
     Validée manuellement par l'admin IvoirPass.
     """
     class Status(models.TextChoices):
-        PENDING   = 'pending',   _('En attente')
-        APPROVED  = 'approved',  _('Approuvée')
-        PROCESSED = 'processed', _('Traitée')
-        REJECTED  = 'rejected',  _('Rejetée')
+        PENDING    = 'pending',    _('En attente de validation OTP')
+        PROCESSING = 'processing', _('Reversement en cours')
+        COMPLETED  = 'completed',  _('Reversement réussi')
+        FAILED     = 'failed',     _('Reversement échoué')
+        CANCELLED  = 'cancelled',  _('Reversement annulé')
+        REJECTED   = 'rejected',   _('Rejetée')
 
     # Numéro unique
     reference = models.CharField(
@@ -267,6 +302,16 @@ class WithdrawalRequest(models.Model):
     created_at   = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
+    # Références et état du payout provider
+    provider = models.CharField(_('provider'), max_length=30, default='paydunya')
+    provider_token = models.CharField(_('token provider'), max_length=200, blank=True)
+    provider_transaction_id = models.CharField(_('transaction provider'), max_length=200, blank=True)
+    provider_reference = models.CharField(_('référence provider'), max_length=200, blank=True)
+    provider_status = models.CharField(_('statut provider'), max_length=30, blank=True)
+    retry_count = models.PositiveIntegerField(_('nombre de retries'), default=0)
+    last_error = models.TextField(_('dernière erreur'), blank=True)
+    completed_at = models.DateTimeField(_('date de confirmation'), null=True, blank=True)
+
     class Meta:
         verbose_name = _('demande de reversement')
         verbose_name_plural = _('demandes de reversement')
@@ -294,97 +339,15 @@ class WithdrawalRequest(models.Model):
         suffix = ''.join(random.choices(string.digits, k=8))
         return f"REV-{suffix}"
 
-    def approve(self, admin_user, note=''):
-        """Approuve la demande et notifie l'organisateur."""
-        self.status      = self.Status.APPROVED
-        self.admin_note  = note
-        self.processed_by = admin_user
-        self.save()
+    def approve(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont automatiques : aucune approbation admin n\'est requise.')
 
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement approuvé',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre demande de reversement de {self.amount} FCFA a été approuvée.\n"
-            f"Référence : {self.reference}\n\n"
-            f"Le virement sera effectué sous 24-48h.\n\n"
-            f"L'équipe IvoirPass",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
+    def mark_processed(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont finalisés automatiquement par la confirmation du provider.')
 
-    def mark_processed(self, admin_user, note=''):
-        """
-        Marque comme traitée après virement effectué.
-        Le débit du wallet est effectué AVANT de figer le statut PROCESSED :
-        si le débit échoue (solde insuffisant), la demande reste dans son
-        statut précédent (ex: APPROVED) au lieu d'être marquée comme traitée
-        à tort — évite toute incohérence comptable.
-        """
-        from django.db import transaction
+    def reject(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont automatiques : utilisez l\'expiration/échec du payout.')
 
-        with transaction.atomic():
-            # Débiter le wallet en premier — si ça échoue, tout est annulé
-            # (y compris balance_pending, géré directement dans debit()) et
-            # le statut n'est jamais touché.
-            self.wallet.debit(
-                amount=self.amount,
-                description=f"Reversement {self.reference}",
-                reference=self.reference,
-            )
-
-            self.status       = self.Status.PROCESSED
-            self.admin_note   = note
-            self.processed_by = admin_user
-            self.processed_at = timezone.now()
-            self.save()
-
-        # Notification admin — seulement une fois le débit confirmé
-        from apps.notifications.models import AdminNotification
-        AdminNotification.objects.create(
-            type='fraud_alert',
-            title='Reversement traite',
-            message=(
-                f"Reversement {self.reference} de {self.amount} FCFA "
-                f"traite pour {self.wallet.organizer.get_full_name()}."
-            ),
-            reference=self.reference,
-        )
-
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement effectue',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre reversement de {self.amount} FCFA a ete traite.\n"
-            f"Reference : {self.reference}\n\n"
-            f"L'equipe IvoirPass",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
-    def reject(self, admin_user, note=''):
-        self.status       = self.Status.REJECTED
-        self.admin_note   = note
-        self.processed_by = admin_user
-        self.processed_at = timezone.now()
-        self.save()
-
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement rejeté',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre demande de reversement {self.reference} "
-            f"de {self.amount} FCFA a été rejetée.\n"
-            f"Motif : {note}\n\n"
-            f"Contactez l'équipe IvoirPass pour plus d'informations.",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
 class ReversalOTP(models.Model):
     """
     Code OTP pour valider une demande de reversement.
@@ -436,6 +399,14 @@ class AuditLog(models.Model):
         LOGIN = 'login', _('Connexion')
         LOGOUT = 'logout', _('Déconnexion')
         PAYOUT = 'payout', _('Reversement')
+        PAYOUT_REQUESTED = 'payout_requested', _('Demande de reversement créée')
+        PAYOUT_OTP_VALIDATED = 'payout_otp_validated', _('OTP reversement validé')
+        PAYOUT_INITIATED = 'payout_initiated', _('Reversement initié')
+        PAYOUT_PROVIDER_PENDING = 'payout_provider_pending', _('Reversement provider en attente')
+        PAYOUT_SUCCESS = 'payout_success', _('Reversement réussi')
+        PAYOUT_FAILED = 'payout_failed', _('Reversement échoué')
+        PAYOUT_RETRY = 'payout_retry', _('Retry reversement')
+        PAYOUT_CANCELLED = 'payout_cancelled', _('Reversement annulé')
         EXPORT = 'export', _('Export données')
         SCAN = 'scan', _('Scan QR')
         # --- Commandes ---

@@ -30,7 +30,7 @@ def bceao_report_view(request):
     ticket_volume = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
     store_volume = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
     withdrawals_count = WithdrawalRequest.objects.filter(created_at__gte=month_start).count()
-    withdrawals_volume = WithdrawalRequest.objects.filter(created_at__gte=month_start, status='processed').aggregate(t=Sum('amount'))['t'] or 0
+    withdrawals_volume = WithdrawalRequest.objects.filter(created_at__gte=month_start, status='completed').aggregate(t=Sum('amount'))['t'] or 0
     total_users = CustomUser.objects.count()
     organizers = CustomUser.objects.filter(role='organizer').count()
 
@@ -79,42 +79,20 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
     list_display = ('reference', 'get_organizer', 'amount', 'payout_method', 'payout_phone', 'status_badge', 'created_at')
     list_filter = ('status', 'payout_method')
     search_fields = ('reference', 'wallet__organizer__email', 'payout_phone')
-    readonly_fields = ('reference', 'amount_net', 'created_at', 'processed_at', 'status')
-    actions = ['approve_requests', 'process_requests', 'reject_requests']
+    readonly_fields = ('reference', 'amount_net', 'created_at', 'processed_at', 'completed_at', 'status', 'provider', 'provider_token', 'provider_transaction_id', 'provider_reference', 'provider_status', 'retry_count', 'last_error')
+    actions = []
 
     def get_organizer(self, obj):
         return obj.wallet.organizer.get_full_name()
     get_organizer.short_description = "Organisateur"
 
     def status_badge(self, obj):
-        colors = {'pending': '#F47920', 'approved': '#1B7A3E', 'processed': '#0dcaf0', 'rejected': '#dc3545'}
+        colors = {'pending': '#F47920', 'processing': '#0dcaf0', 'completed': '#1B7A3E', 'failed': '#dc3545', 'cancelled': '#6c757d', 'rejected': '#dc3545'}
         color = colors.get(obj.status, '#6c757d')
         return format_html('<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;">{}</span>', color, obj.get_status_display())
     status_badge.short_description = "Statut"
 
-    @admin.action(description="✅ Approuver")
-    def approve_requests(self, request, queryset):
-        count = 0
-        for wr in queryset.filter(status=WithdrawalRequest.Status.PENDING):
-            wr.approve(admin_user=request.user, note="Approuvé via admin")
-            count += 1
-        self.message_user(request, f"{count} demande(s) approuvée(s).")
-
-    @admin.action(description="💸 Marquer comme traitées")
-    def process_requests(self, request, queryset):
-        count = 0
-        for wr in queryset.filter(status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.APPROVED]):
-            wr.mark_processed(admin_user=request.user, note="Virement effectué")
-            count += 1
-        self.message_user(request, f"{count} reversement(s) traité(s).")
-
-    @admin.action(description="❌ Rejeter")
-    def reject_requests(self, request, queryset):
-        count = 0
-        for wr in queryset.filter(status=WithdrawalRequest.Status.PENDING):
-            wr.reject(admin_user=request.user, note="Rejeté via admin")
-            count += 1
-        self.message_user(request, f"{count} demande(s) rejetée(s).")
+    # Les reversements sont déclenchés automatiquement après validation OTP.
 
 
 # ============================================

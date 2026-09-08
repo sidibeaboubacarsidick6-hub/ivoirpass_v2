@@ -9,9 +9,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from io import BytesIO
 
-from django.shortcuts import render, redirect, get_object_or_404  # ✅ Correction : enlever la virgule finale
+from django.shortcuts import render, redirect, get_object_or_404
+from django.views import decorators  # ✅ Correction : enlever la virgule finale
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import (
     Sum, Count, F, Q,
     ExpressionWrapper, DecimalField, IntegerField
@@ -319,10 +321,7 @@ def withdraw_request(request):
             errors.append("Méthode de paiement requise.")
 
         pending = wallet.withdrawal_requests.filter(
-            
-                status=WithdrawalRequest.Status.PENDING
-                
-            
+            status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.PROCESSING]
         ).exists()
         if pending:
             errors.append("Une demande est déjà en cours.")
@@ -331,16 +330,19 @@ def withdraw_request(request):
             for e in errors:
                 messages.error(request, e)
         else:
-            wr = WithdrawalRequest.objects.create(
-                wallet        = wallet,
-                amount        = amount,
-                payout_method = method,
-                payout_phone  = phone,
-                payout_name   = name,
-            )
-                        # Mettre à jour le solde en attente
-            wallet.balance_pending += wr.amount
-            wallet.save(update_fields=['balance_pending'])
+            with transaction.atomic():
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+                if amount > wallet.balance_available:
+                    messages.error(request, f"Solde insuffisant. Disponible : {wallet.balance_available:,} FCFA.")
+                    return redirect('dashboard:withdraw')
+                if wallet.withdrawal_requests.filter(status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.PROCESSING]).exists():
+                    messages.error(request, "Une demande est déjà en cours.")
+                    return redirect('dashboard:wallet')
+                wr = WithdrawalRequest.objects.create(
+                    wallet=wallet, amount=amount, fee=0, amount_net=amount,
+                    payout_method=method, payout_phone=phone, payout_name=name,
+                )
+                wallet.reserve(wr.amount, description=f"Réservation reversement {wr.reference}", reference=wr.reference)
 
             # Notifier l'admin
             from apps.notifications.models import AdminNotification
@@ -355,7 +357,7 @@ def withdraw_request(request):
             from .models import AuditLog
             from .services import log_action, get_client_ip
             log_action(
-                action=AuditLog.Action.PAYOUT,
+                action=AuditLog.Action.PAYOUT_REQUESTED,
                 description=f"Demande reversement {wr.amount} FCFA via {wr.get_payout_method_display()}",
                 user=request.user,
                 obj=wr,
@@ -559,7 +561,18 @@ def verify_otp(request, reference):
             if hmac.compare_digest(code, otp.code):
                 otp.is_used = True
                 otp.save(update_fields=['is_used'])
-                messages.success(request, f"✅ Demande {withdrawal.reference} validée !")
+                from .services import log_action
+                log_action(
+                    action=AuditLog.Action.PAYOUT_OTP_VALIDATED,
+                    description=f"OTP validé pour le reversement {withdrawal.reference}",
+                    user=request.user, obj=withdrawal,
+                    metadata={'amount': str(withdrawal.amount), 'payout_method': withdrawal.payout_method},
+                )
+                withdrawal.status = WithdrawalRequest.Status.PROCESSING
+                withdrawal.save(update_fields=['status'])
+                from .tasks import process_payout
+                transaction.on_commit(lambda: process_payout.delay(withdrawal.pk))
+                messages.success(request, f"✅ Demande {withdrawal.reference} validée. Reversement en cours automatiquement.")
                 return redirect('dashboard:wallet')
 
             otp.attempts += 1
@@ -571,6 +584,11 @@ def verify_otp(request, reference):
                 withdrawal.status = WithdrawalRequest.Status.REJECTED
                 withdrawal.admin_note = "OTP incorrect 3 fois — demande rejetée automatiquement"
                 withdrawal.save(update_fields=['status', 'admin_note'])
+                withdrawal.wallet.release_reserved(
+                    withdrawal.amount,
+                    description=f"Libération après rejet OTP {withdrawal.reference}",
+                    reference=withdrawal.reference,
+                )
 
                 messages.error(request, "❌ 3 tentatives échouées. Demande rejetée. Soumettez une nouvelle demande.")
                 return redirect('dashboard:wallet')
@@ -580,6 +598,25 @@ def verify_otp(request, reference):
             messages.error(request, f"Code incorrect. {remaining} tentative(s) restante(s).")
 
     return render(request, 'dashboard/verify_otp.html', {'withdrawal': withdrawal})
+
+@decorators.csrf.csrf_exempt
+def paydunya_payout_webhook(request):
+    """Callback PayDunya pour confirmer un décaissement."""
+    from django.http import JsonResponse
+    from apps.payments.paydunya import PayDunyaService
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    payload = PayDunyaService.parse_disbursement_callback(request)
+    if not payload or not PayDunyaService.verify_disbursement_callback(payload):
+        return JsonResponse({'success': False, 'error': 'Invalid callback'}, status=400)
+    reference = payload.get('disburse_id')
+    withdrawal = WithdrawalRequest.objects.filter(reference=reference).first()
+    if not withdrawal:
+        return JsonResponse({'success': False, 'error': 'Unknown disbursement'}, status=404)
+    from .tasks import finalize_payout_from_provider
+    finalize_payout_from_provider.delay(withdrawal.pk, payload)
+    return JsonResponse({'success': True})
+
 
 @organizer_required
 def audit_log(request):

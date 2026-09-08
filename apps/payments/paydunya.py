@@ -117,6 +117,110 @@ class PayDunyaService:
             logger.error(f"Erreur connexion PayDunya (create_invoice) : {e}")
             return {'success': False, 'error': str(e)}
 
+    DISBURSEMENT_MODES = {
+        'wave': 'wave-ci',
+        'orange_money': 'orange-money-ci',
+        'mtn_momo': 'mtn-ci',
+        'moov': 'moov-ci',
+    }
+
+    @classmethod
+    def _disbursement_headers(cls):
+        return cls.get_headers()
+
+    @classmethod
+    def _disbursement_callback_url(cls):
+        return f"{settings.PAYDUNYA_BASE_URL.rstrip('/')}/dashboard/reversement/paydunya/webhook/"
+
+    @classmethod
+    def create_disbursement(cls, withdrawal):
+        "Crée une facture de décaissement PayDunya."
+        mode = cls.DISBURSEMENT_MODES.get(withdrawal.payout_method)
+        if not mode:
+            return {'success': False, 'error': 'Méthode Mobile Money non supportée'}
+        phone = ''.join(ch for ch in withdrawal.payout_phone if ch.isdigit())
+        if phone.startswith('225'):
+            phone = phone[3:]
+        payload = {
+            'account_alias': phone,
+            'amount': int(withdrawal.amount_net or withdrawal.amount),
+            'withdraw_mode': mode,
+            'callback_url': cls._disbursement_callback_url(),
+        }
+        try:
+            response = requests.post(
+                f"{settings.PAYDUNYA_DISBURSEMENT_API_BASE.rstrip('/')}/disburse/get-invoice",
+                json=payload,
+                headers=cls._disbursement_headers(),
+                timeout=30,
+            )
+            data = response.json()
+            if data.get('response_code') == '00' and data.get('disburse_token'):
+                return {'success': True, 'token': data['disburse_token'], 'status': 'created'}
+            return {'success': False, 'error': data.get('response_text', 'Erreur PayDunya lors de la création du payout')}
+        except Exception as exc:
+            logger.exception('Erreur création payout PayDunya pour %s', withdrawal.reference)
+            return {'success': False, 'error': str(exc)}
+
+    @classmethod
+    def submit_disbursement(cls, token, disburse_id):
+        try:
+            response = requests.post(
+                f"{settings.PAYDUNYA_DISBURSEMENT_API_BASE.rstrip('/')}/disburse/submit-invoice",
+                json={'disburse_invoice': token, 'disburse_id': disburse_id},
+                headers=cls._disbursement_headers(),
+                timeout=30,
+            )
+            data = response.json()
+            return {
+                'success': data.get('response_code') == '00',
+                'status': (data.get('status') or ('success' if data.get('response_code') == '00' and 'pending' not in str(data.get('response_text','')).lower() else 'pending')).lower(),
+                'transaction_id': data.get('transaction_id', ''),
+                'provider_ref': data.get('provider_ref', ''),
+                'response_text': data.get('response_text', ''),
+                'error': data.get('response_text', 'Erreur PayDunya'),
+            }
+        except Exception as exc:
+            logger.exception('Erreur submit payout PayDunya %s', disburse_id)
+            return {'success': False, 'status': 'unknown', 'error': str(exc)}
+
+    @classmethod
+    def check_disbursement_status(cls, token):
+        try:
+            response = requests.post(
+                f"{settings.PAYDUNYA_DISBURSEMENT_API_BASE.rstrip('/')}/disburse/check-status",
+                json={'disburse_invoice': token},
+                headers=cls._disbursement_headers(),
+                timeout=30,
+            )
+            data = response.json()
+            return {
+                'success': data.get('response_code') == '00',
+                'status': (data.get('status') or 'failed').lower(),
+                'transaction_id': data.get('transaction_id', ''),
+                'disburse_tx_id': data.get('disburse_tx_id', ''),
+                'response_text': data.get('response_text', ''),
+                'error': data.get('response_text', 'Erreur PayDunya'),
+            }
+        except Exception as exc:
+            logger.exception('Erreur check status payout PayDunya')
+            return {'success': False, 'status': 'unknown', 'error': str(exc)}
+
+    @classmethod
+    def parse_disbursement_callback(cls, request):
+        import json
+        try:
+            return json.loads(request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return {}
+
+    @classmethod
+    def verify_disbursement_callback(cls, payload):
+        import hashlib, hmac
+        received = payload.get('hash', '')
+        expected = hashlib.sha512(settings.PAYDUNYA_MASTER_KEY.encode('utf-8')).hexdigest()
+        return bool(received) and hmac.compare_digest(received, expected)
+
     @classmethod
     def verify_payment(cls, token):
         """

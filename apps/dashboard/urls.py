@@ -23,6 +23,8 @@ urlpatterns = [
          views.mark_order_shipped, name='mark_shipped'),
     path('reversement/valider/<str:reference>/',
          views.verify_otp, name='verify_otp'),
+    path('reversement/paydunya/webhook/',
+         views.paydunya_payout_webhook, name='paydunya_payout_webhook'),
     path('audit/',
          views.audit_log, name='audit_log'),
     path('audit/global/',
