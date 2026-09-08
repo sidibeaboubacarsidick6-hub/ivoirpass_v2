@@ -30,7 +30,7 @@ urlpatterns = [
     path('guest/retour/<str:order_number>/',
          views.guest_payment_return,    name='guest_return'),
     path('guest/annulation/<str:order_number>/',
-         views.guest_payment_cancel,    name='guest_cancel'),
+         views.guest_confirmation,      name='guest_cancel'),
     path('guest/webhook/',
          views.guest_webhook,           name='guest_webhook'),
     path('guest/confirmation/<str:order_number>/',
