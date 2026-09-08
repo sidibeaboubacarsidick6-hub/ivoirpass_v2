@@ -571,7 +571,7 @@ def verify_otp(request, reference):
                 withdrawal.status = WithdrawalRequest.Status.PROCESSING
                 withdrawal.save(update_fields=['status'])
                 from .tasks import process_payout
-                transaction.on_commit(lambda: process_payout.delay(withdrawal.pk))
+                process_payout.delay(withdrawal.pk)
                 messages.success(request, f"✅ Demande {withdrawal.reference} validée. Reversement en cours automatiquement.")
                 return redirect('dashboard:wallet')
 

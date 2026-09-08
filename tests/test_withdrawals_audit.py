@@ -33,27 +33,44 @@ class WalletCreditDebitTests(TestCase):
         self.assertEqual(tx.amount, Decimal('20000'))
         self.assertEqual(tx.balance_after, Decimal('20000'))
 
-    def test_debit_diminue_le_solde_et_trace_la_transaction(self):
+    def test_reserve_puis_complete_diminue_le_disponible_et_finalise_le_reversement(self):
         self.wallet.credit(Decimal('50000'))
-        self.wallet.debit(Decimal('30000'), description="Reversement", reference="REV-1")
+        self.wallet.reserve(Decimal('30000'), description="Réservation reversement", reference="REV-1")
         self.wallet.refresh_from_db()
+
         self.assertEqual(self.wallet.balance_available, Decimal('20000'))
+        self.assertEqual(self.wallet.balance_pending, Decimal('30000'))
+        self.assertEqual(self.wallet.balance_withdrawn, Decimal('0'))
+
+        self.wallet.complete_reserved(
+            Decimal('30000'),
+            description="Reversement confirmé",
+            reference="REV-1",
+        )
+        self.wallet.refresh_from_db()
+
+        self.assertEqual(self.wallet.balance_available, Decimal('20000'))
+        self.assertEqual(self.wallet.balance_pending, Decimal('0'))
         self.assertEqual(self.wallet.balance_withdrawn, Decimal('30000'))
 
-    def test_debit_refuse_si_solde_insuffisant(self):
+    def test_reserve_refuse_si_solde_insuffisant(self):
         self.wallet.credit(Decimal('10000'))
         with self.assertRaises(ValueError):
-            self.wallet.debit(Decimal('99999'))
+            self.wallet.reserve(Decimal('99999'), reference="REV-2")
         self.wallet.refresh_from_db()
-        self.assertEqual(self.wallet.balance_available, Decimal('10000'), "Le solde ne doit pas bouger si le débit échoue")
+        self.assertEqual(
+            self.wallet.balance_available,
+            Decimal('10000'),
+            "Le solde disponible ne doit pas bouger si la réservation échoue",
+        )
+        self.assertEqual(self.wallet.balance_pending, Decimal('0'))
 
-    def test_pas_de_solde_negatif_apres_debit_refuse(self):
+    def test_reservation_ne_cree_jamais_de_solde_disponible_negatif(self):
         self.wallet.credit(Decimal('5000'))
-        try:
-            self.wallet.debit(Decimal('5001'))
-        except ValueError:
-            pass
+        self.wallet.reserve(Decimal('5000'), reference="REV-3")
         self.wallet.refresh_from_db()
+        self.assertEqual(self.wallet.balance_available, Decimal('0'))
+        self.assertEqual(self.wallet.balance_pending, Decimal('5000'))
         self.assertGreaterEqual(self.wallet.balance_available, Decimal('0'))
 
 
@@ -82,72 +99,82 @@ class WithdrawalRequestLifecycleTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("40000", mail.outbox[0].body)
 
-    def test_approve_ne_debite_pas_encore_le_wallet(self):
-        """approve() change le statut mais ne doit débiter qu'à mark_processed()."""
+    def test_demande_reserve_immediatement_les_fonds(self):
         wr = WithdrawalRequest.objects.create(
-            wallet=self.wallet, amount=Decimal('30000'), fee=Decimal('0'),
-            payout_method='wave', payout_phone='+2250700000000', payout_name='Orga Deux',
+            wallet=self.wallet,
+            amount=Decimal('30000'),
+            fee=Decimal('0'),
+            amount_net=Decimal('30000'),
+            payout_method='wave',
+            payout_phone='+2250700000000',
+            payout_name='Orga Deux',
         )
-        wr.approve(self.admin, note="OK")
-        self.wallet.refresh_from_db()
-        self.assertEqual(wr.status, WithdrawalRequest.Status.APPROVED)
-        self.assertEqual(self.wallet.balance_available, Decimal('100000'), "Le solde ne doit pas bouger à l'approbation seule")
+        self.wallet.reserve(
+            wr.amount,
+            description=f"Réservation reversement {wr.reference}",
+            reference=wr.reference,
+        )
 
-    def test_mark_processed_debite_effectivement_le_wallet(self):
-        wr = WithdrawalRequest.objects.create(
-            wallet=self.wallet, amount=Decimal('30000'), fee=Decimal('0'),
-            payout_method='wave', payout_phone='+2250700000000', payout_name='Orga Deux',
-        )
-        wr.approve(self.admin)
-        mail.outbox.clear()
-        wr.mark_processed(self.admin, note="Viré")
         self.wallet.refresh_from_db()
         wr.refresh_from_db()
-        self.assertEqual(wr.status, WithdrawalRequest.Status.PROCESSED)
+
+        self.assertEqual(wr.status, WithdrawalRequest.Status.PENDING)
         self.assertEqual(self.wallet.balance_available, Decimal('70000'))
-        self.assertEqual(len(mail.outbox), 1, "L'organisateur doit recevoir un email de confirmation")
-        self.assertEqual(mail.outbox[0].to, ["orga2@test.com"])
+        self.assertEqual(self.wallet.balance_pending, Decimal('30000'))
+        self.assertEqual(self.wallet.balance_withdrawn, Decimal('0'))
 
-    def test_reject_ne_touche_jamais_au_solde(self):
+    def test_succes_provider_finalise_le_reversement(self):
         wr = WithdrawalRequest.objects.create(
-            wallet=self.wallet, amount=Decimal('30000'), fee=Decimal('0'),
-            payout_method='wave', payout_phone='+2250700000000', payout_name='Orga Deux',
+            wallet=self.wallet,
+            amount=Decimal('30000'),
+            fee=Decimal('0'),
+            amount_net=Decimal('30000'),
+            payout_method='wave',
+            payout_phone='+2250700000000',
+            payout_name='Orga Deux',
+            status=WithdrawalRequest.Status.PROCESSING,
         )
-        wr.reject(self.admin, note="Coordonnées invalides")
+        self.wallet.reserve(wr.amount, reference=wr.reference)
+        self.wallet.complete_reserved(
+            wr.amount,
+            description="Reversement confirmé",
+            reference=wr.reference,
+        )
+        wr.status = WithdrawalRequest.Status.COMPLETED
+        wr.save(update_fields=['status'])
+
         self.wallet.refresh_from_db()
-        self.assertEqual(wr.status, WithdrawalRequest.Status.REJECTED)
-        self.assertEqual(self.wallet.balance_available, Decimal('100000'))
-
-    def test_mark_processed_reste_coherent_si_debit_echoue(self):
-        """
-        Non-régression : mark_processed() débite le wallet AVANT de figer
-        le statut PROCESSED (dans une transaction atomique). Si le débit
-        échoue (solde insuffisant), la demande doit rester dans son statut
-        précédent, PAS PROCESSED — pour ne jamais afficher un reversement
-        comme "traité" alors que l'argent n'a jamais bougé.
-        """
-        wr = WithdrawalRequest.objects.create(
-            wallet=self.wallet, amount=Decimal('30000'), fee=Decimal('0'),
-            payout_method='wave', payout_phone='+2250700000000', payout_name='Orga Deux',
-        )
-        wr.approve(self.admin)
-
-        # Le solde chute en dessous du montant demandé avant le traitement
-        # (ex : un autre reversement concurrent vient d'être traité)
-        self.wallet.balance_available = Decimal('10000')
-        self.wallet.save(update_fields=['balance_available'])
-
-        with self.assertRaises(ValueError):
-            wr.mark_processed(self.admin, note="Viré")
-
         wr.refresh_from_db()
-        self.wallet.refresh_from_db()
 
-        self.assertEqual(
-            wr.status, WithdrawalRequest.Status.APPROVED,
-            "La demande ne doit PAS passer à PROCESSED si le débit a échoué"
+        self.assertEqual(wr.status, WithdrawalRequest.Status.COMPLETED)
+        self.assertEqual(self.wallet.balance_available, Decimal('70000'))
+        self.assertEqual(self.wallet.balance_pending, Decimal('0'))
+        self.assertEqual(self.wallet.balance_withdrawn, Decimal('30000'))
+
+    def test_echec_definitif_provider_libere_les_fonds(self):
+        wr = WithdrawalRequest.objects.create(
+            wallet=self.wallet,
+            amount=Decimal('30000'),
+            fee=Decimal('0'),
+            amount_net=Decimal('30000'),
+            payout_method='wave',
+            payout_phone='+2250700000000',
+            payout_name='Orga Deux',
+            status=WithdrawalRequest.Status.PROCESSING,
         )
-        self.assertEqual(
-            self.wallet.balance_withdrawn, Decimal('0'),
-            "Aucun montant ne doit être compté comme reversé si le débit a échoué"
+        self.wallet.reserve(wr.amount, reference=wr.reference)
+        self.wallet.release_reserved(
+            wr.amount,
+            description="Reversement échoué",
+            reference=wr.reference,
         )
+        wr.status = WithdrawalRequest.Status.FAILED
+        wr.save(update_fields=['status'])
+
+        self.wallet.refresh_from_db()
+        wr.refresh_from_db()
+
+        self.assertEqual(wr.status, WithdrawalRequest.Status.FAILED)
+        self.assertEqual(self.wallet.balance_available, Decimal('100000'))
+        self.assertEqual(self.wallet.balance_pending, Decimal('0'))
+        self.assertEqual(self.wallet.balance_withdrawn, Decimal('0'))
