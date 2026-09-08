@@ -99,6 +99,21 @@
       </div>
       {% endfor %}
 
+
+      {% elif order.status == 'cancelled' %}
+
+      <!-- ❌ Annule -->
+      <div class="ip-card p-5 text-center">
+        <div style="font-size:3.5rem; margin-bottom:1rem;">❌</div>
+        <h4 class="fw-bold mb-2">Paiement annulé</h4>
+        <p class="text-muted mb-0">
+          Vous avez annulé le paiement de la commande
+          <strong>{{ order.order_number }}</strong>.<br>
+          Aucun montant n'a été débité. Vous pouvez explorer d'autres
+          événements ci-dessous.
+        </p>
+      </div>
+
       {% else %}
 
       <!-- ⏳ En attente -->

@@ -488,6 +488,24 @@ def guest_confirmation(request, order_number):
     return render(request, 'tickets/guest_confirmation.html', {'order': order, 'tickets': tickets})
 
 
+def guest_payment_cancel(request, order_number):
+    """
+    URL appelee si l'acheteur invite annule le paiement sur PayDunya.
+    Marque la commande comme annulee (au lieu de rester PENDING
+    indefiniment) et affiche un message clair, distinct de l'attente
+    de confirmation.
+    """
+    from .models import GuestOrder, GuestTicket
+    order = get_object_or_404(GuestOrder, order_number=order_number)
+
+    if order.status == GuestOrder.Status.PENDING:
+        order.status = GuestOrder.Status.CANCELLED
+        order.save(update_fields=['status'])
+
+    tickets = GuestTicket.objects.filter(order_item__order=order)
+    return render(request, 'tickets/guest_confirmation.html', {'order': order, 'tickets': tickets})
+
+
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
