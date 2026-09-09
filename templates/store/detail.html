@@ -382,13 +382,6 @@
                             </small>
                         </div>
 
-                        <!-- Commission info -->
-                        <div class="commission-info text-center">
-                            <small>
-                                <i class="bi bi-info-circle me-1"></i>
-                                Commission plateforme : {{ product.commission_rate }}%
-                            </small>
-                        </div>
 
                     {% else %}
                         <!-- Utilisateur non authentifié - ACHAT SANS COMPTE -->
@@ -401,14 +394,6 @@
                             Aucun compte requis — Paiement sécurisé
                         </p>
                         
-                        <!-- Lien de connexion -->
-                        <div class="text-center mt-2">
-                            <a href="{% url 'account_login' %}?next={{ request.path }}"
-                               class="text-decoration-none small">
-                                <i class="bi bi-box-arrow-in-right me-1"></i>
-                                Vous avez déjà un compte ? Connectez-vous
-                            </a>
-                        </div>
 
                         <!-- Infos téléchargement -->
                         {% if product.is_digital %}
@@ -419,13 +404,6 @@
                         </div>
                         {% endif %}
 
-                        <!-- Commission info -->
-                        <div class="commission-info text-center">
-                            <small>
-                                <i class="bi bi-info-circle me-1"></i>
-                                Commission plateforme : {{ product.commission_rate }}%
-                            </small>
-                        </div>
                     {% endif %}
 
                 {% else %}
