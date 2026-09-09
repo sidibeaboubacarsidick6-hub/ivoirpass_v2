@@ -150,13 +150,10 @@ class EventForm(forms.ModelForm):
                 "La date de fin doit être après la date de début."
             )
 
-        if event_type in (
-            Event.EventType.ONLINE,
-            Event.EventType.HYBRID,
-        ) and not online_link:
+        if event_type == Event.EventType.ONLINE and not online_link:
             self.add_error(
                 'online_link',
-                "Le lien en ligne est obligatoire pour un événement en ligne ou hybride."
+                "Le lien en ligne est obligatoire pour un événement en ligne."
             )
 
         return cleaned
