@@ -728,26 +728,28 @@
 {% block extra_js %}
 <script>
 function addTicketForm() {
-  const formset   = document.getElementById('ticket-formset');
+  const formset = document.getElementById('ticket-formset');
   const totalForms = document.getElementById('id_ticket_types-TOTAL_FORMS');
-  const formCount  = parseInt(totalForms.value);
+  const formCount = parseInt(totalForms.value, 10);
 
-  // Clone le premier formulaire
-  const firstForm  = formset.querySelector('.ticket-form');
-  const newForm    = firstForm.cloneNode(true);
+  const firstForm = formset.querySelector('.ticket-form');
+  if (!firstForm) return;
 
-  // Met à jour les indices
+  const newForm = firstForm.cloneNode(true);
+
   newForm.innerHTML = newForm.innerHTML.replace(
     /ticket_types-\d+/g,
     `ticket_types-${formCount}`
   );
 
-  // Vide les valeurs
   newForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(el => {
-    el.value = '';
+    if (el.type === 'checkbox') {
+      el.checked = false;
+    } else {
+      el.value = '';
+    }
   });
 
-  // Supprime le bouton "Supprimer" sur un nouveau formulaire
   const deleteCheck = newForm.querySelector('[id*="DELETE"]');
   if (deleteCheck) {
     deleteCheck.closest('.form-check')?.remove();
@@ -755,15 +757,21 @@ function addTicketForm() {
 
   formset.appendChild(newForm);
   totalForms.value = formCount + 1;
+  initFileInputs(newForm);
 }
 
 function addExtraForm(containerId, prefix) {
-  const container  = document.getElementById(containerId);
+  const container = document.getElementById(containerId);
   const totalForms = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
-  const formCount  = parseInt(totalForms.value);
 
+  if (!container || !totalForms) return;
+
+  const formCount = parseInt(totalForms.value, 10);
   const firstForm = container.querySelector('.extra-form');
-  const newForm   = firstForm.cloneNode(true);
+
+  if (!firstForm) return;
+
+  const newForm = firstForm.cloneNode(true);
 
   newForm.innerHTML = newForm.innerHTML.replace(
     new RegExp(`${prefix}-\\d+`, 'g'),
@@ -771,7 +779,11 @@ function addExtraForm(containerId, prefix) {
   );
 
   newForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(el => {
-    if (el.type === 'checkbox') { el.checked = false; } else { el.value = ''; }
+    if (el.type === 'checkbox') {
+      el.checked = false;
+    } else {
+      el.value = '';
+    }
   });
 
   const deleteCheck = newForm.querySelector('[id*="DELETE"]');
@@ -780,15 +792,15 @@ function addExtraForm(containerId, prefix) {
   }
 
   container.appendChild(newForm);
-  initFileInputs(newForm);
   totalForms.value = formCount + 1;
+  initFileInputs(newForm);
 }
 
-<script>
 /* Gestion universelle des uploads : retirer puis remplacer un fichier sans recharger. */
 function initFileInputs(root = document) {
   root.querySelectorAll('input[type="file"]').forEach(input => {
     if (input.dataset.fileManagerInitialized === '1') return;
+
     input.dataset.fileManagerInitialized = '1';
 
     const wrapper = document.createElement('div');
