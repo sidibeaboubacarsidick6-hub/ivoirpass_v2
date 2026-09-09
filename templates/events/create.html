@@ -188,7 +188,7 @@
 
           <div class="mb-3">
             <label class="form-label fw-semibold small">{{ form.event_type.label }}</label>
-            {{ form.event_type.as_widget(attrs={"x-model": "type"}) }}
+            {{ form.event_type }}
             {% if form.event_type.errors %}
               {% for error in form.event_type.errors %}
               <div class="text-danger small mt-1">

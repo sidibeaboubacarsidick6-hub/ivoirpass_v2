@@ -48,7 +48,7 @@ class EventForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'musique, concert, afro, abidjan...',
             }),
-            'event_type': forms.Select(attrs={'class': 'form-select'}),
+            'event_type': forms.Select(attrs={'x-model': 'type', 'class': 'form-select'}),
             'start_date': forms.DateTimeInput(
                 attrs={'class': 'form-control', 'type': 'datetime-local'},
                 format='%Y-%m-%dT%H:%M'
