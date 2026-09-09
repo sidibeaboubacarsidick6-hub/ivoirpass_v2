@@ -78,14 +78,6 @@
           <h5 class="fw-bold mb-3"><i class="bi bi-geo-alt me-2 text-green"></i>Adresse de livraison</h5>
           <div class="alert alert-warning small mb-3 py-2">🚚 <strong>Frais de livraison à la charge du client.</strong></div>
 
-          <!-- Carte dans son propre conteneur -->
-          <div style="height:180px; width:100%; border-radius:8px; border:2px solid #ddd; margin-bottom:12px; overflow:hidden; position:relative;">
-            <div id="delivery-map" style="height:180px !important; width:100% !important;"></div>
-          </div>
-          <div class="text-muted small mb-2"><span id="map-status">👆 Cliquez sur la carte</span></div>
-          <input type="hidden" name="latitude" id="id_latitude">
-          <input type="hidden" name="longitude" id="id_longitude">
-
           <div class="row g-3">
             <div class="col-md-6"><label class="form-label fw-semibold small">Nom complet *</label><input type="text" name="delivery_name" class="form-control" required /></div>
             <div class="col-md-6"><label class="form-label fw-semibold small">Téléphone *</label><input type="tel" name="delivery_phone" class="form-control" required /></div>
@@ -128,51 +120,6 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if product.is_physical %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-(function(){
-  var el = document.getElementById('delivery-map');
-  if (!el || el.dataset.ok) return;
-  el.dataset.ok = 1;
-
-  // Attendre que le conteneur soit visible
-var map = L.map('delivery-map', {
-    zoomControl: true,
-    zoomControlOptions: { position: 'bottomright' }
-}).setView([5.3599, -4.0082], 13);
-
-// Forcer la carte à remplir son conteneur
-setTimeout(function() {
-    map.invalidateSize();
-}, 100);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 19
-  }).addTo(map);
-
-  var marker;
-
-  map.on('click', function(e) {
-    var la = e.latlng.lat.toFixed(6);
-    var ln = e.latlng.lng.toFixed(6);
-    if (marker) {
-      marker.setLatLng(e.latlng);
-    } else {
-      marker = L.marker(e.latlng).addTo(map);
-    }
-    document.getElementById('id_latitude').value = la;
-    document.getElementById('id_longitude').value = ln;
-    document.getElementById('map-status').innerHTML = '✅ ' + la + ', ' + ln;
-  });
-
-  // Forcer la carte à prendre toute la hauteur
-  setTimeout(function() {
-    map.invalidateSize();
-  }, 500);
-})();
-</script>
 
 <script>
 (function(){

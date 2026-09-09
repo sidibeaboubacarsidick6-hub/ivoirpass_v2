@@ -333,7 +333,7 @@
                         {% if product.stock > 0 %}
                             {{ product.stock }} exemplaire{{ product.stock|pluralize }}
                         {% else %}
-                            <span class="text-danger">Rupture de stock</span>
+                            <span class="text-danger">Indisponible</span>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -415,7 +415,7 @@
                         {% elif product.status == 'archived' %}
                             Produit archivé
                         {% elif product.status == 'out_stock' %}
-                            Rupture de stock
+                            Indisponible
                         {% else %}
                             Indisponible
                         {% endif %}
