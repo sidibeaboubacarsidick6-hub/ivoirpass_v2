@@ -61,7 +61,7 @@
         {% if product.is_physical %}
         <div class="ip-card p-4 mb-4">
           <h5 class="fw-bold mb-3"><i class="bi bi-boxes me-2 text-green"></i>Quantité</h5>
-          <select name="quantity" class="form-select" style="max-width:150px;">
+          <select name="quantity" id="id_quantity" class="form-select" style="max-width:150px;">
             {% for i in "12345" %}{% if forloop.counter <= product.stock %}
             <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
             {% endif %}{% endfor %}
@@ -101,7 +101,7 @@
         <div class="ip-card p-4 mb-4" style="border-left:4px solid #1B7A3E;">
           <div class="d-flex justify-content-between align-items-center">
             <span class="fw-bold">Total</span>
-            <span class="fw-bold fs-5 text-green">{{ product.price|floatformat:0 }} FCFA</span>
+            <span class="fw-bold fs-5 text-green" id="total-amount" data-unit-price="{{ product.price|floatformat:0 }}">{{ product.price|floatformat:0 }} FCFA</span>
           </div>
           {% if product.is_physical %}<small class="text-muted">+ frais livraison à charge client</small>{% endif %}
         </div>
@@ -171,6 +171,24 @@ setTimeout(function() {
   setTimeout(function() {
     map.invalidateSize();
   }, 500);
+})();
+</script>
+
+<script>
+(function(){
+  var qtySelect = document.getElementById('id_quantity');
+  var totalEl   = document.getElementById('total-amount');
+  if (!qtySelect || !totalEl) return;
+  var unitPrice = parseFloat(totalEl.dataset.unitPrice) || 0;
+
+  function updateTotal() {
+    var qty = parseInt(qtySelect.value, 10) || 1;
+    var total = unitPrice * qty;
+    totalEl.textContent = total.toLocaleString('fr-FR') + ' FCFA';
+  }
+
+  qtySelect.addEventListener('change', updateTotal);
+  updateTotal();
 })();
 </script>
 {% endif %}
