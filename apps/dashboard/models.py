@@ -147,8 +147,37 @@ class OrganizerWallet(models.Model):
         )
 
     def debit(self, amount, description='', reference=''):
-        """Compatibilité legacy : finalise un montant déjà réservé."""
+        # Compatibilité legacy : finalise un montant déjà réservé.
         return self.complete_reserved(amount, description=description, reference=reference)
+
+    def refund_charge(self, amount, description='', reference=''):
+        # Le coût intégral du remboursement client est supporté par l'organisateur.
+        from decimal import Decimal
+
+        amount = Decimal(str(amount))
+        if amount <= 0:
+            raise ValueError("Le montant du remboursement doit être positif.")
+
+        self.balance_available -= amount
+        self.save(update_fields=["balance_available", "updated_at"])
+
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.REFUND,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or "Remboursement client — coût supporté par organisateur",
+            reference=reference,
+        )
+
+        return True
+
+    def __str__(self):
+        return (
+            f"{self.get_type_display()} — "
+            f"{self.amount} FCFA — "
+            f"{self.created_at.strftime('%d/%m/%Y')}"
+        )
 
 
 class WalletTransaction(models.Model):
@@ -207,6 +236,7 @@ class WalletTransaction(models.Model):
             f"{self.amount} FCFA — "
             f"{self.created_at.strftime('%d/%m/%Y')}"
         )
+
 
 
 class WithdrawalRequest(models.Model):

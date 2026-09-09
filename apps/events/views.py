@@ -201,6 +201,54 @@ def event_create(request):
                 event.min_price = min(prices)
                 event.save(update_fields=['min_price'])
 
+            # Notification email de création d'événement.
+            # L'envoi ne doit jamais empêcher la création de l'événement.
+            try:
+                from django.conf import settings
+                from django.core.mail import EmailMultiAlternatives
+                from django.template.loader import render_to_string
+                from django.urls import reverse
+                from django.utils import timezone
+
+                organizer = request.user
+                kyc_required = not organizer.is_organizer_verified
+                profile_url = request.build_absolute_uri(
+                    reverse('accounts:profile')
+                )
+
+                context = {
+                    'organizer': organizer,
+                    'event': event,
+                    'kyc_required': kyc_required,
+                    'profile_url': profile_url,
+                    'platform_url': settings.PAYDUNYA_BASE_URL,
+                    'support_email': getattr(
+                        settings, 'DEFAULT_FROM_EMAIL', ''
+                    ),
+                    'year': timezone.now().year,
+                }
+
+                subject = f"Votre événement « {event.title} » a été créé — IvoirPass"
+                text_body = render_to_string(
+                    'notifications/email/event_created.txt',
+                    context,
+                )
+                html_body = render_to_string(
+                    'notifications/email/event_created.html',
+                    context,
+                )
+
+                email = EmailMultiAlternatives(
+                    subject=subject,
+                    body=text_body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    to=[organizer.email],
+                )
+                email.attach_alternative(html_body, "text/html")
+                email.send(fail_silently=True)
+            except Exception:
+                pass
+
             messages.success(request, f"Événement « {event.title} » créé avec succès !")
             return redirect('events:my_events')
         else:
@@ -294,39 +342,24 @@ def event_edit(request, slug):
 @organizer_required
 def event_delete(request, slug):
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
+
     if request.method == 'POST':
         if event.tickets_sold > 0:
-            event.status = Event.Status.CANCELLED
-            event.save()
+            from .services import cancel_event_and_refund
 
-            from apps.tickets.models import Ticket
-            from apps.notifications.service import NotificationService
-
-            tickets = Ticket.objects.filter(
-                order_item__ticket_type__event=event,
-                order_item__order__status='paid',
-                status='valid',
-            ).select_related('order_item__order')
-
-            orders_refunded = set()
-            for ticket in tickets:
-                order = ticket.order_item.order
-                if order.id not in orders_refunded:
-                    order.refund(reason='Événement annulé par organisateur')
-                    orders_refunded.add(order.id)
-                NotificationService.event_cancelled(ticket)
+            result = cancel_event_and_refund(event)
 
             messages.warning(
                 request,
-                f"Événement annulé. {len(orders_refunded)} commande(s) "
-                f"marquée(s) pour remboursement et clients notifiés."
+                f"Événement annulé. {result['orders_refunded']} commande(s) "
+                f"client(s) concernée(s) par le remboursement."
             )
         else:
             title = event.title
             event.delete()
             messages.success(request, f"Événement « {title} » supprimé.")
-    return redirect('events:my_events')
 
+    return redirect('events:my_events')
 
 @organizer_required
 def assign_scanner_agents(request, slug):

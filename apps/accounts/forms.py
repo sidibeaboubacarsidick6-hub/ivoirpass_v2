@@ -67,7 +67,6 @@ class ProfileEditForm(forms.ModelForm):
         fields = [
             'first_name', 'last_name', 'phone_number',
             'city', 'bio', 'avatar',
-            'preferred_language',
             'notify_email', 'notify_sms', 'notify_push',
         ]
         widgets = {
@@ -96,9 +95,6 @@ class ProfileEditForm(forms.ModelForm):
                 'class': 'form-control',
                 'accept': 'image/*',
             }),
-            'preferred_language': forms.Select(attrs={
-                'class': 'form-select',
-            }),
         }
         labels = {
             'first_name':         'Prénom',
@@ -107,7 +103,6 @@ class ProfileEditForm(forms.ModelForm):
             'city':               'Ville',
             'bio':                'Biographie',
             'avatar':             'Photo de profil',
-            'preferred_language': 'Langue préférée',
             'notify_email':       'Recevoir les notifications par email',
             'notify_sms':         'Recevoir les notifications par SMS',
             'notify_push':        'Recevoir les notifications push',

@@ -180,54 +180,75 @@
         </div>
 
         <!-- Section : Lieu -->
-        <div class="ip-card p-4 mb-4" x-data="{ type: '{{ event.event_type|default:'physical' }}' }">
+        <div class="ip-card p-4 mb-4"
+             x-data="{ type: '{{ form.event_type.value|default:'physical' }}' }">
           <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
-            <i class="bi bi-geo-alt me-2 text-green"></i>Lieu
+            <i class="bi bi-geo-alt me-2 text-green"></i>Lieu et accès
           </h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">{{ form.venue_name.label }}</label>
-              {{ form.venue_name }}
-              {% if form.venue_name.errors %}
-                {% for error in form.venue_name.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">{{ form.event_type.label }}</label>
+            {{ form.event_type.as_widget(attrs={"x-model": "type"}) }}
+            {% if form.event_type.errors %}
+              {% for error in form.event_type.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <div x-show="type !== 'online'" x-transition>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold small">{{ form.venue_name.label }}</label>
+                {{ form.venue_name }}
+                {% if form.venue_name.errors %}
+                  {% for error in form.venue_name.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  </div>
+                  {% endfor %}
+                {% endif %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label fw-semibold small">{{ form.venue_city.label }}</label>
+                {{ form.venue_city }}
+                {% if form.venue_city.errors %}
+                  {% for error in form.venue_city.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  </div>
+                  {% endfor %}
+                {% endif %}
+              </div>
+
+              <div class="col-12">
+                <label class="form-label fw-semibold small">{{ form.venue_address.label }}</label>
+                {{ form.venue_address }}
+                {% if form.venue_address.errors %}
+                  {% for error in form.venue_address.errors %}
+                  <div class="text-danger small mt-1">
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  </div>
+                  {% endfor %}
+                {% endif %}
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">{{ form.venue_city.label }}</label>
-              {{ form.venue_city }}
-              {% if form.venue_city.errors %}
-                {% for error in form.venue_city.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold small">{{ form.venue_address.label }}</label>
-              {{ form.venue_address }}
-              {% if form.venue_address.errors %}
-                {% for error in form.venue_address.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold small">{{ form.online_link.label }}</label>
-              {{ form.online_link }}
-              {% if form.online_link.errors %}
-                {% for error in form.online_link.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
+          </div>
+
+          <div class="mt-3" x-show="type !== 'physical'" x-transition>
+            <label class="form-label fw-semibold small">{{ form.online_link.label }}</label>
+            {{ form.online_link }}
+            {% if form.online_link.errors %}
+              {% for error in form.online_link.errors %}
+              <div class="text-danger small mt-1">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+              {% endfor %}
+            {% endif %}
+            <div class="form-text">
+              Indiquez le lien de connexion à votre événement en ligne.
             </div>
           </div>
         </div>
@@ -759,7 +780,68 @@ function addExtraForm(containerId, prefix) {
   }
 
   container.appendChild(newForm);
+  initFileInputs(newForm);
   totalForms.value = formCount + 1;
 }
+
+<script>
+/* Gestion universelle des uploads : retirer puis remplacer un fichier sans recharger. */
+function initFileInputs(root = document) {
+  root.querySelectorAll('input[type="file"]').forEach(input => {
+    if (input.dataset.fileManagerInitialized === '1') return;
+    input.dataset.fileManagerInitialized = '1';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'file-upload-manager';
+
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+
+    const actions = document.createElement('div');
+    actions.className = 'd-flex align-items-center gap-2 mt-2';
+
+    const filename = document.createElement('span');
+    filename.className = 'text-muted small';
+    filename.style.display = 'none';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-outline-danger btn-sm';
+    removeBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Retirer';
+    removeBtn.style.display = 'none';
+
+    actions.appendChild(filename);
+    actions.appendChild(removeBtn);
+    wrapper.appendChild(actions);
+
+    function refresh() {
+      if (input.files && input.files.length > 0) {
+        filename.textContent = input.files[0].name;
+        filename.style.display = '';
+        removeBtn.style.display = '';
+      } else {
+        filename.textContent = '';
+        filename.style.display = 'none';
+        removeBtn.style.display = 'none';
+      }
+    }
+
+    input.addEventListener('change', refresh);
+
+    removeBtn.addEventListener('click', function () {
+      input.value = '';
+      refresh();
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    refresh();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  initFileInputs();
+});
+</script>
+
 </script>
 {% endblock %}

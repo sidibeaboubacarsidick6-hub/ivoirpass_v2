@@ -90,11 +90,10 @@ class Event(models.Model):
         help_text="Accroche courte affichée sous le titre"
     )
     description = models.TextField(_('description complète'))
-    short_description = models.TextField(
-        _('description courte'),
-        max_length=500,
-        blank=True,
-        help_text="Résumé pour les cartes d'aperçu (max 500 car.)"
+    short_description = models.CharField(
+        _('InfoLine'),
+        max_length=150,
+        help_text="Information courte affichée sur les cartes et aperçus (max 150 caractères)"
     )
 
     # ============================================

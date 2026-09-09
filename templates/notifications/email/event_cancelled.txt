@@ -1,6 +1,6 @@
 Événement annulé — IvoirPass
 
-Bonjour {{ user.get_short_name }},
+Bonjour {{ guest_order.buyer_name }},
 
 L'événement « {{ event.title }} » prévu le
 {{ event.start_date|date:"d/m/Y" }} a été annulé.

@@ -288,16 +288,43 @@ class NotificationService:
 
     @classmethod
     def event_cancelled(cls, ticket):
-        user = ticket.buyer
-        event = ticket.event
-        context = {'user': user, 'ticket': ticket, 'event': event, 'platform_name': 'IvoirPass', 'platform_url': settings.PAYDUNYA_BASE_URL, 'year': timezone.now().year}
+        """
+        Notifie le participant invité lorsqu'un événement est annulé.
+        L'adresse email provient du GuestOrder associé au GuestTicket.
+        """
+        order = ticket.order_item.order
+        event = ticket.order_item.ticket_type.event
+
+        context = {
+            'user': None,
+            'guest_order': order,
+            'ticket': ticket,
+            'event': event,
+            'platform_name': 'IvoirPass',
+            'platform_url': settings.PAYDUNYA_BASE_URL,
+            'year': timezone.now().year,
+        }
+
         try:
-            html_message  = render_to_string('notifications/email/event_cancelled.html', context)
-            plain_message = render_to_string('notifications/email/event_cancelled.txt', context)
+            html_message = render_to_string(
+                'notifications/email/event_cancelled.html',
+                context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/event_cancelled.txt',
+                context,
+            )
         except Exception:
             return False
-        email = EmailMultiAlternatives(subject=f"Événement annulé — {event.title}", body=plain_message, from_email=settings.DEFAULT_FROM_EMAIL, to=[user.email])
+
+        email = EmailMultiAlternatives(
+            subject=f"Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.buyer_email],
+        )
         email.attach_alternative(html_message, "text/html")
+
         try:
             email.send()
             return True

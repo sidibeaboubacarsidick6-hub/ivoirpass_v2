@@ -144,8 +144,21 @@ class EventAdmin(admin.ModelAdmin):
 
     @admin.action(description="🚫 Annuler les événements sélectionnés")
     def cancel_events(self, request, queryset):
-        updated = queryset.update(status=Event.Status.CANCELLED)
-        self.message_user(request, f"{updated} événement(s) annulé(s).")
+        from .services import cancel_event_and_refund
+
+        cancelled = 0
+        orders_refunded = 0
+
+        for event in queryset:
+            result = cancel_event_and_refund(event)
+            cancelled += 1
+            orders_refunded += result["orders_refunded"]
+
+        self.message_user(
+            request,
+            f"{cancelled} événement(s) annulé(s). "
+            f"{orders_refunded} commande(s) concernée(s) par un remboursement."
+        )
 
     @admin.action(description="⭐ Mettre en avant")
     def feature_events(self, request, queryset):

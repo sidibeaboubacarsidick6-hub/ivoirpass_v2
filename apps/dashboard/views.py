@@ -22,7 +22,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.events.models import Event
-from apps.tickets.models import Order, OrderItem, Ticket
+from apps.tickets.models import Order, OrderItem, Ticket, GuestTicket, GuestOrder
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP, AuditLog, Dispute
 
 
@@ -246,37 +246,91 @@ def event_stats(request, slug):
 def participants(request, slug):
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
 
+    # Billets issus des commandes avec compte
     tickets = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
     ).select_related(
         'order_item__ticket_type',
         'order_item__order__buyer',
-    ).order_by('-created_at')
+    )
+
+    # Billets issus des commandes invitées
+    guest_tickets = GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
+    ).select_related(
+        'order_item__ticket_type',
+        'order_item__order',
+    )
 
     status_filter = request.GET.get('status', '')
-    if status_filter:
-        tickets = tickets.filter(status=status_filter)
+    search = request.GET.get('q', '').strip()
 
-    search = request.GET.get('q', '')
+    participants_list = []
+
+    for ticket in tickets:
+        buyer = ticket.order_item.order.buyer
+        participants_list.append({
+            'ticket': ticket,
+            'buyer_name': buyer.get_full_name(),
+            'buyer_email': buyer.email,
+            'buyer_phone': buyer.phone_number or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.status,
+            'status_display': ticket.get_status_display(),
+            'scanned_at': ticket.scanned_at,
+            'created_at': ticket.created_at,
+        })
+
+    for ticket in guest_tickets:
+        order = ticket.order_item.order
+        participants_list.append({
+            'ticket': ticket,
+            'buyer_name': order.buyer_name,
+            'buyer_email': order.email,
+            'buyer_phone': order.phone or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.status,
+            'status_display': ticket.get_status_display(),
+            'scanned_at': ticket.scanned_at,
+            'created_at': ticket.created_at,
+        })
+
+    if status_filter:
+        participants_list = [
+            p for p in participants_list
+            if p['status'] == status_filter
+        ]
+
     if search:
-        tickets = tickets.filter(
-            Q(order_item__order__buyer__email__icontains=search) |
-            Q(order_item__order__buyer__first_name__icontains=search) |
-            Q(ticket_number__icontains=search)
-        )
+        search_lower = search.lower()
+        participants_list = [
+            p for p in participants_list
+            if search_lower in p['buyer_name'].lower()
+            or search_lower in p['buyer_email'].lower()
+            or search_lower in p['ticket_number'].lower()
+            or search_lower in p['buyer_phone'].lower()
+        ]
+
+    participants_list.sort(
+        key=lambda p: p['created_at'],
+        reverse=True
+    )
 
     stats = {
-        'total': tickets.count(),
-        'valid': tickets.filter(status='valid').count(),
-        'used':  tickets.filter(status='used').count(),
+        'total': len(participants_list),
+        'valid': sum(1 for p in participants_list if p['status'] == 'valid'),
+        'used': sum(1 for p in participants_list if p['status'] == 'used'),
     }
 
     return render(request, 'dashboard/participants.html', {
-        'event':         event,
-        'tickets':       tickets,
-        'stats':         stats,
-        'search':        search,
+        'event': event,
+        'tickets': participants_list,
+        'stats': stats,
+        'search': search,
         'status_filter': status_filter,
     })
 
@@ -409,7 +463,7 @@ from django.http import HttpResponse
 
 @organizer_required
 def export_participants_csv(request, slug):
-    """Exporte la liste des participants en CSV."""
+    """Exporte la liste complète des participants en CSV."""
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
 
     tickets = Ticket.objects.filter(
@@ -418,30 +472,73 @@ def export_participants_csv(request, slug):
     ).select_related(
         'order_item__ticket_type',
         'order_item__order__buyer',
-    ).order_by('-created_at')
+    )
+
+    guest_tickets = GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
+    ).select_related(
+        'order_item__ticket_type',
+        'order_item__order',
+    )
+
+    participants_list = []
+
+    for ticket in tickets:
+        buyer = ticket.order_item.order.buyer
+        participants_list.append({
+            'buyer_name': buyer.get_full_name(),
+            'buyer_email': buyer.email,
+            'buyer_phone': buyer.phone_number or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.get_status_display(),
+            'created_at': ticket.created_at,
+        })
+
+    for ticket in guest_tickets:
+        order = ticket.order_item.order
+        participants_list.append({
+            'buyer_name': order.buyer_name,
+            'buyer_email': order.email,
+            'buyer_phone': order.phone or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.get_status_display(),
+            'created_at': ticket.created_at,
+        })
+
+    participants_list.sort(
+        key=lambda participant: participant['created_at'],
+        reverse=True
+    )
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = (
         f'attachment; filename="participants_{event.slug}.csv"'
     )
-    response.write('\ufeff')  # BOM pour Excel UTF-8
+    response.write('\ufeff')
 
     writer = csv.writer(response)
     writer.writerow([
-        'Nom complet', 'Email', 'Téléphone', 'Type de billet',
-        'Numéro ticket', 'Statut', 'Date achat'
+        'Nom complet',
+        'Email',
+        'Téléphone',
+        'Type de billet',
+        'Numéro ticket',
+        'Statut',
+        'Date achat',
     ])
 
-    for ticket in tickets:
-        buyer = ticket.order_item.order.buyer
+    for participant in participants_list:
         writer.writerow([
-            buyer.get_full_name(),
-            buyer.email,
-            buyer.phone_number or '',
-            ticket.order_item.ticket_type.name,
-            ticket.ticket_number,
-            ticket.get_status_display(),
-            ticket.created_at.strftime('%d/%m/%Y %H:%M'),
+            participant['buyer_name'],
+            participant['buyer_email'],
+            participant['buyer_phone'],
+            participant['ticket_type'],
+            participant['ticket_number'],
+            participant['status'],
+            participant['created_at'].strftime('%d/%m/%Y %H:%M'),
         ])
 
     return response

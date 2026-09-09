@@ -38,10 +38,11 @@ class EventForm(forms.ModelForm):
                 'rows': 8,
                 'placeholder': 'Décrivez votre événement en détail...',
             }),
-            'short_description': forms.Textarea(attrs={
+            'short_description': forms.TextInput(attrs={
                 'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Résumé court pour les aperçus (max 500 caractères)',
+                'maxlength': 150,
+                'required': True,
+                'placeholder': 'Information courte sur votre événement (150 caractères max)',
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -140,11 +141,24 @@ class EventForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         start = cleaned.get('start_date')
-        end   = cleaned.get('end_date')
+        end = cleaned.get('end_date')
+        event_type = cleaned.get('event_type')
+        online_link = cleaned.get('online_link')
+
         if start and end and end <= start:
             raise forms.ValidationError(
                 "La date de fin doit être après la date de début."
             )
+
+        if event_type in (
+            Event.EventType.ONLINE,
+            Event.EventType.HYBRID,
+        ) and not online_link:
+            self.add_error(
+                'online_link',
+                "Le lien en ligne est obligatoire pour un événement en ligne ou hybride."
+            )
+
         return cleaned
 
 

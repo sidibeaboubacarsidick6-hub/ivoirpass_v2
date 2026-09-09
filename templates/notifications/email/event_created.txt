@@ -1,0 +1,25 @@
+Votre événement a été créé — IvoirPass
+
+Bonjour {{ organizer.get_short_name|default:organizer.first_name|default:organizer.email }},
+
+Votre événement « {{ event.title }} » a bien été créé sur IvoirPass.
+
+{% if kyc_required %}
+VÉRIFICATION KYC REQUISE
+
+Pour publier un événement comportant des billets payants, votre compte organisateur doit être vérifié.
+
+Documents à fournir :
+- Pièce d'identité : carte d'identité, passeport ou carte consulaire
+- Justificatif de domicile : facture d'électricité, d'eau ou attestation de domicile
+- Document professionnel : RCCM, attestation fiscale ou déclaration d'activité
+
+Vous pouvez transmettre vos documents depuis votre profil organisateur :
+{{ profile_url }}
+
+Après soumission, vos documents sont vérifiés par notre équipe. La publication payante sera disponible une fois la vérification validée.
+{% else %}
+Votre compte organisateur étant déjà vérifié, vous pouvez utiliser les fonctionnalités de publication payante conformément aux règles d'IvoirPass.
+{% endif %}
+
+Merci d'utiliser IvoirPass.
