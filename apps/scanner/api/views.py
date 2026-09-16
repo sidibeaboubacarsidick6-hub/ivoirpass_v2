@@ -10,7 +10,6 @@ import uuid as uuid_lib
 
 from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db import transaction
@@ -33,10 +32,16 @@ def _check_agent(request):
     return user, None
 
 
-@csrf_exempt
 @require_POST
 def scan_qr_api(request):
-    """API pour scanner un QR code depuis scanner_app (session Django)."""
+    """
+    API pour scanner un QR code depuis scanner_app (session Django).
+
+    Authentifié par cookie de session (voir _check_agent) : la protection
+    CSRF standard de Django s'applique donc normalement. Le front-end
+    (templates/scanner_app/index.html) envoie le jeton CSRF via l'en-tête
+    X-CSRFToken sur cet appel.
+    """
 
     agent, error_response = _check_agent(request)
     if error_response:
@@ -179,10 +184,14 @@ def scan_qr_api(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
 @require_POST
 def check_event_exists(request):
-    """Vérifie si un événement existe (pour l'app scanner)."""
+    """
+    Vérifie si un événement existe (pour l'app scanner).
+
+    Authentifié par cookie de session, même remarque que scan_qr_api :
+    protection CSRF standard réactivée, jeton envoyé par le front-end.
+    """
     try:
         body = json.loads(request.body)
         event_id = body.get('event_id')

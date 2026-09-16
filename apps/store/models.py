@@ -7,7 +7,7 @@ import os
 import random
 import string
 import logging
-from django.db import models
+from django.db import models, transaction, IntegrityError
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify
@@ -542,30 +542,45 @@ class ProductOrder(models.Model):
                 )
 
     def _credit_seller_wallet(self):
-        """Crédite le wallet avec la commission dynamique du produit — anti-doublon."""
-        from apps.dashboard.models import OrganizerWallet, WalletTransaction
+        """
+        Crédite le wallet avec la commission dynamique du produit.
 
-        # ✅ Anti-doublon : ne crédite jamais deux fois la même commande
-        already_credited = WalletTransaction.objects.filter(
-            reference=self.order_number
-        ).exists()
-        if already_credited:
-            logger.info(
-                f"Transaction déjà créditée pour la commande {self.order_number}, ignorée"
-            )
-            return
+        Verrouillé (select_for_update) et protégé par la contrainte unique
+        en base sur (wallet, reference, type=credit) : évite un double
+        crédit si cette méthode est appelée deux fois pour la même commande
+        (ex. deux requêtes concurrentes marquant la commande comme payée).
+        """
+        from apps.dashboard.models import OrganizerWallet, WalletTransaction
 
         commission_rate = float(self.product.commission_rate) / 100
         net_amount = int(round(float(self.subtotal) * (1 - commission_rate)))
 
-        wallet, _ = OrganizerWallet.objects.get_or_create(
-            organizer=self.product.seller
-        )
-        wallet.credit(
-            amount=net_amount,
-            description=f"Vente boutique — {self.product.name}",
-            reference=self.order_number,
-        )
+        try:
+            with transaction.atomic():
+                wallet, _ = OrganizerWallet.objects.get_or_create(
+                    organizer=self.product.seller
+                )
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+
+                if WalletTransaction.objects.filter(
+                    wallet=wallet, reference=self.order_number, type=WalletTransaction.Type.CREDIT
+                ).exists():
+                    logger.info(
+                        f"Transaction déjà créditée pour la commande {self.order_number}, ignorée"
+                    )
+                    return
+
+                wallet.credit(
+                    amount=net_amount,
+                    description=f"Vente boutique — {self.product.name}",
+                    reference=self.order_number,
+                )
+        except IntegrityError:
+            logger.warning(
+                f"Double crédit wallet évité par la contrainte unique pour "
+                f"la commande {self.order_number}"
+            )
+            return
         logger.info(
             f"Wallet crédité pour la commande {self.order_number}: "
             f"{net_amount} FCFA"
@@ -697,6 +712,7 @@ class GuestProductOrder(models.Model):
     class DeliveryMethod(models.TextChoices):
         DOWNLOAD = 'download', _('Téléchargement')
         DELIVERY = 'delivery', _('Livraison')
+        BOTH     = 'both',     _('Bundle (physique + numérique)')
 
     # Numéro unique
     order_number = models.CharField(
@@ -892,12 +908,17 @@ class GuestProductOrder(models.Model):
         # Crédite le wallet du vendeur
         self._credit_seller_wallet()
 
-        # Génère les liens de téléchargement si produit numérique
-        if self.product.is_digital:
+        # Génère les liens de téléchargement UNIQUEMENT si le client a
+        # reellement choisi le numerique (seul ou bundle) — avant, ceci
+        # se basait sur product.is_digital, qui est TOUJOURS vrai pour
+        # un bundle, meme si le client n'avait choisi que le physique.
+        if self.delivery_method in (self.DeliveryMethod.DOWNLOAD, self.DeliveryMethod.BOTH):
             self._generate_download_links()
 
-        # Met à jour le stock si produit physique
-        if self.product.is_physical:
+        # Met a jour le stock UNIQUEMENT si le client a reellement
+        # choisi la livraison physique (seule ou bundle) — meme
+        # correction que ci-dessus.
+        if self.delivery_method in (self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH):
             from django.db import transaction
             from django.db.models import F
             
@@ -928,30 +949,44 @@ class GuestProductOrder(models.Model):
                 )
 
     def _credit_seller_wallet(self):
-        """Crédite le wallet avec la commission dynamique du produit — anti-doublon."""
-        from apps.dashboard.models import OrganizerWallet, WalletTransaction
+        """
+        Crédite le wallet avec la commission dynamique du produit.
 
-        # ✅ Anti-doublon : ne crédite jamais deux fois la même commande
-        already_credited = WalletTransaction.objects.filter(
-            reference=self.order_number
-        ).exists()
-        if already_credited:
-            logger.info(
-                f"Transaction déjà créditée pour la commande guest {self.order_number}, ignorée"
-            )
-            return
+        Verrouillé (select_for_update) et protégé par la contrainte unique
+        en base sur (wallet, reference, type=credit) : évite un double
+        crédit si cette méthode est appelée deux fois pour la même commande.
+        """
+        from apps.dashboard.models import OrganizerWallet, WalletTransaction
 
         commission_rate = float(self.product.commission_rate) / 100
         net_amount = int(round(float(self.subtotal) * (1 - commission_rate)))
 
-        wallet, _ = OrganizerWallet.objects.get_or_create(
-            organizer=self.product.seller
-        )
-        wallet.credit(
-            amount=net_amount,
-            description=f"Vente boutique — {self.product.name}",
-            reference=self.order_number,
-        )
+        try:
+            with transaction.atomic():
+                wallet, _ = OrganizerWallet.objects.get_or_create(
+                    organizer=self.product.seller
+                )
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+
+                if WalletTransaction.objects.filter(
+                    wallet=wallet, reference=self.order_number, type=WalletTransaction.Type.CREDIT
+                ).exists():
+                    logger.info(
+                        f"Transaction déjà créditée pour la commande guest {self.order_number}, ignorée"
+                    )
+                    return
+
+                wallet.credit(
+                    amount=net_amount,
+                    description=f"Vente boutique — {self.product.name}",
+                    reference=self.order_number,
+                )
+        except IntegrityError:
+            logger.warning(
+                f"Double crédit wallet évité par la contrainte unique pour "
+                f"la commande guest {self.order_number}"
+            )
+            return
         logger.info(
             f"Wallet crédité pour la commande guest {self.order_number}: "
             f"{net_amount} FCFA"

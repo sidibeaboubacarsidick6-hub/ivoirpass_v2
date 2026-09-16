@@ -717,6 +717,7 @@ def product_delete(request, slug):
 @ratelimit(key='ip', rate='30/m', block=True)
 def store_webhook(request):
     """Webhook PayDunya pour les commandes boutique."""
+    from django.db import transaction
     
     if not request.body:
         logger.warning("Store webhook: body vide")
@@ -755,24 +756,35 @@ def store_webhook(request):
         
         if status == 'completed' and order_number:
             try:
-                order = ProductOrder.objects.get(
-                    order_number=order_number,
-                    status=ProductOrder.Status.PENDING
-                )
-                
-                order.status = ProductOrder.Status.PAID
-                order.payment_method = 'paydunya'
-                order.payment_reference = token
-                order.paid_at = timezone.now()
-                order.save()
-                
+                # Verrouille la ligne commande pour rester robuste face aux
+                # retries de webhook PayDunya (deux livraisons quasi
+                # simultanées ne doivent confirmer/décrémenter le stock
+                # qu'une seule fois) — même patron que pour les commandes
+                # de billetterie (apps/tickets/models.py mark_as_paid).
+                with transaction.atomic():
+                    order = ProductOrder.objects.select_for_update().get(
+                        order_number=order_number,
+                        status=ProductOrder.Status.PENDING
+                    )
+
+                    order.status = ProductOrder.Status.PAID
+                    order.payment_method = 'paydunya'
+                    order.payment_reference = token
+                    order.paid_at = timezone.now()
+                    order.save()
+
+                    if order.product.is_physical:
+                        order.product.stock -= order.quantity
+                        order.product.sold_count += order.quantity
+                        order.product.save(update_fields=['stock', 'sold_count'])
+
                 logger.info(f"Store webhook: commande {order_number} validée")
-                
+
                 try:
                     order._credit_seller_wallet()
                 except Exception as e:
                     logger.error(f"Store webhook: erreur wallet: {e}")
-                
+
                 if order.product.is_digital:
                     from .models import DownloadLink
                     if not DownloadLink.objects.filter(order=order).exists():
@@ -782,12 +794,7 @@ def store_webhook(request):
                             send_download_link_email_async.delay(str(order.uuid))
                         except Exception as e:
                             logger.error(f"Store webhook: erreur envoi email: {e}")
-                
-                if order.product.is_physical:
-                    order.product.stock -= order.quantity
-                    order.product.sold_count += order.quantity
-                    order.product.save(update_fields=['stock', 'sold_count'])
-                
+
             except ProductOrder.DoesNotExist:
                 logger.warning(f"Store webhook: commande {order_number} introuvable ou déjà payée")
             except Exception as e:
@@ -834,8 +841,8 @@ def guest_buy_product(request, slug):
         if not last_name:  errors.append("Le nom est requis.")
         if not email:      errors.append("L'email est requis.")
 
-        # Adresse obligatoire si livraison physique
-        if delivery_method == 'delivery':
+        # Adresse obligatoire si livraison physique (seule ou en bundle)
+        if delivery_method in ('delivery', 'both'):
             delivery_name    = request.POST.get('delivery_name', '').strip()
             delivery_phone   = request.POST.get('delivery_phone', '').strip()
             delivery_address = request.POST.get('delivery_address', '').strip()
@@ -845,7 +852,7 @@ def guest_buy_product(request, slug):
             if not delivery_address: errors.append("L'adresse est requise.")
             if not delivery_city:    errors.append("La ville est requise.")
 
-        if product.is_physical and quantity > product.stock:
+        if delivery_method in ('delivery', 'both') and quantity > product.stock:
             errors.append("Quantité demandée supérieure au stock disponible.")
 
         if errors:
@@ -853,10 +860,21 @@ def guest_buy_product(request, slug):
                 messages.error(request, e)
             return render(request, 'store/guest_checkout.html', {'product': product})
 
-        # Calcul montants
-        unit_price = product.price
-        subtotal   = unit_price * quantity
-        total      = subtotal  # Commission prélevée sur le vendeur, pas sur l'acheteur
+        # Calcul montants — pour un bundle, le prix depend du format choisi
+        if product.product_type == Product.ProductType.BUNDLE:
+            if delivery_method == 'download':
+                unit_price = product.price_digital
+            elif delivery_method == 'delivery':
+                unit_price = product.price_physical
+            else:
+                unit_price = product.price
+            if not unit_price:
+                messages.error(request, "Ce format n'est pas disponible pour ce produit.")
+                return render(request, 'store/guest_checkout.html', {'product': product})
+        else:
+            unit_price = product.price
+        subtotal = unit_price * quantity
+        total    = subtotal  # Commission prélevée sur le vendeur, pas sur l'acheteur
 
         # 🔒 Verrouillage du stock pour éviter les race conditions
         from django.db import transaction
@@ -864,7 +882,7 @@ def guest_buy_product(request, slug):
         with transaction.atomic():
             product_locked = Product.objects.select_for_update().get(pk=product.pk)
             
-            if product_locked.is_physical and product_locked.stock < quantity:
+            if delivery_method in ('delivery', 'both') and product_locked.stock < quantity:
                 messages.error(request, "Stock insuffisant. Réessayez.")
                 return render(request, 'store/guest_checkout.html', {'product': product})
             
@@ -882,7 +900,7 @@ def guest_buy_product(request, slug):
                 status = GuestProductOrder.Status.PENDING,
             )
 
-        if delivery_method == 'delivery':
+        if delivery_method in ('delivery', 'both'):
             order.delivery_name         = request.POST.get('delivery_name', '').strip()
             order.delivery_phone        = request.POST.get('delivery_phone', '').strip()
             order.delivery_address      = request.POST.get('delivery_address', '').strip()

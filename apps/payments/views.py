@@ -193,16 +193,15 @@ def payment_cancel(request, order_number):
 @require_POST
 @ratelimit(key='ip', rate='30/m', block=True)
 def payment_webhook(request):
-    # 🔥 DEBUG: Afficher TOUT ce que PayDunya envoie
     import logging
     logger = logging.getLogger(__name__)
-    
-    logger.info("=" * 50)
-    logger.info("WEBHOOK RECU")
-    logger.info(f"Content-Type: {request.content_type}")
-    logger.debug("Webhook recu - body: %s", request.body[:200])
-    logger.info(f"POST dict: {request.POST}")
-    logger.info("=" * 50)
+
+    logger.info("Webhook PayDunya reçu (Content-Type: %s)", request.content_type)
+    # Le corps complet peut contenir le hash de signature PayDunya et des
+    # données personnelles de l'acheteur (email) — journalisé en DEBUG
+    # uniquement, jamais en INFO en production (voir R-08 de l'audit).
+    logger.debug("Webhook body: %s", request.body[:500])
+    logger.debug("Webhook POST dict: %s", request.POST)
 
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not PayDunyaService.verify_webhook_signature(request):
@@ -222,17 +221,13 @@ def payment_webhook(request):
     import urllib.parse
     
     try:
-        logger.info(f"Webhook BODY: {request.body[:500]}")
-        logger.info(f"Webhook POST: {request.POST}")
-        logger.info(f"Webhook content_type: {request.content_type}")
-        
         # 🔥 Récupération des données quel que soit le format
         raw_data = {}
         token = None
         
         if request.content_type and 'application/json' in request.content_type:
             raw_data = json.loads(request.body)
-            logger.info(f"Webhook JSON: {raw_data}")
+            logger.debug("Webhook JSON: %s", raw_data)
             
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
@@ -241,7 +236,7 @@ def payment_webhook(request):
             
         else:
             raw_data = request.POST.dict()
-            logger.info(f"Webhook form-data: {raw_data}")
+            logger.debug("Webhook form-data: %s", raw_data)
             
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
@@ -338,8 +333,23 @@ def payment_webhook(request):
 
 
 def _confirm_order(order, token, raw_data):
-    """Confirme une commande après paiement — applique la commission dynamique."""
-    if order.status == Order.Status.PAID:
+    """
+    Confirme une commande après paiement — applique la commission dynamique.
+
+    order.mark_as_paid() est verrouillé et idempotent (voir apps/tickets/models.py) :
+    si un appel concurrent (retour navigateur / webhook / polling) a déjà
+    confirmé la commande entre-temps, il renvoie False et on s'arrête ici
+    sans dupliquer le crédit wallet, les logs d'audit ni l'email des billets.
+    """
+    newly_confirmed = order.mark_as_paid(
+        payment_method    = 'paydunya',
+        payment_reference = token,
+    )
+    if not newly_confirmed:
+        logger.info(
+            f"Commande {order.order_number} déjà confirmée par un appel "
+            f"concurrent — traitement ignoré."
+        )
         return
 
     Payment.objects.filter(
@@ -349,11 +359,6 @@ def _confirm_order(order, token, raw_data):
         status       = Payment.Status.COMPLETED,
         raw_response = raw_data,
         completed_at = timezone.now(),
-    )
-
-    order.mark_as_paid(
-        payment_method    = 'paydunya',
-        payment_reference = token,
     )
 
     log_action(

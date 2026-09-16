@@ -19,8 +19,13 @@ class PaymentAdmin(admin.ModelAdmin):
         'order__buyer__email',
         'guest_order__email',
     )
+    # 'status' et 'amount' sont en lecture seule : une transaction
+    # financière ne doit jamais être modifiée silencieusement depuis
+    # l'admin. Toute correction nécessaire doit passer par une nouvelle
+    # écriture tracée (remboursement, ajustement...) plutôt qu'une édition
+    # directe qui ne laisserait aucune trace dans le journal d'audit.
     readonly_fields = (
-        'paydunya_token', 'paydunya_invoice_token',
+        'paydunya_token', 'paydunya_invoice_token', 'status', 'amount',
         'raw_response', 'created_at', 'updated_at', 'completed_at'
     )
 

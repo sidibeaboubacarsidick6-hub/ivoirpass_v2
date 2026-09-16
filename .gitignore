@@ -53,3 +53,6 @@ staticfiles/
 patch_billets_par_jour/
 patch_billets_par_jour.zip
 
+
+# Fichiers de sauvegarde (ne doivent jamais être versionnés)
+*.bak

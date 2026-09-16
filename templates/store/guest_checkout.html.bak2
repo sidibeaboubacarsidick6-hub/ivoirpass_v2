@@ -41,19 +41,15 @@
         <!-- Bundle -->
         {% if product.product_type == 'bundle' %}
         <div class="ip-card p-4 mb-4">
-          <h5 class="fw-bold mb-3"><i class="bi bi-box-seam me-2 text-orange"></i>Format souhaité</h5>
+          <h5 class="fw-bold mb-3"><i class="bi bi-box-seam me-2 text-orange"></i>Réception</h5>
           <div class="row g-3">
-            <div class="col-4">
-              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="download" class="d-none" data-price="{{ product.price_digital|default_if_none:0|floatformat:0 }}" />
-                <div class="p-3 rounded-3 border text-center">💾<br>Numérique<br><small>{{ product.price_digital|default_if_none:"—"|floatformat:0 }} FCFA</small></div></label>
+            <div class="col-6">
+              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="download" class="d-none" />
+                <div class="p-3 rounded-3 border text-center">💾<br>Numérique</div></label>
             </div>
-            <div class="col-4">
-              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="delivery" class="d-none" data-price="{{ product.price_physical|default_if_none:0|floatformat:0 }}" checked />
-                <div class="p-3 rounded-3 border text-center">📦<br>Physique<br><small>{{ product.price_physical|default_if_none:"—"|floatformat:0 }} FCFA</small></div></label>
-            </div>
-            <div class="col-4">
-              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="both" class="d-none" data-price="{{ product.price|floatformat:0 }}" />
-                <div class="p-3 rounded-3 border text-center">🎁<br>Bundle<br><small>{{ product.price|floatformat:0 }} FCFA</small></div></label>
+            <div class="col-6">
+              <label style="cursor:pointer;"><input type="radio" name="delivery_method" value="delivery" class="d-none" checked />
+                <div class="p-3 rounded-3 border text-center">📦<br>Physique</div></label>
             </div>
           </div>
         </div>
@@ -78,15 +74,15 @@
 
         <!-- Adresse + Carte -->
         {% if product.is_physical %}
-        <div class="ip-card p-4 mb-4" id="delivery-address-block">
+        <div class="ip-card p-4 mb-4">
           <h5 class="fw-bold mb-3"><i class="bi bi-geo-alt me-2 text-green"></i>Adresse de livraison</h5>
           <div class="alert alert-warning small mb-3 py-2">🚚 <strong>Frais de livraison à la charge du client.</strong></div>
 
           <div class="row g-3">
-            <div class="col-md-6"><label class="form-label fw-semibold small">Nom complet *</label><input type="text" name="delivery_name" id="fld_delivery_name" class="form-control" required /></div>
-            <div class="col-md-6"><label class="form-label fw-semibold small">Téléphone *</label><input type="tel" name="delivery_phone" id="fld_delivery_phone" class="form-control" required /></div>
-            <div class="col-12"><label class="form-label fw-semibold small">Adresse *</label><textarea name="delivery_address" id="fld_delivery_address" class="form-control" rows="2" required></textarea></div>
-            <div class="col-md-4"><label class="form-label fw-semibold small">Ville *</label><input type="text" name="delivery_city" id="fld_delivery_city" class="form-control" value="Abidjan" required /></div>
+            <div class="col-md-6"><label class="form-label fw-semibold small">Nom complet *</label><input type="text" name="delivery_name" class="form-control" required /></div>
+            <div class="col-md-6"><label class="form-label fw-semibold small">Téléphone *</label><input type="tel" name="delivery_phone" class="form-control" required /></div>
+            <div class="col-12"><label class="form-label fw-semibold small">Adresse *</label><textarea name="delivery_address" class="form-control" rows="2" required></textarea></div>
+            <div class="col-md-4"><label class="form-label fw-semibold small">Ville *</label><input type="text" name="delivery_city" class="form-control" value="Abidjan" required /></div>
             <div class="col-md-4"><label class="form-label fw-semibold small">Commune</label><input type="text" name="delivery_commune" class="form-control" /></div>
             <div class="col-md-4"><label class="form-label fw-semibold small">Pays</label><input type="text" name="delivery_country" class="form-control" value="Côte d'Ivoire" /></div>
           </div>
@@ -99,7 +95,7 @@
             <span class="fw-bold">Total</span>
             <span class="fw-bold fs-5 text-green" id="total-amount" data-unit-price="{{ product.price|floatformat:0 }}">{{ product.price|floatformat:0 }} FCFA</span>
           </div>
-          {% if product.is_physical %}<small class="text-muted" id="delivery-fee-note">+ frais livraison à charge client</small>{% endif %}
+          {% if product.is_physical %}<small class="text-muted">+ frais livraison à charge client</small>{% endif %}
         </div>
 
         <button type="submit" class="btn btn-orange btn-lg w-100 py-3"><i class="bi bi-lock me-2"></i>Payer via PayDunya</button>
@@ -127,42 +123,18 @@
 
 <script>
 (function(){
-  var qtySelect    = document.getElementById('id_quantity');
-  var totalEl      = document.getElementById('total-amount');
-  var radios       = document.querySelectorAll('input[name="delivery_method"][data-price]');
-  var addressBlock = document.getElementById('delivery-address-block');
-  var feeNote      = document.getElementById('delivery-fee-note');
-  var addressFieldIds = ['fld_delivery_name','fld_delivery_phone','fld_delivery_address','fld_delivery_city'];
-  if (!totalEl) return;
-  var basePrice = parseFloat(totalEl.dataset.unitPrice) || 0;
-
-  function currentUnitPrice() {
-    var checked = document.querySelector('input[name="delivery_method"]:checked');
-    if (checked && checked.dataset.price !== undefined) {
-      return parseFloat(checked.dataset.price) || 0;
-    }
-    return basePrice;
-  }
+  var qtySelect = document.getElementById('id_quantity');
+  var totalEl   = document.getElementById('total-amount');
+  if (!qtySelect || !totalEl) return;
+  var unitPrice = parseFloat(totalEl.dataset.unitPrice) || 0;
 
   function updateTotal() {
-    var qty   = qtySelect ? (parseInt(qtySelect.value, 10) || 1) : 1;
-    var price = currentUnitPrice();
-    totalEl.textContent = (price * qty).toLocaleString('fr-FR') + ' FCFA';
-
-    if (radios.length) {
-      var checked = document.querySelector('input[name="delivery_method"]:checked');
-      var needsAddress = checked && (checked.value === 'delivery' || checked.value === 'both');
-      if (addressBlock) addressBlock.style.display = needsAddress ? '' : 'none';
-      if (feeNote)       feeNote.style.display      = needsAddress ? '' : 'none';
-      addressFieldIds.forEach(function(id){
-        var el = document.getElementById(id);
-        if (el) el.required = needsAddress;
-      });
-    }
+    var qty = parseInt(qtySelect.value, 10) || 1;
+    var total = unitPrice * qty;
+    totalEl.textContent = total.toLocaleString('fr-FR') + ' FCFA';
   }
 
-  if (qtySelect) qtySelect.addEventListener('change', updateTotal);
-  radios.forEach(function(r){ r.addEventListener('change', updateTotal); });
+  qtySelect.addEventListener('change', updateTotal);
   updateTotal();
 })();
 </script>

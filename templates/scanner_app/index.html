@@ -151,9 +151,12 @@
         document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
         document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
 
+        // Jeton CSRF rendu côté serveur (fiable même quand
+        // CSRF_COOKIE_HTTPONLY=True empêche la lecture du cookie en JS,
+        // ce qui est le cas en production — voir config/settings/production.py).
+        const CSRF_TOKEN = "{{ csrf_token }}";
         function getCSRF() {
-            const match = document.cookie.match(/csrftoken=([\w]+)/);
-            return match ? match[1] : '';
+            return CSRF_TOKEN;
         }
 
         async function doLogin() {
@@ -190,7 +193,7 @@
             eventId = parseInt(document.getElementById('eventIdInput').value);
             if(!eventId||eventId<1){document.getElementById('eventError').textContent='ID invalide';document.getElementById('eventError').style.display='block';return;}
             try {
-                const cr = await fetch(CHECK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({event_id:eventId}) });
+                const cr = await fetch(CHECK_URL, { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()}, body:JSON.stringify({event_id:eventId}) });
                 const cd = await cr.json();
                 if(!cd.exists){document.getElementById('eventError').textContent='Cet événement n\'existe pas';document.getElementById('eventError').style.display='block';return;}
             } catch(e) { document.getElementById('eventError').textContent='Erreur connexion';document.getElementById('eventError').style.display='block';return; }
@@ -219,7 +222,7 @@
 
         function onScan(decodedText) {
             if(!scanning)return;scanning=false;
-            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
+            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
             .then(r=>r.json()).then(data=>{
                 if(data.result==='unauthorized'){alert('Session expirée.');stopScan();return;}
                 showResult(data);

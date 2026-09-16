@@ -229,6 +229,21 @@ class WalletTransaction(models.Model):
         verbose_name = _('transaction wallet')
         verbose_name_plural = _('transactions wallet')
         ordering = ['-created_at']
+        constraints = [
+            # Empêche un double crédit de la même commande sur le même
+            # wallet (ex. appel concurrent du signal post_save déclenché par
+            # deux confirmations quasi-simultanées d'une même commande).
+            # Filtre volontairement sur type=CREDIT et reference non vide :
+            # les mouvements de reversement (ADJUSTMENT/DEBIT/REFUND)
+            # peuvent légitimement réutiliser la même référence à plusieurs
+            # étapes (réservation puis finalisation) et ne sont pas
+            # concernés par cette contrainte.
+            models.UniqueConstraint(
+                fields=['wallet', 'reference'],
+                condition=models.Q(type='credit') & ~models.Q(reference=''),
+                name='wallettransaction_unique_credit_per_wallet_reference',
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -454,6 +469,9 @@ class AuditLog(models.Model):
         # --- Emails ---
         EMAIL_SENT = 'email_sent', _('Email envoyé')
         EMAIL_FAILED = 'email_failed', _('Email échoué')
+        # --- Réconciliation PayDunya ↔ IvoirPass ---
+        RECONCILIATION_RECOVERED = 'reconciliation_recovered', _('Paiement récupéré par réconciliation')
+        RECONCILIATION_ANOMALY = 'reconciliation_anomaly', _('Anomalie détectée en réconciliation')
         OTHER = 'other', _('Autre')
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='audit_logs', verbose_name=_('utilisateur'))

@@ -6,7 +6,7 @@ import hmac
 import hashlib
 import random
 import string
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -113,15 +113,37 @@ class Order(models.Model):
         return f"IP-{year}-{suffix}"
 
     def mark_as_paid(self, payment_method='', payment_reference=''):
-        """Marque la commande comme payée et génère les tickets."""
-        self.status = self.Status.PAID
-        self.payment_method = payment_method
-        self.payment_reference = payment_reference
-        self.paid_at = timezone.now()
-        self.save()
-        # Génère les tickets pour chaque ligne de commande
-        for item in self.items.all():
-            item.generate_tickets()
+        """
+        Marque la commande comme payée et génère les tickets.
+
+        Idempotent et protégé contre les appels concurrents : le retour
+        navigateur, le webhook PayDunya et le polling AJAX peuvent chacun
+        appeler cette méthode pour la même commande à quelques millisecondes
+        d'écart. On verrouille la ligne en base (SELECT ... FOR UPDATE) et on
+        ne procède que si la commande est encore PENDING au moment du
+        verrou, ce qui évite une double génération de billets et un double
+        crédit du wallet organisateur (le crédit est déclenché par le
+        signal post_save sur cette même commande).
+
+        Returns:
+            bool: True si cet appel a effectivement confirmé la commande,
+                  False si elle était déjà payée (appel concurrent redondant
+                  — le code appelant ne doit alors rien refaire de plus).
+        """
+        with transaction.atomic():
+            locked_order = type(self).objects.select_for_update().get(pk=self.pk)
+            if locked_order.status == self.Status.PAID:
+                return False
+
+            self.status = self.Status.PAID
+            self.payment_method = payment_method
+            self.payment_reference = payment_reference
+            self.paid_at = timezone.now()
+            self.save()
+            # Génère les tickets pour chaque ligne de commande
+            for item in self.items.all():
+                item.generate_tickets()
+        return True
 
     def refund(self, reason=''):
         """
@@ -402,13 +424,30 @@ class GuestOrder(models.Model):
         super().save(*args, **kwargs)
 
     def mark_as_paid(self, payment_method='', payment_reference=''):
-        self.status = self.Status.PAID
-        self.payment_method = payment_method
-        self.payment_reference = payment_reference
-        self.paid_at = timezone.now()
-        self.save()
-        for item in self.guest_items.all():
-            item.generate_tickets()
+        """
+        Marque la commande invité comme payée et génère les tickets.
+
+        Même protection que Order.mark_as_paid() : verrouille la ligne et ne
+        confirme que si elle est encore PENDING, pour rester idempotent face
+        aux appels concurrents (retour navigateur / webhook / polling).
+
+        Returns:
+            bool: True si cet appel a confirmé la commande, False si elle
+                  était déjà payée par un appel concurrent.
+        """
+        with transaction.atomic():
+            locked_order = type(self).objects.select_for_update().get(pk=self.pk)
+            if locked_order.status == self.Status.PAID:
+                return False
+
+            self.status = self.Status.PAID
+            self.payment_method = payment_method
+            self.payment_reference = payment_reference
+            self.paid_at = timezone.now()
+            self.save()
+            for item in self.guest_items.all():
+                item.generate_tickets()
+        return True
 
     @property
     def buyer_name(self):

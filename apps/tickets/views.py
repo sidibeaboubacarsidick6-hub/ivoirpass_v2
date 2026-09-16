@@ -456,23 +456,27 @@ def guest_payment_return(request, order_number):
         result = PayDunyaService.verify_payment(token)
         
         if result.get('success') and result.get('status') == 'completed':
-            order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-            from apps.payments.models import Payment
-            Payment.objects.filter(guest_order=order).update(
-                status=Payment.Status.COMPLETED,
-                completed_at=timezone.now(),
-                raw_response=result,
-            )
-            log_action(
-                action=AuditLog.Action.PAYMENT_SUCCESS,
-                description=f"Paiement confirmé (retour) pour la commande invité {order_number}",
-                model_name='Payment', object_id=order_number,
-                metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                ip_address=get_client_ip(request),
-            )
-            # Envoi asynchrone des billets par email (commande payante, invité)
-            from apps.notifications.tasks import send_guest_ticket_email_async
-            send_guest_ticket_email_async.delay(str(order.uuid))
+            # mark_as_paid() est verrouillé et idempotent : si le webhook a
+            # déjà confirmé la commande entre-temps, il renvoie False et on
+            # évite de dupliquer le log d'audit et l'email des billets.
+            newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            if newly_confirmed:
+                from apps.payments.models import Payment
+                Payment.objects.filter(guest_order=order).update(
+                    status=Payment.Status.COMPLETED,
+                    completed_at=timezone.now(),
+                    raw_response=result,
+                )
+                log_action(
+                    action=AuditLog.Action.PAYMENT_SUCCESS,
+                    description=f"Paiement confirmé (retour) pour la commande invité {order_number}",
+                    model_name='Payment', object_id=order_number,
+                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                    ip_address=get_client_ip(request),
+                )
+                # Envoi asynchrone des billets par email (commande payante, invité)
+                from apps.notifications.tasks import send_guest_ticket_email_async
+                send_guest_ticket_email_async.delay(str(order.uuid))
             messages.success(request, f"🎉 Paiement confirmé !")
             return redirect('tickets:guest_confirmation', order_number=order_number)
 
@@ -555,23 +559,27 @@ def guest_webhook(request):
         if status == 'completed' and order_number:
             try:
                 order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
-                order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-                from apps.payments.models import Payment
-                Payment.objects.filter(guest_order=order).update(
-                    status=Payment.Status.COMPLETED,
-                    completed_at=timezone.now(),
-                    raw_response=data,
-                )
-                log_action(
-                    action=AuditLog.Action.PAYMENT_SUCCESS,
-                    description=f"Paiement confirmé (webhook) pour la commande invité {order_number}",
-                    model_name='Payment', object_id=order_number,
-                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                    ip_address=get_client_ip(request),
-                )
-                # Envoi asynchrone des billets par email (commande payante, invité — via webhook)
-                from apps.notifications.tasks import send_guest_ticket_email_async
-                send_guest_ticket_email_async.delay(str(order.uuid))
+                # mark_as_paid() est verrouillé et idempotent : si le retour
+                # navigateur a déjà confirmé la commande entre-temps, il
+                # renvoie False et on évite de dupliquer log/email.
+                newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                if newly_confirmed:
+                    from apps.payments.models import Payment
+                    Payment.objects.filter(guest_order=order).update(
+                        status=Payment.Status.COMPLETED,
+                        completed_at=timezone.now(),
+                        raw_response=data,
+                    )
+                    log_action(
+                        action=AuditLog.Action.PAYMENT_SUCCESS,
+                        description=f"Paiement confirmé (webhook) pour la commande invité {order_number}",
+                        model_name='Payment', object_id=order_number,
+                        metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                        ip_address=get_client_ip(request),
+                    )
+                    # Envoi asynchrone des billets par email (commande payante, invité — via webhook)
+                    from apps.notifications.tasks import send_guest_ticket_email_async
+                    send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
