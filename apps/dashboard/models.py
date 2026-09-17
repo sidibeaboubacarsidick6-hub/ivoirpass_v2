@@ -6,6 +6,7 @@ from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+from django.core.exceptions import PermissionDenied
 
 
 class OrganizerWallet(models.Model):
@@ -434,6 +435,18 @@ class ReversalOTP(models.Model):
             expires_at=expires_at
         )
 
+class AuditLogQuerySet(models.QuerySet):
+    def delete(self, *args, **kwargs):
+        raise PermissionDenied(
+            "Le journal d'audit est immuable : suppression en masse interdite. "
+            "Une opération financière ne doit jamais disparaître de l'historique."
+        )
+
+
+class AuditLogManager(models.Manager.from_queryset(AuditLogQuerySet)):
+    pass
+
+
 class AuditLog(models.Model):
     class Action(models.TextChoices):
         CREATE = 'create', _('Création')
@@ -503,6 +516,28 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f'[{self.created_at:%d/%m/%Y %H:%M}] {self.user} — {self.get_action_display()}'
+
+    objects = AuditLogManager()
+
+    def save(self, *args, **kwargs):
+        """
+        Immutabilité (audit section 8 : "une opération financière ne doit
+        jamais disparaître de l'historique") : une fois créée, une entrée
+        d'audit ne peut plus être modifiée. Seule sa création est permise.
+        """
+        if self.pk and AuditLog.objects.filter(pk=self.pk).exists():
+            raise PermissionDenied(
+                "Une entrée du journal d'audit ne peut jamais être modifiée "
+                "après sa création — seule la création de nouvelles entrées "
+                "est autorisée."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionDenied(
+            "Le journal d'audit est immuable : une entrée ne peut jamais "
+            "être supprimée, même par un administrateur."
+        )
 
 
 

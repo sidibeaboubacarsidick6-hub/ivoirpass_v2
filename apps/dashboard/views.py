@@ -40,11 +40,32 @@ def organizer_required(view_func):
 def platform_admin_required(view_func):
     """Réservé aux comptes avec le rôle ADMIN (super-admins IvoirPass) —
     distinct de `organizer_required`, qui laisse aussi passer les
-    organisateurs pour leurs propres pages."""
+    organisateurs pour leurs propres pages.
+
+    À utiliser pour toute vue qui AGIT sur les données de la plateforme
+    (validation, modification, remboursement...). Pour une vue qui ne fait
+    que consulter/exporter, voir `platform_staff_required` ci-dessous, qui
+    inclut aussi Finance/Support/Auditeur."""
     @login_required
     def wrapper(request, *args, **kwargs):
         if not request.user.is_platform_admin:
             messages.error(request, "Section réservée aux administrateurs IvoirPass.")
+            return redirect('accounts:profile')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def platform_staff_required(view_func):
+    """
+    Accès en LECTURE au back-office plateforme : Admin, Finance, Support,
+    Auditeur (voir CustomUser.is_platform_staff). N'accorde aucun droit de
+    modification — les vues qui agissent sur les données (remboursement,
+    changement de statut...) doivent rester derrière `platform_admin_required`.
+    """
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_platform_staff:
+            messages.error(request, "Section réservée au personnel IvoirPass.")
             return redirect('accounts:profile')
         return view_func(request, *args, **kwargs)
     return wrapper
@@ -733,7 +754,7 @@ def audit_log(request):
     })
 
 
-@platform_admin_required
+@platform_staff_required
 def audit_log_admin(request):
     """
     Journal d'activité global — réservé aux super-admins IvoirPass.
@@ -1027,3 +1048,367 @@ def submit_dispute(request):
         return redirect('home')
 
     return render(request, 'pages/report_problem.html')
+
+# ============================================================
+# BACK-OFFICE FINANCIER — Recherche/fiche/export des transactions
+# (voir audit technique, Phase 2 de la roadmap)
+#
+# Contrairement à `export_sales_*` plus haut (ventes d'UN organisateur,
+# self-service), ce qui suit est une vue PLATEFORME de toutes les
+# transactions (Payment), réservée au personnel IvoirPass
+# (Admin/Finance/Support/Auditeur — accès LECTURE SEULE, aucune action de
+# modification n'est proposée depuis ces vues).
+# ============================================================
+
+def _filtered_payments(request):
+    """
+    Construit le queryset de paiements filtré selon les paramètres GET —
+    partagé entre la vue de liste et les trois exports pour ne jamais avoir
+    deux logiques de filtrage qui divergent silencieusement.
+    """
+    from apps.payments.models import Payment
+
+    payments = Payment.objects.select_related(
+        'order__buyer', 'guest_order',
+    ).prefetch_related(
+        'order__items__ticket_type__event__organizer',
+        'guest_order__guest_items__ticket_type__event__organizer',
+    ).order_by('-created_at')
+
+    filters = {
+        'q':         request.GET.get('q', '').strip(),
+        'status':    request.GET.get('status', '').strip(),
+        'provider':  request.GET.get('provider', '').strip(),
+        'date_from': request.GET.get('date_from', '').strip(),
+        'date_to':   request.GET.get('date_to', '').strip(),
+    }
+
+    q = filters['q']
+    if q:
+        payments = payments.filter(
+            Q(order__order_number__icontains=q) |
+            Q(guest_order__order_number__icontains=q) |
+            Q(paydunya_token__icontains=q) |
+            Q(paydunya_invoice_token__icontains=q) |
+            Q(order__buyer__email__icontains=q) |
+            Q(order__buyer__phone_number__icontains=q) |
+            Q(guest_order__email__icontains=q) |
+            Q(guest_order__phone__icontains=q)
+        )
+
+    if filters['status']:
+        payments = payments.filter(status=filters['status'])
+
+    if filters['provider']:
+        payments = payments.filter(provider=filters['provider'])
+
+    if filters['date_from']:
+        payments = payments.filter(created_at__date__gte=filters['date_from'])
+
+    if filters['date_to']:
+        payments = payments.filter(created_at__date__lte=filters['date_to'])
+
+    return payments, filters
+
+
+def _payment_row(payment):
+    """
+    Aplati un Payment + la commande qu'il concerne (compte ou invité) en un
+    dict simple à afficher ou exporter — évite de dupliquer cette logique
+    dans le template, le CSV, l'Excel et le PDF.
+    Retourne None si le paiement n'a (anormalement) aucune commande liée —
+    ne devrait jamais arriver vu la contrainte en base sur Payment, mais on
+    reste défensif plutôt que de faire planter tout l'export pour une ligne.
+    """
+    order = payment.order or payment.guest_order
+    if order is None:
+        return None
+
+    if payment.order_id:
+        client_name = order.buyer.get_full_name()
+        client_email = order.buyer.email
+        items = list(order.items.all())
+    else:
+        client_name = order.buyer_name
+        client_email = order.email
+        items = list(order.guest_items.all())
+
+    events = sorted({it.ticket_type.event.title for it in items if it.ticket_type and it.ticket_type.event})
+    organizers = sorted({
+        it.ticket_type.event.organizer.get_full_name()
+        for it in items if it.ticket_type and it.ticket_type.event and it.ticket_type.event.organizer
+    })
+    quantity = sum(it.quantity for it in items)
+    ticket_types = ', '.join(f"{it.quantity}x {it.ticket_type.name}" for it in items) if items else '—'
+
+    gross = order.subtotal
+    # GuestOrder ne stocke pas toujours une commission séparée — on la
+    # déduit de total - subtotal plutôt que de supposer un champ absent.
+    fees = getattr(order, 'commission', None)
+    if fees is None:
+        fees = order.total - order.subtotal
+    net = order.total - fees
+
+    return {
+        'payment': payment,
+        'order': order,
+        'order_number': order.order_number,
+        'client_name': client_name or '—',
+        'client_email': client_email or '—',
+        'event': ', '.join(events) or '—',
+        'organizer': ', '.join(organizers) or '—',
+        'ticket_types': ticket_types,
+        'quantity': quantity,
+        'gross': gross,
+        'fees': fees,
+        'net': net,
+        'currency': payment.currency,
+        'payment_method': order.payment_method or payment.get_provider_display(),
+        'status': payment.status,
+        'status_display': payment.get_status_display(),
+        'paydunya_token': payment.paydunya_token,
+        'confirmed_at': payment.completed_at,
+        'created_at': payment.created_at,
+    }
+
+
+def _redact_raw_response(raw_response):
+    """
+    Masque le hash de signature PayDunya avant tout affichage/export —
+    même en back-office, ce hash statique ne doit jamais transiter
+    inutilement (voir audit R-08 : s'il fuit, il reste valide indéfiniment
+    tant que le Master Key n'est pas régénéré).
+    """
+    if not isinstance(raw_response, dict):
+        return raw_response
+    redacted = dict(raw_response)
+    if 'hash' in redacted:
+        redacted['hash'] = '••• (masqué)'
+    data = redacted.get('data')
+    if isinstance(data, dict) and 'hash' in data:
+        data = dict(data)
+        data['hash'] = '••• (masqué)'
+        redacted['data'] = data
+    return redacted
+
+
+@platform_staff_required
+def transactions_list(request):
+    """
+    Liste plateforme de toutes les transactions, recherchable et filtrable
+    (audit section 11). Lecture seule — aucune action de modification n'est
+    proposée ici, quel que soit le rôle (voir platform_staff_required).
+    """
+    from django.core.paginator import Paginator
+    from apps.payments.models import Payment
+
+    payments, filters = _filtered_payments(request)
+
+    paginator = Paginator(payments, 50)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+    rows = [r for r in (_payment_row(p) for p in page_obj) if r]
+
+    return render(request, 'dashboard/transactions_list.html', {
+        'page_obj': page_obj,
+        'rows': rows,
+        'filters': filters,
+        'statuses': Payment.Status.choices,
+        'providers': Payment.Provider.choices,
+    })
+
+
+@platform_staff_required
+def transaction_detail(request, order_number):
+    """
+    Fiche détaillée d'une transaction (audit section 10) : résumé, détail
+    de la commande, informations PayDunya, chronologie reconstituée à
+    partir du Payment/de la commande/du journal d'audit, et actions
+    administratives liées.
+    """
+    import json as _json
+    from apps.payments.models import Payment
+
+    payment = Payment.objects.filter(
+        Q(order__order_number=order_number) | Q(guest_order__order_number=order_number)
+    ).select_related('order__buyer', 'guest_order').first()
+
+    if payment is None:
+        messages.error(request, f"Transaction {order_number} introuvable.")
+        return redirect('dashboard:transactions')
+
+    row = _payment_row(payment)
+    order = row['order']
+    items = list(order.items.all()) if payment.order_id else list(order.guest_items.all())
+
+    audit_entries = AuditLog.objects.filter(object_id=order_number).order_by('created_at')
+
+    timeline = [{'label': 'Commande créée', 'at': order.created_at}]
+    timeline.append({'label': 'Paiement initié', 'at': payment.created_at})
+    for entry in audit_entries:
+        if entry.action in (
+            AuditLog.Action.PAYMENT_SUCCESS, AuditLog.Action.PAYMENT_FAILED,
+            AuditLog.Action.TICKET_CREATED, AuditLog.Action.EMAIL_SENT,
+            AuditLog.Action.RECONCILIATION_RECOVERED, AuditLog.Action.RECONCILIATION_ANOMALY,
+            AuditLog.Action.ORDER_REFUNDED, AuditLog.Action.ORDER_CANCELLED,
+        ):
+            timeline.append({'label': entry.get_action_display(), 'at': entry.created_at, 'description': entry.description})
+    if payment.completed_at:
+        timeline.append({'label': 'Paiement confirmé (PayDunya)', 'at': payment.completed_at})
+    timeline.sort(key=lambda t: t['at'])
+
+    raw_response = _redact_raw_response(payment.raw_response)
+
+    return render(request, 'dashboard/transaction_detail.html', {
+        'row': row,
+        'payment': payment,
+        'order': order,
+        'items': items,
+        'timeline': timeline,
+        'audit_entries': audit_entries,
+        'raw_response_json': _json.dumps(raw_response, indent=2, ensure_ascii=False, default=str) if raw_response else None,
+    })
+
+
+def _export_metadata_lines(request, filters, count, total_gross, total_fees, total_net, currency):
+    """
+    Métadonnées obligatoires sur tout export financier (audit section 12) :
+    période, date de génération, utilisateur, filtres utilisés, totaux.
+    """
+    period = f"Du {filters['date_from']} au {filters['date_to']}" if (filters['date_from'] or filters['date_to']) else "Toute la période"
+    active_filters = ', '.join(f"{k}={v}" for k, v in filters.items() if v) or 'Aucun'
+    return [
+        ['Période', period],
+        ['Généré le', timezone.now().strftime('%d/%m/%Y à %H:%M')],
+        ['Généré par', request.user.email],
+        ['Filtres appliqués', active_filters],
+        ['Nombre de transactions', str(count)],
+        ['Total brut', f"{int(total_gross):,} {currency}".replace(',', ' ')],
+        ['Total frais', f"{int(total_fees):,} {currency}".replace(',', ' ')],
+        ['Total net', f"{int(total_net):,} {currency}".replace(',', ' ')],
+    ]
+
+
+@platform_staff_required
+def export_transactions_csv(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.csv"'
+    response.write('\ufeff')
+    writer = csv.writer(response)
+
+    writer.writerow(['Date', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement', 'Organisateur',
+                      'Type de billet', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+                      'Statut', 'Date confirmation'])
+    total_gross = total_fees = total_net = 0
+    for r in rows:
+        writer.writerow([
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['order_number'], r['paydunya_token'],
+            r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
+            r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
+            r['payment_method'], r['status_display'],
+            r['confirmed_at'].strftime('%d/%m/%Y %H:%M') if r['confirmed_at'] else '',
+        ])
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    writer.writerow([])
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        writer.writerow([label, value])
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export CSV des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response
+
+
+@platform_staff_required
+def export_transactions_excel(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Transactions"
+    ws.append(['Date', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement', 'Organisateur',
+                'Type de billet', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+                'Statut', 'Date confirmation'])
+    total_gross = total_fees = total_net = 0
+    for r in rows:
+        ws.append([
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['order_number'], r['paydunya_token'],
+            r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
+            r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
+            r['payment_method'], r['status_display'],
+            r['confirmed_at'].strftime('%d/%m/%Y %H:%M') if r['confirmed_at'] else '',
+        ])
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    ws.append([])
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        ws.append([label, value])
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.xlsx"'
+    wb.save(response)
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export Excel des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response
+
+
+@platform_staff_required
+def export_transactions_pdf(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(15*mm, height - 15*mm, "Rapport des transactions — IvoirPass (back-office)")
+    p.setFont("Helvetica", 8)
+    p.drawString(15*mm, height - 21*mm, f"Généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')} par {request.user.email}")
+
+    total_gross = total_fees = total_net = 0
+    y = height - 30*mm
+    p.setFont("Helvetica-Bold", 7)
+    p.drawString(15*mm, y, "Date | Réf. | Client | Événement | Qté | Brut | Frais | Net | Statut")
+    y -= 5*mm
+    p.setFont("Helvetica", 7)
+    for r in rows:
+        if y < 20*mm:
+            p.showPage()
+            p.setFont("Helvetica", 7)
+            y = height - 15*mm
+        line = f"{r['created_at'].strftime('%d/%m/%y')} | {r['order_number']} | {r['client_name'][:20]} | {r['event'][:20]} | {r['quantity']} | {int(r['gross'])} | {int(r['fees'])} | {int(r['net'])} | {r['status_display']}"
+        p.drawString(15*mm, y, line[:140])
+        y -= 4.5*mm
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    if y < 40*mm:
+        p.showPage()
+        y = height - 15*mm
+    y -= 6*mm
+    p.setFont("Helvetica-Bold", 8)
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        p.drawString(15*mm, y, f"{label} : {value}")
+        y -= 4.5*mm
+
+    p.save()
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.pdf"'
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export PDF des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response

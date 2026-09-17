@@ -45,6 +45,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         ORGANIZER   = 'organizer',   _('Organisateur')
         SCANNER     = 'scanner',     _('Agent Scanner')
         ADMIN       = 'admin',       _('Administrateur')
+        # --- Rôles internes IvoirPass, back-office plateforme (voir audit
+        # section 17 "Rôles et séparation des responsabilités") ---
+        FINANCE     = 'finance',     _('Finance')
+        SUPPORT     = 'support',     _('Support')
+        AUDITOR     = 'auditor',     _('Auditeur (lecture seule)')
 
     # ============================================
     # INFORMATIONS DE BASE
@@ -275,6 +280,44 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_platform_admin(self):
+        return self.role == self.Role.ADMIN
+
+    @property
+    def is_finance(self):
+        return self.role == self.Role.FINANCE
+
+    @property
+    def is_support(self):
+        return self.role == self.Role.SUPPORT
+
+    @property
+    def is_auditor(self):
+        return self.role == self.Role.AUDITOR
+
+    @property
+    def is_platform_staff(self):
+        """
+        Tout rôle interne IvoirPass ayant accès au back-office plateforme
+        (par opposition aux organisateurs, qui n'ont accès qu'à leurs
+        propres données) : Admin, Finance, Support, Auditeur.
+
+        Ce n'est PAS un droit de modification — voir `can_manage_platform`
+        pour ça. Un Auditeur ou un membre du Support passe ce test mais ne
+        doit pouvoir que consulter/exporter, jamais agir sur une transaction.
+        """
+        return self.role in (
+            self.Role.ADMIN, self.Role.FINANCE,
+            self.Role.SUPPORT, self.Role.AUDITOR,
+        )
+
+    @property
+    def can_manage_platform(self):
+        """
+        Droit d'AGIR sur les données de la plateforme (valider un
+        remboursement, modifier un statut, etc.) — réservé à Admin.
+        Finance/Support/Auditeur ont un accès en lecture et export
+        uniquement (voir audit section 17 : séparation des responsabilités).
+        """
         return self.role == self.Role.ADMIN
 
     @property

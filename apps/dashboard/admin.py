@@ -144,6 +144,18 @@ class AuditLogAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     list_per_page = 50
 
+    def has_delete_permission(self, request, obj=None):
+        # Immutabilité du journal d'audit — personne, pas même un
+        # superutilisateur, ne peut supprimer une entrée depuis l'admin.
+        # Le modèle lui-même refuse aussi .delete() (voir models.py), ceci
+        # n'est qu'une seconde barrière pour masquer le bouton dans l'UI.
+        return False
+
+    def has_add_permission(self, request):
+        # Les entrées d'audit ne sont créées que programmatiquement, via
+        # log_action() — jamais saisies manuellement.
+        return False
+
     def action_badge(self, obj):
         colors = {
             'create': '#1B7A3E', 'update': '#0dcaf0', 'delete': '#dc3545',

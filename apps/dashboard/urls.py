@@ -32,6 +32,13 @@ urlpatterns = [
    path('export/csv/', views.export_sales_csv, name='export_csv'),
    path('export/excel/', views.export_sales_excel, name='export_excel'),
    path('export/pdf/', views.export_sales_pdf, name='export_pdf'),
-   
+
+   # Back-office financier plateforme (Admin/Finance/Support/Auditeur)
+   path('transactions/', views.transactions_list, name='transactions'),
+   path('transactions/<str:order_number>/', views.transaction_detail, name='transaction_detail'),
+   path('transactions/export/csv/', views.export_transactions_csv, name='export_transactions_csv'),
+   path('transactions/export/excel/', views.export_transactions_excel, name='export_transactions_excel'),
+   path('transactions/export/pdf/', views.export_transactions_pdf, name='export_transactions_pdf'),
+
    path('reclamation/', views.submit_dispute, name='submit_dispute'),
 ]
