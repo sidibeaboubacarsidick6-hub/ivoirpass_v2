@@ -14,6 +14,14 @@
     <h3 style="margin:0 0 8px 0; color:#F47920;">📥 Export Excel</h3>
     <a href="{% url 'admin_export_excel' %}" style="display:block; padding:8px; background:#F47920; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Télécharger Excel</a>
   </div>
+  <div style="flex:1; min-width:200px; padding:16px; background:white; border-radius:12px; border-left:4px solid #6f42c1;">
+    <h3 style="margin:0 0 8px 0; color:#6f42c1;">💳 Transactions</h3>
+    <a href="{% url 'dashboard:transactions' %}" style="display:block; padding:8px; background:#6f42c1; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Back-office financier</a>
+  </div>
+  <div style="flex:1; min-width:200px; padding:16px; background:white; border-radius:12px; border-left:4px solid #495057;">
+    <h3 style="margin:0 0 8px 0; color:#495057;">📋 Journal d'audit</h3>
+    <a href="{% url 'dashboard:audit_log_admin' %}" style="display:block; padding:8px; background:#495057; color:white; border-radius:8px; text-decoration:none; text-align:center; font-weight:600;">Voir le journal</a>
+  </div>
 </div>
 {{ block.super }}
 {% endblock %}
