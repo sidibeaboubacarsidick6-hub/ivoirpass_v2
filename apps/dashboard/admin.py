@@ -17,18 +17,37 @@ from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, Audit
 
 @staff_member_required
 def bceao_report_view(request):
-    """Rapport mensuel BCEAO accessible dans l'admin."""
-    from apps.tickets.models import Order
-    from apps.store.models import ProductOrder
+    """Rapport mensuel BCEAO accessible dans l'admin.
+
+    Couvre à la fois les commandes "avec compte" (Order/ProductOrder) et les
+    commandes invité (GuestOrder/GuestProductOrder) — ces dernières sont
+    aujourd'hui le seul canal réellement utilisé pour les achats. Ignorer
+    les commandes invité ferait apparaître un volume d'activité proche de
+    zéro alors que les ventes réelles ont bien lieu.
+    """
+    from apps.tickets.models import Order, GuestOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
     from apps.accounts.models import CustomUser
 
     now = timezone.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0)
 
-    ticket_orders = Order.objects.filter(paid_at__gte=month_start, status='paid').count()
-    store_orders = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
-    ticket_volume = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
-    store_volume = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
+    ticket_orders_account = Order.objects.filter(paid_at__gte=month_start, status='paid').count()
+    ticket_orders_guest = GuestOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    ticket_orders = ticket_orders_account + ticket_orders_guest
+
+    store_orders_account = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    store_orders_guest = GuestProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    store_orders = store_orders_account + store_orders_guest
+
+    ticket_volume_account = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
+    ticket_volume_guest = GuestOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
+    ticket_volume = ticket_volume_account + ticket_volume_guest
+
+    store_volume_account = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
+    store_volume_guest = GuestProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(t=Sum('total'))['t'] or 0
+    store_volume = store_volume_account + store_volume_guest
+
     withdrawals_count = WithdrawalRequest.objects.filter(created_at__gte=month_start).count()
     withdrawals_volume = WithdrawalRequest.objects.filter(created_at__gte=month_start, status='completed').aggregate(t=Sum('amount'))['t'] or 0
     total_users = CustomUser.objects.count()
@@ -37,6 +56,8 @@ def bceao_report_view(request):
     context = {
         'month': now.strftime('%B %Y'),
         'ticket_orders': ticket_orders, 'store_orders': store_orders,
+        'ticket_orders_account': ticket_orders_account, 'ticket_orders_guest': ticket_orders_guest,
+        'store_orders_account': store_orders_account, 'store_orders_guest': store_orders_guest,
         'total_transactions': ticket_orders + store_orders,
         'ticket_volume': int(ticket_volume), 'store_volume': int(store_volume),
         'total_volume': int(ticket_volume + store_volume),
@@ -195,7 +216,13 @@ from io import BytesIO
 
 @staff_member_required
 def export_admin_csv(request):
-    """Export CSV de toutes les données pour l'admin."""
+    """
+    Export CSV de toutes les données pour l'admin.
+
+    Couvre les commandes avec compte ET les commandes invité (billetterie et
+    boutique) — ces dernières sont aujourd'hui le seul canal réellement
+    utilisé, les ignorer produirait un export quasiment vide.
+    """
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="ivoirpass_export_complet.csv"'
     response.write('\ufeff')
@@ -203,15 +230,23 @@ def export_admin_csv(request):
 
     # Transactions
     writer.writerow(['=== TRANSACTIONS ==='])
-    writer.writerow(['Type', 'Référence', 'Date', 'Montant', 'Statut'])
+    writer.writerow(['Type', 'Canal', 'Référence', 'Client', 'Email', 'Date', 'Montant', 'Moyen de paiement', 'Statut'])
 
-    from apps.tickets.models import Order
+    from apps.tickets.models import Order, GuestOrder
     for o in Order.objects.select_related('buyer').order_by('-created_at'):
-        writer.writerow(['Billet', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+        writer.writerow(['Billet', 'Compte', o.order_number, o.buyer.get_full_name(), o.buyer.email,
+                          o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
+    for o in GuestOrder.objects.order_by('-created_at'):
+        writer.writerow(['Billet', 'Invité', o.order_number, o.buyer_name, o.email,
+                          o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
 
-    from apps.store.models import ProductOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
     for o in ProductOrder.objects.select_related('buyer', 'product').order_by('-created_at'):
-        writer.writerow(['Boutique', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+        writer.writerow(['Boutique', 'Compte', o.order_number, o.buyer.get_full_name(), o.buyer.email,
+                          o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
+    for o in GuestProductOrder.objects.select_related('product').order_by('-created_at'):
+        writer.writerow(['Boutique', 'Invité', o.order_number, f"{o.first_name} {o.last_name}", o.email,
+                          o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
 
     # Reversements
     writer.writerow([])
@@ -233,19 +268,34 @@ def export_admin_csv(request):
 
 @staff_member_required
 def export_admin_excel(request):
-    """Export Excel de toutes les données."""
+    """
+    Export Excel de toutes les données.
+
+    Même correction que l'export CSV : couvre les commandes avec compte ET
+    les commandes invité.
+    """
     wb = openpyxl.Workbook()
 
     # Onglet Transactions
     ws1 = wb.active
     ws1.title = "Transactions"
-    ws1.append(['Type', 'Référence', 'Date', 'Montant', 'Statut'])
-    from apps.tickets.models import Order
+    ws1.append(['Type', 'Canal', 'Référence', 'Client', 'Email', 'Date', 'Montant', 'Moyen de paiement', 'Statut'])
+
+    from apps.tickets.models import Order, GuestOrder
     for o in Order.objects.select_related('buyer').order_by('-created_at')[:1000]:
-        ws1.append(['Billet', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
-    from apps.store.models import ProductOrder
+        ws1.append(['Billet', 'Compte', o.order_number, o.buyer.get_full_name(), o.buyer.email,
+                     o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
+    for o in GuestOrder.objects.order_by('-created_at')[:1000]:
+        ws1.append(['Billet', 'Invité', o.order_number, o.buyer_name, o.email,
+                     o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
+
+    from apps.store.models import ProductOrder, GuestProductOrder
     for o in ProductOrder.objects.select_related('buyer', 'product').order_by('-created_at')[:1000]:
-        ws1.append(['Boutique', o.order_number, o.created_at.strftime('%d/%m/%Y'), int(o.total), o.get_status_display()])
+        ws1.append(['Boutique', 'Compte', o.order_number, o.buyer.get_full_name(), o.buyer.email,
+                     o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
+    for o in GuestProductOrder.objects.select_related('product').order_by('-created_at')[:1000]:
+        ws1.append(['Boutique', 'Invité', o.order_number, f"{o.first_name} {o.last_name}", o.email,
+                     o.created_at.strftime('%d/%m/%Y'), int(o.total), o.payment_method, o.get_status_display()])
 
     # Onglet Reversements
     ws2 = wb.create_sheet("Reversements")

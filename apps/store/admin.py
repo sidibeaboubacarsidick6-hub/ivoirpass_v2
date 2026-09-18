@@ -3,7 +3,7 @@ IvoirPass V2 — Administration de la boutique
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import ProductCategory, Product, ProductOrder, DownloadLink
+from .models import ProductCategory, Product, ProductOrder, DownloadLink, GuestProductOrder, GuestDownloadLink
 
 
 
@@ -157,3 +157,57 @@ class ProductOrderAdmin(admin.ModelAdmin):
     def reject_to_draft(self, request, queryset):
         updated = queryset.update(status=Product.Status.DRAFT)
         self.message_user(request, f"{updated} produit(s) renvoyé(s) en brouillon.")
+
+# ============================================================
+# COMMANDES BOUTIQUE INVITÉES (achat sans compte)
+#
+# Le tunnel d'achat boutique "avec compte" (ProductOrder) est désactivé côté
+# site (voir apps/store/views.py — redirection vers l'accueil) : la boutique
+# ne vend aujourd'hui qu'en achat invité. Sans cet enregistrement admin, la
+# liste "Commandes boutique" apparaissait vide alors que les ventes réelles
+# ont bien lieu, simplement sous GuestProductOrder.
+# ============================================================
+
+class GuestDownloadLinkInline(admin.TabularInline):
+    model = GuestDownloadLink
+    extra = 0
+    readonly_fields = ('token', 'download_count', 'expires_at')
+    can_delete = False
+
+
+@admin.register(GuestProductOrder)
+class GuestProductOrderAdmin(admin.ModelAdmin):
+    list_display = (
+        'order_number', 'get_buyer_name', 'email', 'product',
+        'quantity', 'total', 'status', 'created_at'
+    )
+    list_filter = ('status', 'delivery_method', 'product__product_type')
+    search_fields = ('order_number', 'email', 'phone', 'first_name', 'last_name', 'product__name')
+    readonly_fields = (
+        'order_number', 'uuid', 'subtotal',
+        'created_at', 'updated_at', 'paid_at'
+    )
+    inlines = [GuestDownloadLinkInline]
+
+    actions = ['mark_paid', 'mark_shipped']
+
+    def get_buyer_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}"
+    get_buyer_name.short_description = "Acheteur"
+
+    @admin.action(description="✅ Marquer comme payées")
+    def mark_paid(self, request, queryset):
+        for order in queryset.filter(status=GuestProductOrder.Status.PENDING):
+            order.mark_as_paid(payment_method='manual')
+        self.message_user(request, "Commandes invité confirmées.")
+
+    @admin.action(description="🚚 Marquer comme expédiées")
+    def mark_shipped(self, request, queryset):
+        from django.utils import timezone
+        queryset.filter(
+            status=GuestProductOrder.Status.PAID
+        ).update(
+            status=GuestProductOrder.Status.SHIPPED,
+            shipped_at=timezone.now()
+        )
+        self.message_user(request, "Commandes invité marquées comme expédiées.")

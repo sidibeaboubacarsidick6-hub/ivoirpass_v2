@@ -10,19 +10,24 @@
     📊 Rapport BCEAO — {{ month }}
   </h1>
 
-  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:30px;">
+  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:16px;">
     <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #1B7A3E;">
       <div style="color:#6c757d; font-size:0.85rem;">Transactions billets</div>
       <div style="font-size:2rem; font-weight:800; color:#1B7A3E;">{{ ticket_orders }}</div>
+      <div style="color:#6c757d; font-size:0.75rem; margin-top:4px;">dont {{ ticket_orders_guest }} invité{{ ticket_orders_guest|pluralize }} / {{ ticket_orders_account }} avec compte</div>
     </div>
     <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #F47920;">
       <div style="color:#6c757d; font-size:0.85rem;">Transactions boutique</div>
       <div style="font-size:2rem; font-weight:800; color:#F47920;">{{ store_orders }}</div>
+      <div style="color:#6c757d; font-size:0.75rem; margin-top:4px;">dont {{ store_orders_guest }} invité{{ store_orders_guest|pluralize }} / {{ store_orders_account }} avec compte</div>
     </div>
     <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid #0dcaf0;">
       <div style="color:#6c757d; font-size:0.85rem;">Total transactions</div>
       <div style="font-size:2rem; font-weight:800; color:#0dcaf0;">{{ total_transactions }}</div>
     </div>
+  </div>
+  <div style="background:#fff8e6; border:1px solid #f0c36d; border-radius:8px; padding:10px 16px; margin-bottom:30px; font-size:0.8rem; color:#7a5b00;">
+    ℹ️ Ce rapport compte à la fois les commandes avec compte et les commandes invité (achat sans compte) — la boutique ne vend aujourd'hui qu'en achat invité, l'ignorer aurait rendu ce rapport quasiment vide.
   </div>
 
   <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:16px; margin-bottom:30px;">

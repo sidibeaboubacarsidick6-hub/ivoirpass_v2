@@ -249,8 +249,8 @@ def generate_bceao_report(self):
     """
     from django.utils import timezone
     from datetime import timedelta
-    from apps.tickets.models import Order
-    from apps.store.models import ProductOrder
+    from apps.tickets.models import Order, GuestOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
     from apps.dashboard.models import WithdrawalRequest, OrganizerWallet
     from apps.accounts.models import CustomUser
     from django.core.mail import send_mail
@@ -260,23 +260,44 @@ def generate_bceao_report(self):
     now = timezone.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0)
 
-    # Nombre de transactions
-    ticket_orders = Order.objects.filter(paid_at__gte=month_start, status='paid').count()
-    store_orders = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    # Nombre de transactions — couvre les commandes "avec compte" ET
+    # invité. La boutique ne vend aujourd'hui qu'en achat invité : ignorer
+    # GuestOrder/GuestProductOrder ferait apparaître un rapport quasiment
+    # vide alors que l'activité réelle est bien là.
+    ticket_orders_account = Order.objects.filter(paid_at__gte=month_start, status='paid').count()
+    ticket_orders_guest = GuestOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    ticket_orders = ticket_orders_account + ticket_orders_guest
+
+    store_orders_account = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    store_orders_guest = GuestProductOrder.objects.filter(paid_at__gte=month_start, status='paid').count()
+    store_orders = store_orders_account + store_orders_guest
 
     # Volume financier
-    ticket_volume = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+    ticket_volume_account = Order.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
         total=Sum('total')
     )['total'] or 0
-    store_volume = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+    ticket_volume_guest = GuestOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
         total=Sum('total')
     )['total'] or 0
+    ticket_volume = ticket_volume_account + ticket_volume_guest
 
-    # Commissions
+    store_volume_account = ProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+        total=Sum('total')
+    )['total'] or 0
+    store_volume_guest = GuestProductOrder.objects.filter(paid_at__gte=month_start, status='paid').aggregate(
+        total=Sum('total')
+    )['total'] or 0
+    store_volume = store_volume_account + store_volume_guest
+
+    # Commissions (billetterie — compte + invité)
     ticket_commission = sum(
         float(o.total) * float(o.items.first().ticket_type.event.commission_rate) / 100
         for o in Order.objects.filter(paid_at__gte=month_start, status='paid').prefetch_related('items__ticket_type__event')
         if o.items.first()
+    ) + sum(
+        float(o.total) * float(o.guest_items.first().ticket_type.event.commission_rate) / 100
+        for o in GuestOrder.objects.filter(paid_at__gte=month_start, status='paid').prefetch_related('guest_items__ticket_type__event')
+        if o.guest_items.first()
     )
 
     # Reversements
@@ -292,8 +313,8 @@ def generate_bceao_report(self):
     report = (
         f"=== RAPPORT MENSUEL BCEAO — {now.strftime('%B %Y')} ===\n\n"
         f"TRANSACTIONS :\n"
-        f"- Billets vendus : {ticket_orders}\n"
-        f"- Produits boutique : {store_orders}\n"
+        f"- Billets vendus : {ticket_orders} (dont {ticket_orders_guest} invité / {ticket_orders_account} avec compte)\n"
+        f"- Produits boutique : {store_orders} (dont {store_orders_guest} invité / {store_orders_account} avec compte)\n"
         f"- Total transactions : {ticket_orders + store_orders}\n\n"
         f"VOLUME FINANCIER :\n"
         f"- Billetterie : {int(ticket_volume):,} FCFA\n"
