@@ -17,7 +17,7 @@ class ProductForm(forms.ModelForm):
             'pages', 'duration', 'isbn',
             'cover_image', 'preview_file', 'digital_file',
             'price', 'price_physical', 'price_digital',
-            'stock', 'download_limit', 'download_expiry_hours',
+            'stock',
             'status',
         ]
         widgets = {
@@ -103,14 +103,6 @@ class ProductForm(forms.ModelForm):
                 'placeholder': '0',
                 'min': '0',
             }),
-            'download_limit': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '1',
-            }),
-            'download_expiry_hours': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '1',
-            }),
             'status': forms.Select(attrs={'class': 'form-select'}),
         }
         labels = {
@@ -135,7 +127,5 @@ class ProductForm(forms.ModelForm):
             'price_physical':         'Prix version physique',
             'price_digital':          'Prix version numérique',
             'stock':                  'Stock physique (0 = illimité pour numérique)',
-            'download_limit':         'Téléchargements max par achat',
-            'download_expiry_hours':  'Expiration du lien (heures)',
             'status':                 'Statut',
         }

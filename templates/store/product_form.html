@@ -180,17 +180,6 @@
             {{ form.stock }}
           </div>
 
-          <div class="mb-3" x-show="type !== 'physical'">
-            <label class="form-label fw-semibold small">{{ form.download_limit.label }}</label>
-            {{ form.download_limit }}
-          </div>
-
-          <div class="mb-3" x-show="type !== 'physical'">
-            <label class="form-label fw-semibold small">{{ form.download_expiry_hours.label }}</label>
-            {{ form.download_expiry_hours }}
-            <div class="text-muted small mt-1">Heures après achat</div>
-          </div>
-
           <div class="mb-4">
             <label class="form-label fw-semibold small">{{ form.status.label }}</label>
             {{ form.status }}
