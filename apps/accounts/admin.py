@@ -177,7 +177,7 @@ class CustomUserAdmin(UserAdmin):
     get_full_name.short_description = "Nom complet"
 
     # Actions personnalisées
-    actions = ['verify_organizers', 'deactivate_users', 'activate_users']
+    actions = ['verify_organizers', 'deactivate_users', 'activate_users', 'verify_email_addresses']
 
     @admin.action(description="✅ Certifier les organisateurs sélectionnés")
     def verify_organizers(self, request, queryset):
@@ -198,6 +198,31 @@ class CustomUserAdmin(UserAdmin):
     def activate_users(self, request, queryset):
         updated = queryset.update(is_active=True)
         self.message_user(request, f"{updated} compte(s) activé(s).")
+
+    @admin.action(description="📧 Marquer l'email comme vérifié (permet la connexion)")
+    def verify_email_addresses(self, request, queryset):
+        """
+        Un compte créé directement depuis l'admin (agent scanner, organisateur
+        ajouté manuellement...) n'a pas d'adresse email confirmée tant que
+        personne n'a cliqué sur un lien de confirmation — or
+        ACCOUNT_EMAIL_VERIFICATION='mandatory' empêche alors toute connexion
+        (aucune session n'est créée, même avec le bon mot de passe). Cette
+        action évite d'avoir à passer par la page Admin séparée "Adresses
+        e-mail" à chaque nouveau compte créé manuellement.
+        """
+        from allauth.account.models import EmailAddress
+        count = 0
+        for user in queryset:
+            obj, _ = EmailAddress.objects.get_or_create(
+                user=user, email=user.email,
+                defaults={'primary': True, 'verified': True},
+            )
+            if not obj.verified:
+                obj.verified = True
+                obj.primary = True
+                obj.save(update_fields=['verified', 'primary'])
+            count += 1
+        self.message_user(request, f"Email vérifié pour {count} compte(s) — la connexion est maintenant possible.")
 
 
 @admin.register(UserAddress)

@@ -192,6 +192,10 @@ def check_event_exists(request):
     Authentifié par cookie de session, même remarque que scan_qr_api :
     protection CSRF standard réactivée, jeton envoyé par le front-end.
     """
+    agent, error_response = _check_agent(request)
+    if error_response:
+        return error_response
+
     try:
         body = json.loads(request.body)
         event_id = body.get('event_id')

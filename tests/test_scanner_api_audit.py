@@ -104,8 +104,20 @@ class ScannerMobileAPITests(TestCase):
         response = self._post(self.ticket, self.event, client)
         self.assertEqual(response.status_code, 403)
 
+    def test_check_event_sans_session_rejete_401(self):
+        """check_event_exists doit exiger une session authentifiée, comme scan_qr_api
+        (son propre docstring l'affirmait déjà — le code ne le vérifiait pas)."""
+        client = Client()
+        response = client.post(
+            reverse('scanner_api:check_event'),
+            data=json.dumps({'event_id': self.event.id}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_check_event_exists(self):
         client = Client()
+        client.force_login(self.scanner_agent)
         r1 = client.post(
             reverse('scanner_api:check_event'),
             data=json.dumps({'event_id': self.event.id}),

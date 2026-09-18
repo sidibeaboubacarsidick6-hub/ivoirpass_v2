@@ -169,14 +169,26 @@
             formData.append('csrfmiddlewaretoken', getCSRF());
             try {
                 const res = await fetch(LOGIN_URL, { method: 'POST', body: formData, redirect: 'follow' });
-                if (res.url && !res.url.includes('/login')) {
+                if (res.url && res.url.includes('/confirm-email')) {
+                    // Identifiants corrects mais email non vérifié : allauth
+                    // ne crée pas de session dans ce cas (voir
+                    // ACCOUNT_EMAIL_VERIFICATION='mandatory') — sans cette
+                    // détection explicite, l'écran de scan s'affichait à
+                    // tort alors qu'aucune session n'existait vraiment.
+                    document.getElementById('loginError').textContent =
+                        "Cet email n'est pas encore vérifié — demandez à un administrateur de le confirmer.";
+                    document.getElementById('loginError').style.display = 'block';
+                } else if (res.url && !res.url.includes('/login')) {
                     document.getElementById('loginScreen').classList.remove('active');
                     document.getElementById('eventScreen').classList.add('active');
                     document.getElementById('agentName').textContent = email;
                     document.getElementById('eventIdInput').focus();
                     document.getElementById('loginError').style.display = 'none';
                     document.getElementById('passwordInput').value = '';
-                } else { document.getElementById('loginError').style.display = 'block'; }
+                } else {
+                    document.getElementById('loginError').textContent = 'Email ou mot de passe incorrect';
+                    document.getElementById('loginError').style.display = 'block';
+                }
             } catch(e) { document.getElementById('loginError').style.display = 'block'; }
         }
 
