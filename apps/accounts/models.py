@@ -86,6 +86,18 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         choices=Role.choices,
         default=Role.ORGANIZER
     )
+    managed_by = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='managed_agents',
+        limit_choices_to={'role': 'organizer'},
+        verbose_name=_('géré par (organisateur)'),
+        help_text=_(
+            "Pour un agent scanner : l'organisateur qui a créé ce compte et "
+            "à qui il appartient. Détermine qui peut l'assigner à ses "
+            "événements — évite qu'un organisateur voie ou assigne les "
+            "agents créés pour un autre organisateur."
+        ),
+    )
     is_active = models.BooleanField(
         _('actif'),
         default=True,

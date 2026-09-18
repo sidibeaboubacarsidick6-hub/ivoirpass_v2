@@ -367,15 +367,35 @@ def assign_scanner_agents(request, slug):
     Permet à l'organisateur d'assigner des agents scanner (comptes avec
     le rôle 'scanner') à cet événement précis — sans assignation, un
     agent scanner ne peut plus scanner l'événement (voir Event.scanner_agents).
+
+    Portée strictement limitée aux agents de CET organisateur (CustomUser.managed_by)
+    — avant ce correctif, la liste montrait TOUS les agents scanner de la
+    plateforme, tous organisateurs confondus (fuite d'email/nom entre
+    organisateurs sans lien entre eux, et possibilité d'assigner l'agent
+    d'un autre organisateur à son propre événement sans son accord).
+
+    Les agents déjà assignés à CET événement avant ce correctif (pool
+    global historique, managed_by non renseigné) restent visibles et
+    modifiables ici pour ne pas casser une assignation existante, mais
+    aucun autre agent "orphelin" n'apparaît.
     """
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
     from apps.accounts.models import CustomUser
+    from django.db.models import Q
 
-    all_agents = CustomUser.objects.filter(role='scanner', is_active=True).order_by('email')
+    already_on_this_event = event.scanner_agents.values_list('id', flat=True)
+    allowed_agents = CustomUser.objects.filter(
+        Q(managed_by=request.user) | Q(id__in=already_on_this_event),
+        role='scanner', is_active=True,
+    ).distinct().order_by('email')
 
     if request.method == 'POST':
         selected_ids = request.POST.getlist('agents')
-        event.scanner_agents.set(CustomUser.objects.filter(id__in=selected_ids, role='scanner'))
+        # On ne retient QUE les agents que l'organisateur a le droit
+        # d'assigner (mêmes règles que l'affichage ci-dessus) — sans ce
+        # filtre, un POST forgé avec l'ID d'un agent d'un autre
+        # organisateur aurait pu l'assigner malgré tout.
+        event.scanner_agents.set(allowed_agents.filter(id__in=selected_ids))
         messages.success(
             request,
             f"{event.scanner_agents.count()} agent(s) assigné(s) à « {event.title} »."
@@ -386,6 +406,61 @@ def assign_scanner_agents(request, slug):
 
     return render(request, 'events/assign_scanner_agents.html', {
         'event': event,
-        'all_agents': all_agents,
+        'all_agents': allowed_agents,
         'assigned_ids': assigned_ids,
     })
+
+
+@organizer_required
+def create_scanner_agent(request):
+    """
+    Permet à l'organisateur de créer lui-même un agent scanner, plutôt que
+    de dépendre d'un admin à chaque fois (voir audit — goulot d'étranglement
+    identifié). Le compte créé est automatiquement rattaché à cet
+    organisateur (managed_by) et son email est marqué vérifié d'emblée :
+    c'est l'organisateur qui crée sciemment ce compte de service pour son
+    propre personnel, la vérification d'email par lien n'a pas de sens ici
+    (voir audit — bug corrigé où un agent créé sans email vérifié ne
+    pouvait jamais se connecter).
+    """
+    from apps.accounts.models import CustomUser
+    from allauth.account.models import EmailAddress
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        password = request.POST.get('password', '')
+
+        errors = []
+        if not email:
+            errors.append("L'email est obligatoire.")
+        elif CustomUser.objects.filter(email=email).exists():
+            errors.append("Un compte existe déjà avec cet email.")
+        if not password:
+            errors.append("Le mot de passe est obligatoire.")
+        else:
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                errors.extend(e.messages)
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            agent = CustomUser.objects.create_user(
+                email=email, password=password,
+                first_name=first_name, last_name=last_name,
+                role=CustomUser.Role.SCANNER,
+                managed_by=request.user,
+            )
+            EmailAddress.objects.create(
+                user=agent, email=agent.email, primary=True, verified=True,
+            )
+            messages.success(request, f"Agent scanner {email} créé — vous pouvez maintenant l'assigner à vos événements.")
+            return redirect('events:my_events')
+
+    return render(request, 'events/create_scanner_agent.html')

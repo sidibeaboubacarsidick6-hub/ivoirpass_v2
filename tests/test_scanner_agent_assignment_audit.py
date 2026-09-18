@@ -26,9 +26,11 @@ class ScannerAgentAssignmentTests(TestCase):
         )
         self.agent_assigned = CustomUser.objects.create_user(
             email='agent-assigne@test.com', password='Pass123!', role='scanner',
+            managed_by=self.organizer,
         )
         self.agent_not_assigned = CustomUser.objects.create_user(
             email='agent-non-assigne@test.com', password='Pass123!', role='scanner',
+            managed_by=self.organizer,
         )
         category = Category.objects.create(name='Concert Assign', slug='concert-assign')
         self.event = Event.objects.create(

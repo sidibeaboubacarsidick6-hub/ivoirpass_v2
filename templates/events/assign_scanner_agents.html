@@ -13,6 +13,9 @@
       « <strong>{{ event.title }}</strong> ». Un agent non coché ci-dessous
       ne pourra pas scanner cet événement.
     </p>
+    <a href="{% url 'events:create_scanner_agent' %}" class="btn btn-sm btn-outline-orange mt-2">
+      <i class="bi bi-person-plus me-1"></i>Créer un nouvel agent scanner
+    </a>
   </div>
 
   {% if messages %}
@@ -42,9 +45,9 @@
           </div>
         {% else %}
           <p class="text-muted mb-4">
-            Aucun compte avec le rôle "agent scanner" n'existe encore.
-            Crée-en un via l'administration Django (/admin/) avant de
-            pouvoir l'assigner ici.
+            Vous n'avez encore créé aucun agent scanner.
+            <a href="{% url 'events:create_scanner_agent' %}">Créez-en un</a>
+            avant de pouvoir l'assigner ici.
           </p>
         {% endif %}
 

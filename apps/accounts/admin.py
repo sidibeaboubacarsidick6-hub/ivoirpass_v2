@@ -25,6 +25,11 @@ class UserAddressInline(admin.TabularInline):
 class CustomUserAdmin(UserAdmin):
     """Administration personnalisée des utilisateurs IvoirPass."""
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'managed_by':
+            kwargs['queryset'] = CustomUser.objects.filter(role=CustomUser.Role.ORGANIZER)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):
         was_verified = False
         if change and obj.pk:
@@ -117,7 +122,7 @@ class CustomUserAdmin(UserAdmin):
         }),
         (_('Rôle & Permissions'), {
             'fields': (
-                'role', 'is_active', 'is_staff', 'is_superuser',
+                'role', 'managed_by', 'is_active', 'is_staff', 'is_superuser',
                 'groups', 'user_permissions'
             )
         }),
