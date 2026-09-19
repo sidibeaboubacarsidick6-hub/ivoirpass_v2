@@ -29,9 +29,12 @@ class Payment(models.Model):
         DJAMO    = 'djamo',    'Djamo'
         CARD     = 'card',     'Carte Bancaire'
 
-    # Liaison commande — l'une des deux FK est renseignée, jamais les deux
-    # (contrainte en base ci-dessous). "order" pour les comptes (flux
-    # historique), "guest_order" pour les achats sans compte (flux actuel).
+    # Liaison commande — exactement une seule des quatre FK est renseignée
+    # (contrainte en base ci-dessous). "order"/"guest_order" pour la
+    # billetterie, "product_order"/"guest_product_order" pour la boutique.
+    # La boutique ne vend aujourd'hui qu'en achat invité (guest_product_order) —
+    # product_order existe pour rester cohérent avec order/guest_order et pour
+    # le jour où le tunnel "avec compte" boutique serait réactivé.
     order = models.ForeignKey(
         'tickets.Order',
         on_delete=models.CASCADE,
@@ -44,6 +47,20 @@ class Payment(models.Model):
         on_delete=models.CASCADE,
         related_name='payments',
         verbose_name=_('commande invité'),
+        null=True, blank=True,
+    )
+    product_order = models.ForeignKey(
+        'store.ProductOrder',
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name=_('commande boutique'),
+        null=True, blank=True,
+    )
+    guest_product_order = models.ForeignKey(
+        'store.GuestProductOrder',
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name=_('commande boutique invité'),
         null=True, blank=True,
     )
 
@@ -103,18 +120,23 @@ class Payment(models.Model):
             models.Index(fields=['paydunya_token']),
             models.Index(fields=['order', 'status']),
             models.Index(fields=['guest_order', 'status']),
+            models.Index(fields=['product_order', 'status']),
+            models.Index(fields=['guest_product_order', 'status']),
             models.Index(fields=['status']),
         ]
         constraints = [
             models.CheckConstraint(
                 check=(
-                    Q(order__isnull=False, guest_order__isnull=True) |
-                    Q(order__isnull=True, guest_order__isnull=False)
+                    Q(order__isnull=False, guest_order__isnull=True, product_order__isnull=True, guest_product_order__isnull=True) |
+                    Q(order__isnull=True, guest_order__isnull=False, product_order__isnull=True, guest_product_order__isnull=True) |
+                    Q(order__isnull=True, guest_order__isnull=True, product_order__isnull=False, guest_product_order__isnull=True) |
+                    Q(order__isnull=True, guest_order__isnull=True, product_order__isnull=True, guest_product_order__isnull=False)
                 ),
-                name='payment_exactly_one_of_order_or_guest_order',
+                name='payment_exactly_one_order_type',
             ),
         ]
 
     def __str__(self):
-        ref = self.order.order_number if self.order_id else self.guest_order.order_number
+        order = self.order or self.guest_order or self.product_order or self.guest_product_order
+        ref = order.order_number if order else '?'
         return f"Paiement {ref} — {self.amount} FCFA ({self.get_status_display()})"

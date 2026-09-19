@@ -121,6 +121,11 @@
                    title="Voir" target="_blank">
                   <i class="bi bi-eye"></i>
                 </a>
+                <a href="{% url 'store:product_stats' product.slug %}"
+                   class="btn btn-outline-success btn-sm"
+                   title="Statistiques">
+                  <i class="bi bi-graph-up"></i>
+                </a>
                 <a href="{% url 'store:product_edit' product.slug %}"
                    class="btn btn-outline-primary btn-sm">
                   <i class="bi bi-pencil"></i>

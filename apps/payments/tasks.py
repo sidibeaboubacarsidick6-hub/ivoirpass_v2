@@ -17,16 +17,18 @@ uniquement l'API de vérification, elle ne déclenche ni ne modifie rien chez
 PayDunya) et ne confirme une commande que via order.mark_as_paid(), qui est
 verrouillé et idempotent (voir apps/tickets/models.py — correctif R-01).
 
-Portée actuelle : commandes de billetterie (Order / GuestOrder), qui sont les
-seules à disposer d'un enregistrement Payment dédié aujourd'hui. Les commandes
-boutique (ProductOrder / GuestProductOrder) ne créent pas de ligne Payment et
-ne sont donc pas couvertes par cette tâche — c'est un point distinct à traiter
-séparément si la réconciliation doit être étendue à la boutique.
+Portée : commandes de billetterie (Order / GuestOrder) et commandes boutique
+invité (GuestProductOrder) — ces dernières ont été ajoutées après coup (voir
+audit) via l'extension du modèle Payment. Les commandes boutique "avec
+compte" (ProductOrder) restent hors périmètre car ce tunnel d'achat est
+désactivé côté site (voir apps/store/views.py).
 """
 import logging
 from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -57,17 +59,20 @@ def reconcile_pending_payments(self):
     candidates = Payment.objects.filter(
         status=Payment.Status.PENDING,
         created_at__lte=min_age,
-    ).select_related('order', 'guest_order')
+    ).select_related('order', 'guest_order', 'product_order', 'guest_product_order')
 
     checked = recovered = marked_failed = anomalies = 0
+    anomaly_details = []
 
     for payment in candidates:
         token = payment.paydunya_token
 
         if not token:
             if payment.created_at <= anomaly_age:
-                _flag_anomaly(payment, "Paiement PENDING sans token PayDunya depuis plus de "
-                                        f"{RECONCILE_ANOMALY_AGE_HOURS}h")
+                reason = ("Paiement PENDING sans token PayDunya depuis plus de "
+                           f"{RECONCILE_ANOMALY_AGE_HOURS}h")
+                _flag_anomaly(payment, reason)
+                anomaly_details.append(_describe_anomaly(payment, reason))
                 anomalies += 1
             continue
 
@@ -97,12 +102,14 @@ def reconcile_pending_payments(self):
         # Toujours en attente côté PayDunya aussi — anomalie seulement si ça
         # traîne depuis trop longtemps.
         if payment.created_at <= anomaly_age:
-            _flag_anomaly(
-                payment,
-                f"Paiement PENDING depuis plus de {RECONCILE_ANOMALY_AGE_HOURS}h "
-                f"(statut PayDunya: {status or 'inconnu'})",
-            )
+            reason = (f"Paiement PENDING depuis plus de {RECONCILE_ANOMALY_AGE_HOURS}h "
+                       f"(statut PayDunya: {status or 'inconnu'})")
+            _flag_anomaly(payment, reason)
+            anomaly_details.append(_describe_anomaly(payment, reason))
             anomalies += 1
+
+    if anomaly_details:
+        _send_anomaly_alert(anomaly_details)
 
     summary = (
         f"Réconciliation PayDunya: {checked} paiement(s) interrogé(s), "
@@ -124,7 +131,7 @@ def _recover_confirmed_payment(payment, token, result, now):
     from apps.dashboard.models import AuditLog
     from apps.dashboard.services import log_action
 
-    order = payment.order or payment.guest_order
+    order = payment.order or payment.guest_order or payment.product_order or payment.guest_product_order
     if order is None:
         _flag_anomaly(payment, "Paiement confirmé chez PayDunya mais sans commande associée en base")
         return False
@@ -156,6 +163,49 @@ def _recover_confirmed_payment(payment, token, result, now):
     return True
 
 
+def _describe_anomaly(payment, reason):
+    order = payment.order or payment.guest_order
+    order_number = getattr(order, 'order_number', '—')
+    return f"- {order_number} : {payment.amount} {payment.currency} — {reason}"
+
+
+def _send_anomaly_alert(anomaly_details):
+    """
+    Alerte les admins par email dès qu'au moins une anomalie de
+    réconciliation est détectée — même patron que
+    check_pending_withdrawals (apps/dashboard/tasks.py) pour rester cohérent.
+    Best-effort : une erreur d'envoi n'interrompt jamais la réconciliation
+    elle-même (fail_silently=True), les anomalies restent de toute façon
+    tracées dans AuditLog même si l'email échoue.
+    """
+    from apps.accounts.models import CustomUser
+
+    message = (
+        f"⚠️ {len(anomaly_details)} anomalie(s) de réconciliation PayDunya détectée(s) :\n\n"
+        + "\n".join(anomaly_details)
+        + "\n\nDétail consultable dans le journal d'audit (back-office → Journal d'audit, "
+        "action \"Anomalie détectée en réconciliation\") ou dans la fiche de chaque "
+        "transaction concernée (back-office → Transactions)."
+    )
+
+    admins = CustomUser.objects.filter(
+        role=CustomUser.Role.ADMIN, is_active=True, notify_email=True,
+    )
+    if not admins.exists():
+        logger.warning("Réconciliation: anomalies détectées mais aucun admin à notifier (notify_email=False ?)")
+        return
+
+    recipient_list = list(admins.values_list('email', flat=True))
+    send_mail(
+        subject=f"[IvoirPass] ⚠️ {len(anomaly_details)} anomalie(s) de réconciliation PayDunya",
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=recipient_list,
+        fail_silently=True,
+    )
+    logger.info(f"Alerte réconciliation envoyée à {len(recipient_list)} admin(s)")
+
+
 def _flag_anomaly(payment, reason):
     from apps.dashboard.models import AuditLog
     from apps.dashboard.services import log_action
@@ -176,14 +226,18 @@ def _flag_anomaly(payment, reason):
 
 
 def _dispatch_post_confirmation(order):
-    """Envoie l'email des billets pour une commande récupérée par réconciliation."""
+    """Envoie la confirmation (email billets ou email boutique) pour une commande récupérée par réconciliation."""
     try:
         from apps.tickets.models import Order, GuestOrder
+        from apps.store.models import GuestProductOrder
         if isinstance(order, Order):
             from apps.notifications.tasks import send_ticket_email_async
             send_ticket_email_async.delay(str(order.uuid))
         elif isinstance(order, GuestOrder):
             from apps.notifications.tasks import send_guest_ticket_email_async
             send_guest_ticket_email_async.delay(str(order.uuid))
+        elif isinstance(order, GuestProductOrder):
+            from apps.notifications.service import NotificationService
+            NotificationService.guest_store_order_confirmed(order)
     except Exception as e:
-        logger.error(f"Réconciliation: erreur envoi email billets pour {order.order_number}: {e}")
+        logger.error(f"Réconciliation: erreur envoi confirmation pour {order.order_number}: {e}")

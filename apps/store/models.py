@@ -8,6 +8,7 @@ import random
 import string
 import logging
 from django.db import models, transaction, IntegrityError
+from django.db.models import F
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify
@@ -513,7 +514,7 @@ class ProductOrder(models.Model):
         if self.product.is_physical:
             from django.db import transaction
             from django.db.models import F
-            
+
             with transaction.atomic():
                 # Verrouille et décrémente de manière atomique
                 updated = Product.objects.select_for_update().filter(
@@ -523,7 +524,7 @@ class ProductOrder(models.Model):
                     stock=F('stock') - self.quantity,
                     sold_count=F('sold_count') + self.quantity
                 )
-                
+
                 if not updated:
                     logger.error(f"Stock insuffisant pour {self.order_number}")
                     raise ValueError("Stock insuffisant")
@@ -607,7 +608,7 @@ class ProductOrder(models.Model):
         if self.status in [self.Status.PENDING, self.Status.PAID]:
             self.status = self.Status.CANCELLED
             self.save()
-            
+
             # Restaurer le stock si commande était payée
             if self.product.is_physical and self.status == self.Status.PAID:
                 self.product.stock += self.quantity
@@ -621,7 +622,7 @@ class ProductOrder(models.Model):
         if self.status == self.Status.PAID:
             self.status = self.Status.REFUNDED
             self.save()
-            
+
             # Restaurer le stock si produit physique
             if self.product.is_physical:
                 self.product.stock += self.quantity
@@ -898,31 +899,43 @@ class GuestProductOrder(models.Model):
         Confirme le paiement. Génère TOUJOURS de nouveaux liens de téléchargement,
         indépendamment des achats précédents du même produit par le même client.
         Notifie le vendeur pour les produits physiques.
+
+        Verrouillé et idempotent (même patron que Order/GuestOrder.mark_as_paid,
+        apps/tickets/models.py — correctif R-01) : le retour navigateur, le
+        webhook PayDunya et la tâche de réconciliation peuvent tous les trois
+        appeler cette méthode pour la même commande. Sans ce verrou, un appel
+        concurrent aurait pu décrémenter le stock et créditer le wallet vendeur
+        deux fois.
+
+        Returns:
+            bool: True si cet appel a confirmé la commande, False si elle
+                  était déjà payée par un appel concurrent.
         """
-        self.status = self.Status.PAID
-        self.payment_method = payment_method
-        self.payment_reference = payment_reference
-        self.paid_at = timezone.now()
-        self.save()
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            if locked.status == self.Status.PAID:
+                return False
 
-        # Crédite le wallet du vendeur
-        self._credit_seller_wallet()
+            self.status = self.Status.PAID
+            self.payment_method = payment_method
+            self.payment_reference = payment_reference
+            self.paid_at = timezone.now()
+            self.save()
 
-        # Génère les liens de téléchargement UNIQUEMENT si le client a
-        # reellement choisi le numerique (seul ou bundle) — avant, ceci
-        # se basait sur product.is_digital, qui est TOUJOURS vrai pour
-        # un bundle, meme si le client n'avait choisi que le physique.
-        if self.delivery_method in (self.DeliveryMethod.DOWNLOAD, self.DeliveryMethod.BOTH):
-            self._generate_download_links()
+            # Crédite le wallet du vendeur
+            self._credit_seller_wallet()
 
-        # Met a jour le stock UNIQUEMENT si le client a reellement
-        # choisi la livraison physique (seule ou bundle) — meme
-        # correction que ci-dessus.
-        if self.delivery_method in (self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH):
-            from django.db import transaction
-            from django.db.models import F
-            
-            with transaction.atomic():
+            # Génère les liens de téléchargement UNIQUEMENT si le client a
+            # reellement choisi le numerique (seul ou bundle) — avant, ceci
+            # se basait sur product.is_digital, qui est TOUJOURS vrai pour
+            # un bundle, meme si le client n'avait choisi que le physique.
+            if self.delivery_method in (self.DeliveryMethod.DOWNLOAD, self.DeliveryMethod.BOTH):
+                self._generate_download_links()
+
+            # Met a jour le stock UNIQUEMENT si le client a reellement
+            # choisi la livraison physique (seule ou bundle) — meme
+            # correction que ci-dessus.
+            if self.delivery_method in (self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH):
                 updated = Product.objects.select_for_update().filter(
                     pk=self.product.pk,
                     stock__gte=self.quantity
@@ -930,23 +943,25 @@ class GuestProductOrder(models.Model):
                     stock=F('stock') - self.quantity,
                     sold_count=F('sold_count') + self.quantity
                 )
-                
+
                 if not updated:
                     logger.error(f"Stock insuffisant pour guest {self.order_number}")
                     raise ValueError("Stock insuffisant")
 
-            # ✅ Notifie le vendeur qu'il doit préparer une livraison
-            try:
-                from apps.notifications.service import NotificationService
-                NotificationService.notify_seller_new_order(self, is_guest=True)
-                logger.info(
-                    f"Vendeur notifié pour la commande guest {self.order_number} "
-                    f"(produit physique)"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
-                )
+                # ✅ Notifie le vendeur qu'il doit préparer une livraison
+                try:
+                    from apps.notifications.service import NotificationService
+                    NotificationService.notify_seller_new_order(self, is_guest=True)
+                    logger.info(
+                        f"Vendeur notifié pour la commande guest {self.order_number} "
+                        f"(produit physique)"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
+                    )
+        return True
+        return True
 
     def _credit_seller_wallet(self):
         """
@@ -1018,7 +1033,7 @@ class GuestProductOrder(models.Model):
         if self.status in [self.Status.PENDING, self.Status.PAID]:
             self.status = self.Status.CANCELLED
             self.save()
-            
+
             # Restaurer le stock si commande était payée et produit physique
             if self.product.is_physical and self.status == self.Status.PAID:
                 self.product.stock += self.quantity
@@ -1034,7 +1049,7 @@ class GuestProductOrder(models.Model):
         if self.status == self.Status.PAID:
             self.status = self.Status.REFUNDED
             self.save()
-            
+
             # Restaurer le stock si produit physique
             if self.product.is_physical:
                 self.product.stock += self.quantity

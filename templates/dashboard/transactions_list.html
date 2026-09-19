@@ -74,6 +74,7 @@
         <tr>
           <th style="width:130px;">Date</th>
           <th>Référence</th>
+          <th>Type</th>
           <th>Client</th>
           <th>Événement</th>
           <th>Billets</th>
@@ -92,6 +93,7 @@
             </a>
             {% if r.paydunya_token %}<div class="text-muted" style="font-size:0.72rem;">{{ r.paydunya_token|truncatechars:20 }}</div>{% endif %}
           </td>
+          <td class="small"><span class="badge {% if r.kind == 'Boutique' %}bg-info-subtle text-info-emphasis{% else %}bg-success-subtle text-success-emphasis{% endif %}">{{ r.kind }}</span></td>
           <td class="small">{{ r.client_name }}<div class="text-muted" style="font-size:0.72rem;">{{ r.client_email }}</div></td>
           <td class="small">{{ r.event }}</td>
           <td class="small">{{ r.ticket_types }}</td>
@@ -104,7 +106,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="8" class="text-center text-muted py-4">Aucune transaction pour ces critères.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">Aucune transaction pour ces critères.</td></tr>
         {% endfor %}
       </tbody>
     </table>

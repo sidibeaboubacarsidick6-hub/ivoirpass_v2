@@ -1065,11 +1065,19 @@ def _filtered_payments(request):
     Construit le queryset de paiements filtré selon les paramètres GET —
     partagé entre la vue de liste et les trois exports pour ne jamais avoir
     deux logiques de filtrage qui divergent silencieusement.
+
+    Couvre à la fois la billetterie (order/guest_order) et la boutique
+    (product_order/guest_product_order) — cette dernière ne dispose de
+    lignes Payment que pour les commandes initiées après l'extension du
+    modèle Payment (voir audit) ; les commandes boutique antérieures ne
+    remonteront pas ici.
     """
     from apps.payments.models import Payment
 
     payments = Payment.objects.select_related(
         'order__buyer', 'guest_order',
+        'product_order__buyer', 'product_order__product',
+        'guest_product_order__product',
     ).prefetch_related(
         'order__items__ticket_type__event__organizer',
         'guest_order__guest_items__ticket_type__event__organizer',
@@ -1088,12 +1096,17 @@ def _filtered_payments(request):
         payments = payments.filter(
             Q(order__order_number__icontains=q) |
             Q(guest_order__order_number__icontains=q) |
+            Q(product_order__order_number__icontains=q) |
+            Q(guest_product_order__order_number__icontains=q) |
             Q(paydunya_token__icontains=q) |
             Q(paydunya_invoice_token__icontains=q) |
             Q(order__buyer__email__icontains=q) |
             Q(order__buyer__phone_number__icontains=q) |
             Q(guest_order__email__icontains=q) |
-            Q(guest_order__phone__icontains=q)
+            Q(guest_order__phone__icontains=q) |
+            Q(product_order__buyer__email__icontains=q) |
+            Q(guest_product_order__email__icontains=q) |
+            Q(guest_product_order__phone__icontains=q)
         )
 
     if filters['status']:
@@ -1113,37 +1126,57 @@ def _filtered_payments(request):
 
 def _payment_row(payment):
     """
-    Aplati un Payment + la commande qu'il concerne (compte ou invité) en un
-    dict simple à afficher ou exporter — évite de dupliquer cette logique
-    dans le template, le CSV, l'Excel et le PDF.
+    Aplati un Payment + la commande qu'il concerne (billetterie ou boutique,
+    compte ou invité) en un dict simple à afficher ou exporter — évite de
+    dupliquer cette logique dans le template, le CSV, l'Excel et le PDF.
     Retourne None si le paiement n'a (anormalement) aucune commande liée —
     ne devrait jamais arriver vu la contrainte en base sur Payment, mais on
     reste défensif plutôt que de faire planter tout l'export pour une ligne.
     """
-    order = payment.order or payment.guest_order
+    order = payment.order or payment.guest_order or payment.product_order or payment.guest_product_order
     if order is None:
         return None
 
-    if payment.order_id:
-        client_name = order.buyer.get_full_name()
-        client_email = order.buyer.email
-        items = list(order.items.all())
-    else:
-        client_name = order.buyer_name
-        client_email = order.email
-        items = list(order.guest_items.all())
+    is_store = bool(payment.product_order_id or payment.guest_product_order_id)
 
-    events = sorted({it.ticket_type.event.title for it in items if it.ticket_type and it.ticket_type.event})
-    organizers = sorted({
-        it.ticket_type.event.organizer.get_full_name()
-        for it in items if it.ticket_type and it.ticket_type.event and it.ticket_type.event.organizer
-    })
-    quantity = sum(it.quantity for it in items)
-    ticket_types = ', '.join(f"{it.quantity}x {it.ticket_type.name}" for it in items) if items else '—'
+    if is_store:
+        kind = 'Boutique'
+        if payment.product_order_id:
+            client_name = order.buyer.get_full_name()
+            client_email = order.buyer.email
+        else:
+            client_name = f"{order.first_name} {order.last_name}"
+            client_email = order.email
+        product = order.product
+        event_label = product.name if product else '—'
+        organizer_label = product.seller.get_full_name() if product and product.seller else '—'
+        ticket_types = f"{order.quantity}x {product.name}" if product else '—'
+        quantity = order.quantity
+    else:
+        kind = 'Billet'
+        if payment.order_id:
+            client_name = order.buyer.get_full_name()
+            client_email = order.buyer.email
+            items = list(order.items.all())
+        else:
+            client_name = order.buyer_name
+            client_email = order.email
+            items = list(order.guest_items.all())
+
+        event_label = ', '.join(sorted({
+            it.ticket_type.event.title for it in items if it.ticket_type and it.ticket_type.event
+        })) or '—'
+        organizer_label = ', '.join(sorted({
+            it.ticket_type.event.organizer.get_full_name()
+            for it in items if it.ticket_type and it.ticket_type.event and it.ticket_type.event.organizer
+        })) or '—'
+        quantity = sum(it.quantity for it in items)
+        ticket_types = ', '.join(f"{it.quantity}x {it.ticket_type.name}" for it in items) if items else '—'
 
     gross = order.subtotal
-    # GuestOrder ne stocke pas toujours une commission séparée — on la
-    # déduit de total - subtotal plutôt que de supposer un champ absent.
+    # GuestOrder / commandes boutique ne stockent pas toujours une commission
+    # séparée — on la déduit de total - subtotal plutôt que de supposer un
+    # champ absent.
     fees = getattr(order, 'commission', None)
     if fees is None:
         fees = order.total - order.subtotal
@@ -1152,11 +1185,12 @@ def _payment_row(payment):
     return {
         'payment': payment,
         'order': order,
+        'kind': kind,
         'order_number': order.order_number,
         'client_name': client_name or '—',
         'client_email': client_email or '—',
-        'event': ', '.join(events) or '—',
-        'organizer': ', '.join(organizers) or '—',
+        'event': event_label,
+        'organizer': organizer_label,
         'ticket_types': ticket_types,
         'quantity': quantity,
         'gross': gross,
@@ -1229,8 +1263,11 @@ def transaction_detail(request, order_number):
     from apps.payments.models import Payment
 
     payment = Payment.objects.filter(
-        Q(order__order_number=order_number) | Q(guest_order__order_number=order_number)
-    ).select_related('order__buyer', 'guest_order').first()
+        Q(order__order_number=order_number) | Q(guest_order__order_number=order_number) |
+        Q(product_order__order_number=order_number) | Q(guest_product_order__order_number=order_number)
+    ).select_related(
+        'order__buyer', 'guest_order', 'product_order__buyer', 'guest_product_order'
+    ).first()
 
     if payment is None:
         messages.error(request, f"Transaction {order_number} introuvable.")
@@ -1238,7 +1275,14 @@ def transaction_detail(request, order_number):
 
     row = _payment_row(payment)
     order = row['order']
-    items = list(order.items.all()) if payment.order_id else list(order.guest_items.all())
+    is_store = bool(payment.product_order_id or payment.guest_product_order_id)
+    if is_store:
+        # Une commande boutique porte un seul produit/quantité — pas de
+        # lignes multiples comme pour la billetterie, mais le template
+        # attend un itérable "items" : on lui fabrique une ligne unique.
+        items = [order] if order.product_id else []
+    else:
+        items = list(order.items.all()) if payment.order_id else list(order.guest_items.all())
 
     audit_entries = AuditLog.objects.filter(object_id=order_number).order_by('created_at')
 
@@ -1299,13 +1343,13 @@ def export_transactions_csv(request):
     response.write('\ufeff')
     writer = csv.writer(response)
 
-    writer.writerow(['Date', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement', 'Organisateur',
-                      'Type de billet', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+    writer.writerow(['Date', 'Type', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement/Produit', 'Organisateur/Vendeur',
+                      'Détail', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
                       'Statut', 'Date confirmation'])
     total_gross = total_fees = total_net = 0
     for r in rows:
         writer.writerow([
-            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['order_number'], r['paydunya_token'],
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['kind'], r['order_number'], r['paydunya_token'],
             r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
             r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
             r['payment_method'], r['status_display'],
@@ -1333,13 +1377,13 @@ def export_transactions_excel(request):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Transactions"
-    ws.append(['Date', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement', 'Organisateur',
-                'Type de billet', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+    ws.append(['Date', 'Type', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement/Produit', 'Organisateur/Vendeur',
+                'Détail', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
                 'Statut', 'Date confirmation'])
     total_gross = total_fees = total_net = 0
     for r in rows:
         ws.append([
-            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['order_number'], r['paydunya_token'],
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['kind'], r['order_number'], r['paydunya_token'],
             r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
             r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
             r['payment_method'], r['status_display'],
@@ -1380,7 +1424,7 @@ def export_transactions_pdf(request):
     total_gross = total_fees = total_net = 0
     y = height - 30*mm
     p.setFont("Helvetica-Bold", 7)
-    p.drawString(15*mm, y, "Date | Réf. | Client | Événement | Qté | Brut | Frais | Net | Statut")
+    p.drawString(15*mm, y, "Date | Type | Réf. | Client | Événement/Produit | Qté | Brut | Frais | Net | Statut")
     y -= 5*mm
     p.setFont("Helvetica", 7)
     for r in rows:
@@ -1388,7 +1432,7 @@ def export_transactions_pdf(request):
             p.showPage()
             p.setFont("Helvetica", 7)
             y = height - 15*mm
-        line = f"{r['created_at'].strftime('%d/%m/%y')} | {r['order_number']} | {r['client_name'][:20]} | {r['event'][:20]} | {r['quantity']} | {int(r['gross'])} | {int(r['fees'])} | {int(r['net'])} | {r['status_display']}"
+        line = f"{r['created_at'].strftime('%d/%m/%y')} | {r['kind']} | {r['order_number']} | {r['client_name'][:20]} | {r['event'][:20]} | {r['quantity']} | {int(r['gross'])} | {int(r['fees'])} | {int(r['net'])} | {r['status_display']}"
         p.drawString(15*mm, y, line[:140])
         y -= 4.5*mm
         total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']

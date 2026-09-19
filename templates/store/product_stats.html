@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% block title %}Stats — {{ product.name }}{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- En-tête -->
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <a href="{% url 'store:my_products' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div class="flex-grow-1">
+      <h4 class="fw-bold mb-0">{{ product.name }}</h4>
+      <p class="text-muted small mb-0">
+        {{ product.get_product_type_display }} —
+        {{ product.price|floatformat:0 }} FCFA
+      </p>
+    </div>
+    <a href="{% url 'store:product_edit' product.slug %}" class="btn btn-green">
+      <i class="bi bi-pencil me-2"></i>Modifier
+    </a>
+  </div>
+
+  <!-- KPIs financiers -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">
+          {{ units_sold }}
+        </div>
+        <div class="text-muted small">Unités vendues</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#F47920;">
+          {{ gross_revenue|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Revenus bruts (FCFA)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#1B7A3E;">
+          {{ net_revenue|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Revenus nets (FCFA)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ip-card p-3 text-center">
+        <div style="font-size:1.6rem; font-weight:900; color:#6c757d;">
+          {{ commission|floatformat:0 }}
+        </div>
+        <div class="text-muted small">Commission IvoirPass</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs specifiques boutique -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center" style="border-top:3px solid #1B7A3E;">
+        <div style="font-size:1.4rem; font-weight:900; color:#1B7A3E;">
+          {{ orders_count }}
+        </div>
+        <div class="text-muted small">Commandes payées</div>
+      </div>
+    </div>
+    {% if product.is_digital %}
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center" style="border-top:3px solid #F47920;">
+        <div style="font-size:1.4rem; font-weight:900; color:#F47920;">
+          {{ downloads_used }} / {{ downloads_total }}
+        </div>
+        <div class="text-muted small">Téléchargements utilisés</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if product.is_physical %}
+    <div class="col-md-4">
+      <div class="ip-card p-3 text-center" style="border-top:3px solid #6c757d;">
+        <div style="font-size:1.4rem; font-weight:900; color:#6c757d;">
+          {{ product.stock }}
+        </div>
+        <div class="text-muted small">Stock restant</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Info commission -->
+  <div class="alert ip-alert alert-info mb-4">
+    <i class="bi bi-percent me-2"></i>
+    Commission IvoirPass : <strong>{{ product.commission_rate }}%</strong>
+    prélevée sur votre reversement —
+    Brut : <strong>{{ gross_revenue|floatformat:0 }} FCFA</strong> →
+    Net : <strong>{{ net_revenue|floatformat:0 }} FCFA</strong>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Graphique ventes -->
+    {% if sales_timeline %}
+    <div class="col-lg-8">
+      <div class="ip-card p-4">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-graph-up me-2 text-green"></i>
+          Ventes par jour (30 derniers jours)
+        </h6>
+        <canvas id="timelineChart" height="120"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Repartition par format (surtout utile pour les bundles) -->
+    <div class="col-lg-4">
+      <div class="ip-card p-4">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-pie-chart me-2 text-orange"></i>
+          Répartition par format
+        </h6>
+        {% for fs in format_stats %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="fw-semibold small">{{ fs.label }}</span>
+            <span class="text-muted small">{{ fs.count }} commande{{ fs.count|pluralize }}</span>
+          </div>
+          <div class="text-end" style="font-size:0.78rem; color:#1B7A3E; font-weight:600;">
+            {{ fs.revenue|floatformat:0 }} FCFA
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-muted small">Aucune vente pour l'instant.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Commandes recentes -->
+  <div class="ip-card mt-4">
+    <div class="p-4 border-bottom">
+      <h6 class="fw-bold mb-0">
+        <i class="bi bi-receipt me-2 text-green"></i>
+        Commandes récentes
+      </h6>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Commande</th>
+            <th>Acheteur</th>
+            <th>Format</th>
+            <th>Qté</th>
+            <th>Montant</th>
+            <th class="pe-4">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in recent_orders %}
+          <tr>
+            <td class="ps-4">
+              <span style="font-family:monospace; font-size:0.85rem;">
+                {{ order.order_number }}
+              </span>
+            </td>
+            <td>
+              <div class="fw-semibold small">{{ order.first_name }} {{ order.last_name }}</div>
+              <div class="text-muted" style="font-size:0.78rem;">{{ order.email }}</div>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border small">
+                {{ order.get_delivery_method_display }}
+              </span>
+            </td>
+            <td>{{ order.quantity }}</td>
+            <td class="fw-semibold text-green">{{ order.total|floatformat:0 }} FCFA</td>
+            <td class="pe-4 text-muted small">{{ order.paid_at|date:"d/m/Y H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-3 text-muted">Aucune commande.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if sales_timeline %}
+<script>
+new Chart(document.getElementById('timelineChart'), {
+  type: 'bar',
+  data: {
+    labels: [{% for d in sales_timeline %}"{{ d.date }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+    datasets: [{
+      label: 'Unités vendues',
+      data:  [{% for d in sales_timeline %}{{ d.qty }}{% if not forloop.last %},{% endif %}{% endfor %}],
+      backgroundColor: 'rgba(27,122,62,0.7)',
+      borderColor:     '#1B7A3E',
+      borderWidth:     1,
+      borderRadius:    4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

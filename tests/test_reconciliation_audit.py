@@ -13,6 +13,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.core import mail
 from django.utils import timezone
 
 from apps.accounts.models import CustomUser
@@ -119,3 +120,36 @@ class ReconciliationTaskTests(TestCase):
             AuditLog.objects.filter(action=AuditLog.Action.RECONCILIATION_ANOMALY).exists(),
             "Un paiement PENDING depuis plus de 48h doit être signalé",
         )
+
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
+    def test_anomalie_declenche_une_alerte_email_aux_admins(self, mock_verify):
+        admin = CustomUser.objects.create_user(
+            email='admin.recon@test.com', password='Pass123!',
+            role=CustomUser.Role.ADMIN, notify_email=True,
+        )
+        mock_verify.return_value = {'success': True, 'status': 'pending'}
+        self._make_pending_payment(
+            'tok_recon_6', created_at=timezone.now() - timedelta(hours=72)
+        )
+
+        reconcile_pending_payments()
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('anomalie', mail.outbox[0].subject.lower())
+        self.assertIn(admin.email, mail.outbox[0].to)
+
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
+    def test_pas_danomalie_pas_demail(self, mock_verify):
+        """Le cas normal (récupération réussie) ne doit pas déclencher d'alerte."""
+        CustomUser.objects.create_user(
+            email='admin.recon2@test.com', password='Pass123!',
+            role=CustomUser.Role.ADMIN, notify_email=True,
+        )
+        mock_verify.return_value = {'success': True, 'status': 'completed'}
+        self._make_pending_payment(
+            'tok_recon_7', created_at=timezone.now() - timedelta(minutes=30)
+        )
+
+        reconcile_pending_payments()
+
+        self.assertEqual(len(mail.outbox), 0)

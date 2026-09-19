@@ -987,22 +987,6 @@ def guest_store_payment_initiate(request, order_number):
             request.session[f'guest_store_token_{order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
-
-            # Enregistrement Payment (traçabilité back-office/réconciliation —
-            # voir audit : la boutique ne créait jusqu'ici aucune ligne
-            # Payment, contrairement à la billetterie, et n'apparaissait donc
-            # ni dans le back-office financier ni dans la réconciliation
-            # automatique).
-            from apps.payments.models import Payment
-            Payment.objects.get_or_create(
-                guest_product_order=order,
-                defaults={
-                    'amount': order.total, 'currency': 'XOF',
-                    'provider': Payment.Provider.PAYDUNYA,
-                    'paydunya_token': token, 'status': Payment.Status.PENDING,
-                },
-            )
-
             log_action(
                 action=AuditLog.Action.PAYMENT_INITIATED,
                 description=f"Paiement initié pour la commande boutique invité {order_number}",
@@ -1054,29 +1038,20 @@ def guest_store_payment_return(request, order_number):
         status = result.get('status', '') or result.get('data', {}).get('invoice', {}).get('status', '')
 
         if result.get('success') and status == 'completed':
-            # mark_as_paid() est verrouillé et idempotent : si le webhook a
-            # déjà confirmé la commande entre-temps, il renvoie False et on
-            # évite de dupliquer le log d'audit et l'email de confirmation.
-            newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-            if newly_confirmed:
-                from apps.payments.models import Payment
-                Payment.objects.filter(guest_product_order=order).update(
-                    status=Payment.Status.COMPLETED, raw_response=result,
-                    completed_at=timezone.now(),
-                )
-                log_action(
-                    action=AuditLog.Action.PAYMENT_SUCCESS,
-                    description=f"Paiement confirmé (retour) pour la commande boutique invité {order_number}",
-                    model_name='GuestProductOrder', object_id=order_number,
-                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                    ip_address=get_client_ip(request),
-                )
+            order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            log_action(
+                action=AuditLog.Action.PAYMENT_SUCCESS,
+                description=f"Paiement confirmé (retour) pour la commande boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                ip_address=get_client_ip(request),
+            )
 
-                try:
-                    from apps.notifications.service import NotificationService
-                    NotificationService.guest_store_order_confirmed(order)
-                except Exception as e:
-                    logger.error(f"Email guest store erreur: {e}")
+            try:
+                from apps.notifications.service import NotificationService
+                NotificationService.guest_store_order_confirmed(order)
+            except Exception as e:
+                logger.error(f"Email guest store erreur: {e}")
 
             messages.success(request, f"Commande {order.order_number} confirmée !")
 
@@ -1136,25 +1111,16 @@ def guest_store_webhook(request):
                     order_number=order_number,
                     status=GuestProductOrder.Status.PENDING
                 )
-                # mark_as_paid() est verrouillé et idempotent : si le retour
-                # navigateur a déjà confirmé la commande entre-temps, il
-                # renvoie False et on évite de dupliquer log/email.
-                newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-                if newly_confirmed:
-                    from apps.payments.models import Payment
-                    Payment.objects.filter(guest_product_order=order).update(
-                        status=Payment.Status.COMPLETED, raw_response=data,
-                        completed_at=timezone.now(),
-                    )
-                    log_action(
-                        action=AuditLog.Action.PAYMENT_SUCCESS,
-                        description=f"Paiement confirmé (webhook) pour la commande boutique invité {order_number}",
-                        model_name='GuestProductOrder', object_id=order_number,
-                        metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                        ip_address=get_client_ip(request),
-                    )
-                    from apps.notifications.service import NotificationService
-                    NotificationService.guest_store_order_confirmed(order)
+                order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                log_action(
+                    action=AuditLog.Action.PAYMENT_SUCCESS,
+                    description=f"Paiement confirmé (webhook) pour la commande boutique invité {order_number}",
+                    model_name='GuestProductOrder', object_id=order_number,
+                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
+                    ip_address=get_client_ip(request),
+                )
+                from apps.notifications.service import NotificationService
+                NotificationService.guest_store_order_confirmed(order)
             except GuestProductOrder.DoesNotExist:
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
