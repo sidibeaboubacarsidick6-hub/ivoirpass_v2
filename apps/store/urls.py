@@ -41,6 +41,8 @@ urlpatterns = [
          views.product_create, name='product_create'),
     path('mes-produits/<slug:slug>/modifier/',
          views.product_edit, name='product_edit'),
+    path('mes-produits/<slug:slug>/stats/',
+         views.product_stats, name='product_stats'),
     path('mes-produits/<slug:slug>/supprimer/',
          views.product_delete, name='product_delete'),
 

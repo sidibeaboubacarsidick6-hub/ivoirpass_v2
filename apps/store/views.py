@@ -640,6 +640,70 @@ def my_products(request):
 
 
 @seller_required
+def product_stats(request, slug):
+    """Statistiques detaillees d'un produit boutique (comparable a event_stats)."""
+    from decimal import Decimal
+    from django.db.models import Sum
+    from datetime import timedelta
+
+    product = get_object_or_404(Product, slug=slug, seller=request.user)
+
+    orders = GuestProductOrder.objects.filter(
+        product=product, status=GuestProductOrder.Status.PAID
+    ).order_by('-paid_at')
+
+    gross_revenue = orders.aggregate(t=Sum('subtotal'))['t'] or 0
+    units_sold    = orders.aggregate(t=Sum('quantity'))['t'] or 0
+
+    commission_rate = Decimal(str(product.commission_rate)) / Decimal('100')
+    gross_decimal   = Decimal(str(gross_revenue))
+    commission      = gross_decimal * commission_rate
+    net_revenue     = gross_decimal - commission
+
+    # Repartition par format choisi (surtout utile pour les bundles)
+    format_stats = []
+    for method_value, method_label in GuestProductOrder.DeliveryMethod.choices:
+        method_orders = orders.filter(delivery_method=method_value)
+        count = method_orders.count()
+        if count:
+            format_stats.append({
+                'label':   method_label,
+                'count':   count,
+                'revenue': method_orders.aggregate(t=Sum('subtotal'))['t'] or 0,
+            })
+
+    # Telechargements (produits numeriques/bundle)
+    download_links  = GuestDownloadLink.objects.filter(product=product)
+    downloads_used  = download_links.aggregate(t=Sum('download_count'))['t'] or 0
+    downloads_total = download_links.aggregate(t=Sum('max_downloads'))['t'] or 0
+
+    # Commandes recentes
+    recent_orders = orders[:20]
+
+    # Timeline des ventes (30 derniers jours)
+    sales_timeline = []
+    today = timezone.now().date()
+    for i in range(29, -1, -1):
+        day = today - timedelta(days=i)
+        day_qty = orders.filter(paid_at__date=day).aggregate(t=Sum('quantity'))['t'] or 0
+        sales_timeline.append({'date': day.strftime('%d/%m'), 'qty': day_qty})
+
+    return render(request, 'store/product_stats.html', {
+        'product':          product,
+        'gross_revenue':    gross_revenue,
+        'commission':       commission,
+        'net_revenue':      net_revenue,
+        'units_sold':       units_sold,
+        'orders_count':     orders.count(),
+        'format_stats':     format_stats,
+        'downloads_used':   downloads_used,
+        'downloads_total':  downloads_total,
+        'recent_orders':    recent_orders,
+        'sales_timeline':   sales_timeline,
+    })
+
+
+@seller_required
 def product_create(request):
     """Créer un nouveau produit."""
     form = ProductForm()
