@@ -20,6 +20,9 @@
         {{ product.price|floatformat:0 }} FCFA
       </p>
     </div>
+    <a href="{% url 'store:product_buyers' product.slug %}" class="btn btn-outline-secondary">
+      <i class="bi bi-people me-2"></i>Acheteurs
+    </a>
     <a href="{% url 'store:product_edit' product.slug %}" class="btn btn-green">
       <i class="bi bi-pencil me-2"></i>Modifier
     </a>

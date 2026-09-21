@@ -43,6 +43,10 @@ urlpatterns = [
          views.product_edit, name='product_edit'),
     path('mes-produits/<slug:slug>/stats/',
          views.product_stats, name='product_stats'),
+    path('mes-produits/<slug:slug>/acheteurs/',
+         views.product_buyers, name='product_buyers'),
+    path('mes-produits/<slug:slug>/acheteurs/export/',
+         views.export_product_buyers_csv, name='export_product_buyers'),
     path('mes-produits/<slug:slug>/supprimer/',
          views.product_delete, name='product_delete'),
 

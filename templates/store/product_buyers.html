@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Acheteurs — {{ product.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    .container { padding: 0 !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap no-print">
+    <a href="{% url 'store:product_stats' product.slug %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div class="flex-grow-1">
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-people me-2 text-green"></i>Acheteurs
+      </h4>
+      <p class="text-muted small mb-0">{{ product.name }} — {{ total_count }} acheteur{{ total_count|pluralize }}</p>
+    </div>
+  </div>
+
+  <!-- En-tête visible uniquement à l'impression -->
+  <div class="d-none d-print-block mb-4">
+    <h4 class="fw-bold mb-0">Liste des acheteurs — {{ product.name }}</h4>
+    <p class="text-muted small">{{ total_count }} acheteur{{ total_count|pluralize }} — généré le {% now "d/m/Y à H:i" %}</p>
+  </div>
+
+  <!-- Filtres -->
+  <div class="ip-card p-3 mb-3 no-print">
+    <form method="GET" class="d-flex gap-3 flex-wrap align-items-center">
+      <input type="text" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width:250px;"
+             placeholder="Rechercher nom, email, téléphone, référence..." />
+      <select name="delivery" class="form-select form-select-sm" style="max-width:200px;">
+        <option value="">Tous les formats</option>
+        <option value="download" {% if delivery_filter == 'download' %}selected{% endif %}>Téléchargement</option>
+        <option value="delivery" {% if delivery_filter == 'delivery' %}selected{% endif %}>Livraison physique</option>
+      </select>
+      <button type="submit" class="btn btn-green btn-sm">
+        <i class="bi bi-search me-1"></i>Filtrer
+      </button>
+      <a href="{% url 'store:product_buyers' product.slug %}" class="btn btn-outline-secondary btn-sm">
+        Reset
+      </a>
+    </form>
+  </div>
+
+  <div class="d-flex gap-2 mb-3 no-print">
+    <a href="{% url 'store:export_product_buyers' product.slug %}?{{ request.GET.urlencode }}" class="btn btn-outline-success btn-sm">
+      <i class="bi bi-download me-1"></i>Exporter CSV
+    </a>
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i>Imprimer
+    </button>
+  </div>
+
+  <!-- Tableau acheteurs -->
+  <div class="ip-card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#f8f9fa;">
+          <tr>
+            <th class="ps-4">Acheteur</th>
+            <th>Commande</th>
+            <th>Format</th>
+            <th>Qté</th>
+            <th>Montant</th>
+            <th class="pe-4">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold small">{{ order.buyer_name }}</div>
+              <div class="text-muted" style="font-size:0.78rem;">{{ order.email }}</div>
+              {% if order.phone %}
+              <div class="text-muted" style="font-size:0.75rem;">
+                <i class="bi bi-phone me-1"></i>{{ order.phone }}
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <span style="font-family:monospace; font-size:0.8rem;">{{ order.order_number }}</span>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border small">
+                {{ order.get_delivery_method_display }}
+              </span>
+            </td>
+            <td>{{ order.quantity }}</td>
+            <td class="fw-semibold text-green">{{ order.total|floatformat:0 }} FCFA</td>
+            <td class="pe-4 text-muted small">{{ order.paid_at|date:"d/m/Y H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-4 text-muted">Aucun acheteur trouvé.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
