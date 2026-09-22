@@ -81,7 +81,7 @@
 <body>
 
     <!-- LOGIN -->
-    <div id="loginScreen" class="screen active">
+    <div id="loginScreen" class="screen{% if not already_logged_in %} active{% endif %}">
         <div class="logo-icon">🎫</div>
         <h1>Ivoir<span>Pass</span></h1>
         <p class="subtitle">Scanner agent</p>
@@ -94,10 +94,10 @@
     </div>
 
     <!-- EVENT ID -->
-    <div id="eventScreen" class="screen">
+    <div id="eventScreen" class="screen{% if already_logged_in %} active{% endif %}">
         <div class="logo-icon">🎯</div>
         <h1 style="margin-bottom:5px;">Événement</h1>
-        <p class="subtitle" style="margin-bottom:20px;">Connecté : <strong id="agentName" style="color:#F47920;"></strong></p>
+        <p class="subtitle" style="margin-bottom:20px;">Connecté : <strong id="agentName" style="color:#F47920;">{{ request.user.email }}</strong></p>
         <div class="card">
             <div class="field"><label>🎫 ID de l'événement</label><input type="number" id="eventIdInput" placeholder="Ex: 5" autofocus></div>
             <p class="error-msg" id="eventError">ID invalide</p>
@@ -179,12 +179,15 @@
                         "Cet email n'est pas encore vérifié — demandez à un administrateur de le confirmer.";
                     document.getElementById('loginError').style.display = 'block';
                 } else if (res.url && !res.url.includes('/login')) {
-                    document.getElementById('loginScreen').classList.remove('active');
-                    document.getElementById('eventScreen').classList.add('active');
-                    document.getElementById('agentName').textContent = email;
-                    document.getElementById('eventIdInput').focus();
-                    document.getElementById('loginError').style.display = 'none';
-                    document.getElementById('passwordInput').value = '';
+                    // Rechargement complet plutôt qu'un simple changement
+                    // d'écran en JS : Django régénère le jeton CSRF après
+                    // une connexion réussie (mesure de sécurité standard),
+                    // donc l'ancien jeton embarqué dans cette page ne
+                    // fonctionne plus pour les appels suivants (vérifier
+                    // l'événement, scanner) — un rechargement récupère un
+                    // jeton à jour. La vue scanner_app affiche directement
+                    // l'écran événement pour un utilisateur déjà connecté.
+                    window.location.reload();
                 } else {
                     document.getElementById('loginError').textContent = 'Email ou mot de passe incorrect';
                     document.getElementById('loginError').style.display = 'block';
@@ -194,11 +197,9 @@
 
         async function doLogout() {
             await fetch(LOGOUT_URL, { method: 'POST', headers: { 'X-CSRFToken': getCSRF() } });
-            document.getElementById('eventScreen').classList.remove('active');
-            document.getElementById('loginScreen').classList.add('active');
-            document.getElementById('emailInput').value = '';
-            document.getElementById('passwordInput').value = '';
-            document.getElementById('emailInput').focus();
+            // Même raison que doLogin() : rechargement pour repartir avec
+            // un jeton CSRF cohérent avec l'état déconnecté.
+            window.location.reload();
         }
 
         async function startScan() {

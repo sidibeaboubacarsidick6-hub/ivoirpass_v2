@@ -4,11 +4,19 @@ IvoirPass V2 — Utilitaires boutique
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.conf import settings
 
 
 def send_download_link_email(order):
     """
     Envoie un email à l'acheteur avec les liens de téléchargement.
+
+    Note : cette fonction ne gère que ProductOrder (achat "avec compte"),
+    un tunnel désactivé côté site (voir audit) — elle échoue donc
+    silencieusement pour les commandes invité réelles, qui reçoivent déjà
+    leurs liens via NotificationService.guest_store_order_confirmed
+    (apps/notifications/service.py). Conservée pour le jour où le tunnel
+    "avec compte" serait réactivé.
     """
     if not order.buyer.email:
         return
@@ -18,7 +26,7 @@ def send_download_link_email(order):
         return
 
     product = order.product
-    base_url = 'https://revengeless-unfervent-deandrea.ngrok-free.dev'
+    base_url = settings.SITE_URL if hasattr(settings, 'SITE_URL') else settings.PAYDUNYA_BASE_URL
 
     subject = f"📥 Téléchargez votre produit — {product.name}"
 
@@ -36,7 +44,7 @@ def send_download_link_email(order):
     email = EmailMultiAlternatives(
         subject=subject,
         body=text_content,
-        from_email='IvoirPass Boutique <noreply@ivoirpass.com>',
+        from_email=settings.DEFAULT_FROM_EMAIL,
         to=[order.buyer.email],
     )
     email.attach_alternative(html_content, "text/html")

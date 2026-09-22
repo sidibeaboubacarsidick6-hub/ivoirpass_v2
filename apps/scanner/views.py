@@ -254,7 +254,16 @@ def scan_history(request, event_id):
 def scanner_app(request):
     """
     Sert l'application PWA de scan (scanner_app/index.html).
-    L'authentification est gérée par le template lui-même (login intégré).
-    Aucune redirection Django — le template vérifie la session.
+    L'authentification est gérée par le template lui-même (login intégré),
+    mais la vue vérifie tout de même la session pour savoir quel écran
+    afficher au chargement (event screen si déjà connecté, sinon login) —
+    utile après le rechargement de page qui suit une connexion réussie
+    (nécessaire pour obtenir un jeton CSRF à jour, voir index.html).
     """
-    return render(request, 'scanner_app/index.html')
+    already_logged_in = (
+        request.user.is_authenticated and
+        (request.user.is_scanner_agent or request.user.is_organizer or request.user.is_platform_admin)
+    )
+    return render(request, 'scanner_app/index.html', {
+        'already_logged_in': already_logged_in,
+    })

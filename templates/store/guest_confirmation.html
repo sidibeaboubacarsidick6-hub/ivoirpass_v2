@@ -70,6 +70,27 @@
       </div>
       {% endif %}
 
+      {% elif order.status == 'cancelled' %}
+      <div class="ip-card p-5 text-center">
+        <div style="font-size:3rem; margin-bottom:1rem;">❌</div>
+        <h4 class="fw-bold mb-2">Paiement annulé</h4>
+        <p class="text-muted mb-0">
+          Vous avez annulé le paiement de la commande
+          <strong>{{ order.order_number }}</strong>.<br>
+          Aucun montant n'a été débité. Vous pouvez explorer d'autres
+          produits ci-dessous.
+        </p>
+      </div>
+
+      {% elif order.status == 'refunded' %}
+      <div class="ip-card p-5 text-center">
+        <div style="font-size:3rem; margin-bottom:1rem;">💸</div>
+        <h4 class="fw-bold mb-2">Commande remboursée</h4>
+        <p class="text-muted mb-0">
+          La commande <strong>{{ order.order_number }}</strong> a été remboursée.
+        </p>
+      </div>
+
       {% else %}
       <div class="ip-card p-5 text-center">
         <div style="font-size:3rem; margin-bottom:1rem;">⏳</div>
@@ -82,8 +103,11 @@
       {% endif %}
 
       <div class="text-center mt-4">
-        <a href="{% url 'store:list' %}" class="btn btn-outline-secondary px-4">
+        <a href="{% url 'store:list' %}" class="btn btn-outline-secondary px-4 me-2">
           <i class="bi bi-shop me-1"></i>Voir d'autres produits
+        </a>
+        <a href="{% url 'home' %}" class="btn btn-outline-secondary px-4">
+          <i class="bi bi-house me-1"></i>Accueil
         </a>
       </div>
 

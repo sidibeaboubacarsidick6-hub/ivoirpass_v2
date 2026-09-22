@@ -78,6 +78,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.accounts.middleware.ScannerAccessRestrictionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
@@ -223,6 +224,15 @@ CRISPY_TEMPLATE_PACK = 'bootstrap5'
 # ALLAUTH — Authentification
 # ============================================
 ACCOUNT_UNIQUE_EMAIL            = True
+# Par défaut, allauth masque volontairement si un email existe déjà (envoie
+# un email "vous avez déjà un compte" plutôt qu'une erreur sur le
+# formulaire) pour empêcher un tiers de deviner quels emails sont inscrits.
+# Désactivé ici à la demande explicite : le formulaire affiche directement
+# "cet email est déjà utilisé" plutôt que d'envoyer silencieusement un lien
+# à une adresse qui n'est peut-être pas celle de la personne qui s'inscrit.
+# Compromis assumé : un tiers peut désormais déduire qu'un email est déjà
+# enregistré en tentant une inscription avec.
+ACCOUNT_PREVENT_ENUMERATION     = False
 ACCOUNT_LOGIN_METHODS           = {'email'}
 ACCOUNT_SIGNUP_FIELDS           = ['email*', 'password1*', 'password2*']
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None

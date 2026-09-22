@@ -44,6 +44,7 @@ class CustomUserAdmin(UserAdmin):
         # Si vient d'être certifié
         if obj.is_organizer_verified and not was_verified:
             from django.core.mail import send_mail
+            login_url = f"{settings.PAYDUNYA_BASE_URL}/accounts/login/"
             send_mail(
                 '[IvoirPass] Votre compte organisateur est certifie',
                 f"Bonjour {obj.get_full_name()},\n\n"
@@ -52,11 +53,11 @@ class CustomUserAdmin(UserAdmin):
                 f"- Publier des evenements payants\n"
                 f"- Vendre des produits dans la boutique\n"
                 f"- Recevoir des reversements\n\n"
-                f"Connectez-vous : http://127.0.0.1:8000/accounts/login/\n\n"
+                f"Connectez-vous : {login_url}\n\n"
                 f"L'equipe IvoirPass",
                 None,
                 [obj.email],
-                fail_silently=False,
+                fail_silently=True,
             )
 
             # SMS si activé
@@ -81,7 +82,7 @@ class CustomUserAdmin(UserAdmin):
                 f"L'équipe IvoirPass",
                 None,
                 [obj.email],
-                fail_silently=False,
+                fail_silently=True,
             )
 
     # Colonnes affichées dans la liste
