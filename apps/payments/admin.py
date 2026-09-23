@@ -15,9 +15,13 @@ class PaymentAdmin(admin.ModelAdmin):
     search_fields = (
         'order__order_number',
         'guest_order__order_number',
+        'product_order__order_number',
+        'guest_product_order__order_number',
         'paydunya_token',
         'order__buyer__email',
         'guest_order__email',
+        'product_order__buyer__email',
+        'guest_product_order__email',
     )
     # 'status' et 'amount' sont en lecture seule : une transaction
     # financière ne doit jamais être modifiée silencieusement depuis
@@ -30,12 +34,20 @@ class PaymentAdmin(admin.ModelAdmin):
     )
 
     def commande(self, obj):
-        return obj.order.order_number if obj.order_id else obj.guest_order.order_number
+        # Une seule des quatre FK est renseignée (contrainte en base) —
+        # billetterie (order/guest_order) ou boutique
+        # (product_order/guest_product_order, voir extension du modèle
+        # Payment pour la réconciliation/back-office boutique).
+        order = obj.order or obj.guest_order or obj.product_order or obj.guest_product_order
+        return order.order_number if order else '—'
     commande.short_description = 'Commande'
 
     fieldsets = (
         ('Commande', {
-            'fields': ('order', 'guest_order', 'amount', 'currency')
+            'fields': (
+                'order', 'guest_order', 'product_order', 'guest_product_order',
+                'amount', 'currency',
+            )
         }),
         ('PayDunya', {
             'fields': (
