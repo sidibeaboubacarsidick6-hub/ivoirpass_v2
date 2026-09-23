@@ -470,12 +470,20 @@ class AuditLog(models.Model):
         # --- Commandes ---
         ORDER_CREATED = 'order_created', _('Commande créée')
         ORDER_CANCELLED = 'order_cancelled', _('Commande annulée')
+        # ✅ Audit H-1 : libération automatique du stock d'une commande
+        # billetterie restée PENDING trop longtemps sans paiement initié.
+        ORDER_STOCK_RELEASED = 'order_stock_released', _('Stock libéré (commande expirée)')
         ORDER_REFUNDED = 'order_refunded', _('Commande remboursée')
         # --- Paiements ---
         PAYMENT_INITIATED = 'payment_initiated', _('Paiement initié')
         PAYMENT_SUCCESS = 'payment_success', _('Paiement réussi')
         PAYMENT_FAILED = 'payment_failed', _('Paiement échoué')
         PAYMENT_CANCELLED = 'payment_cancelled', _('Paiement annulé')
+        # ✅ Audit H-2 : paiement confirmé par PayDunya (argent réellement
+        # encaissé) mais commande non confirmable côté IvoirPass (stock
+        # produit insuffisant au moment de la confirmation) — nécessite une
+        # intervention humaine (remboursement ou réapprovisionnement).
+        PAYMENT_PAID_STOCK_UNAVAILABLE = 'payment_paid_stock_unavailable', _('Payé mais stock indisponible')
         # --- Billets ---
         TICKET_CREATED = 'ticket_created', _('Billet(s) généré(s)')
         TICKET_SCANNED = 'ticket_scanned', _('Billet scanné')

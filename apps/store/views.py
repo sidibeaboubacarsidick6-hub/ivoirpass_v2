@@ -24,6 +24,126 @@ from apps.dashboard.services import log_action, get_client_ip
 logger = logging.getLogger(__name__)
 
 
+# ============================================================
+# ✅ CORRECTIF AUDIT — H-2 : confirmation boutique invité robuste
+# face à un stock devenu insuffisant entre la création de la
+# commande et la confirmation du paiement.
+#
+# GuestProductOrder.mark_as_paid() lève une ValueError si le stock
+# physique manque au moment de décrémenter (voir apps/store/models.py).
+# Avant ce correctif :
+#   - guest_store_payment_return : l'exception n'était pas interceptée
+#     -> 500 renvoyée à un client qui vient de payer.
+#   - guest_store_webhook : l'exception était avalée par un
+#     `except Exception` générique -> silence total, PayDunya reçoit
+#     quand même "OK" (pas de retry), personne n'est alerté.
+#   - reconcile_pending_payments (apps/payments/tasks.py) : replante à
+#     chaque exécution (toutes les 20 min) sur la même commande.
+#
+# Ce helper centralise la confirmation : en cas de ValueError, il trace
+# une AuditLog dédiée (paiement encaissé, stock indisponible) et alerte
+# les admins par email immédiatement, au lieu de laisser planter ou
+# disparaître silencieusement l'incident.
+# ============================================================
+def _confirm_guest_product_order_safely(order, token, raw_data, source):
+    """
+    Tente de confirmer une GuestProductOrder après paiement PayDunya.
+
+    Args:
+        order: la GuestProductOrder à confirmer.
+        token: le token PayDunya du paiement.
+        raw_data: la réponse brute PayDunya (pour le Payment.raw_response).
+        source: 'retour' ou 'webhook' — uniquement pour le message d'audit.
+
+    Returns:
+        (newly_confirmed: bool, stock_conflict: bool)
+        - newly_confirmed=True  : commande confirmée par cet appel.
+        - newly_confirmed=False, stock_conflict=False : déjà confirmée par
+          un appel concurrent (cas normal d'idempotence).
+        - newly_confirmed=False, stock_conflict=True : paiement réellement
+          encaissé par PayDunya, mais stock insuffisant — nécessite une
+          intervention humaine (remboursement ou réapprovisionnement).
+    """
+    try:
+        newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+    except ValueError as e:
+        logger.error(
+            f"[H-2] Commande boutique invité {order.order_number} payée chez "
+            f"PayDunya mais non confirmable ({source}) : {e}"
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_PAID_STOCK_UNAVAILABLE,
+            description=(
+                f"Paiement PayDunya encaissé pour la commande boutique invité "
+                f"{order.order_number}, mais confirmation impossible ({source}) : "
+                f"stock produit insuffisant. Intervention manuelle requise "
+                f"(remboursement ou réapprovisionnement)."
+            ),
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={
+                'paydunya_token': token,
+                'amount': str(order.total),
+                'product': order.product.name,
+                'quantity': order.quantity,
+                'error': str(e)[:200],
+            },
+        )
+        _alert_admins_stock_conflict(order, token)
+        return False, True
+
+    if newly_confirmed:
+        from apps.payments.models import Payment
+        Payment.objects.filter(guest_product_order=order).update(
+            status=Payment.Status.COMPLETED, raw_response=raw_data,
+            completed_at=timezone.now(),
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_SUCCESS,
+            description=f"Paiement confirmé ({source}) pour la commande boutique invité {order.order_number}",
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={'provider': 'paydunya', 'amount': str(order.total)},
+        )
+    return newly_confirmed, False
+
+
+def _alert_admins_stock_conflict(order, token):
+    """
+    Alerte immédiate des admins — même patron que
+    apps.payments.tasks._send_anomaly_alert — dès qu'un paiement encaissé
+    ne peut pas être confirmé faute de stock. Best-effort : ne doit jamais
+    faire planter la confirmation elle-même.
+    """
+    try:
+        from django.conf import settings
+        from django.core.mail import send_mail
+        from apps.accounts.models import CustomUser
+
+        admins = CustomUser.objects.filter(
+            role=CustomUser.Role.ADMIN, is_active=True, notify_email=True,
+        )
+        recipient_list = list(admins.values_list('email', flat=True))
+        if not recipient_list:
+            logger.warning("[H-2] Conflit stock/paiement mais aucun admin à notifier (notify_email=False ?)")
+            return
+
+        send_mail(
+            subject=f"[IvoirPass] ⚠️ Payé mais stock indisponible — {order.order_number}",
+            message=(
+                f"La commande boutique invité {order.order_number} a été payée "
+                f"({order.total} XOF, token PayDunya {token}) mais ne peut pas être "
+                f"confirmée : stock insuffisant pour « {order.product.name} ».\n\n"
+                f"Action requise : rembourser le client ou réapprovisionner puis "
+                f"confirmer manuellement depuis le back-office.\n\n"
+                f"Client : {order.buyer_name} <{order.email}>"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_list,
+            fail_silently=True,
+        )
+    except Exception as e:
+        logger.error(f"[H-2] Échec envoi alerte conflit stock/paiement pour {order.order_number}: {e}")
+
+
 # ============================================
 # VUES PUBLIQUES
 # ============================================
@@ -1188,28 +1308,32 @@ def guest_store_payment_return(request, order_number):
             # mark_as_paid() est verrouillé et idempotent : si le webhook a
             # déjà confirmé la commande entre-temps, il renvoie False et on
             # évite de dupliquer le log d'audit et l'email de confirmation.
-            newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            # ✅ H-2 : passe désormais par le helper sécurisé — une
+            # ValueError (stock insuffisant) est tracée et alertée au lieu
+            # de faire planter cette vue avec une 500 pour un client qui
+            # vient de payer.
+            newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
+                order, token, result, source='retour'
+            )
             if newly_confirmed:
-                from apps.payments.models import Payment
-                Payment.objects.filter(guest_product_order=order).update(
-                    status=Payment.Status.COMPLETED, raw_response=result,
-                    completed_at=timezone.now(),
-                )
-                log_action(
-                    action=AuditLog.Action.PAYMENT_SUCCESS,
-                    description=f"Paiement confirmé (retour) pour la commande boutique invité {order_number}",
-                    model_name='GuestProductOrder', object_id=order_number,
-                    metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                    ip_address=get_client_ip(request),
-                )
-
                 try:
                     from apps.notifications.service import NotificationService
                     NotificationService.guest_store_order_confirmed(order)
                 except Exception as e:
                     logger.error(f"Email guest store erreur: {e}")
-
-            messages.success(request, f"Commande {order.order_number} confirmée !")
+                messages.success(request, f"Commande {order.order_number} confirmée !")
+            elif stock_conflict:
+                # ✅ H-2 : le client a bien payé — on ne lui montre jamais
+                # d'erreur serveur brute, mais un message clair. Le back-
+                # office a déjà été alerté par _confirm_guest_product_order_safely.
+                messages.warning(
+                    request,
+                    "Votre paiement a bien été reçu. Votre commande est en "
+                    "cours de traitement et notre équipe vous contactera "
+                    "sous peu concernant sa disponibilité."
+                )
+            else:
+                messages.success(request, f"Commande {order.order_number} confirmée !")
 
     return redirect('store:guest_confirmation', order_number=order_number)
 
@@ -1270,22 +1394,21 @@ def guest_store_webhook(request):
                 # mark_as_paid() est verrouillé et idempotent : si le retour
                 # navigateur a déjà confirmé la commande entre-temps, il
                 # renvoie False et on évite de dupliquer log/email.
-                newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                # ✅ H-2 : passe par le helper sécurisé — avant ce correctif,
+                # une ValueError (stock insuffisant) ici était avalée par le
+                # `except Exception` générique de cette vue, qui renvoyait
+                # quand même "OK" à PayDunya (donc jamais de retry) sans que
+                # personne ne soit alerté. Le conflit est maintenant tracé
+                # en AuditLog et notifié aux admins par email.
+                newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
+                    order, token, data, source='webhook'
+                )
                 if newly_confirmed:
-                    from apps.payments.models import Payment
-                    Payment.objects.filter(guest_product_order=order).update(
-                        status=Payment.Status.COMPLETED, raw_response=data,
-                        completed_at=timezone.now(),
-                    )
-                    log_action(
-                        action=AuditLog.Action.PAYMENT_SUCCESS,
-                        description=f"Paiement confirmé (webhook) pour la commande boutique invité {order_number}",
-                        model_name='GuestProductOrder', object_id=order_number,
-                        metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                        ip_address=get_client_ip(request),
-                    )
-                    from apps.notifications.service import NotificationService
-                    NotificationService.guest_store_order_confirmed(order)
+                    try:
+                        from apps.notifications.service import NotificationService
+                        NotificationService.guest_store_order_confirmed(order)
+                    except Exception as e:
+                        logger.error(f"Email guest store erreur (webhook) : {e}")
             except GuestProductOrder.DoesNotExist:
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
@@ -1337,15 +1460,24 @@ def guest_download_file(request, token):
 
 
 def guest_store_payment_cancel(request, order_number):
-    """Annulation paiement boutique invité."""
+    """
+    Annulation paiement boutique invité.
+
+    Ne marque annulé que si la commande est encore PENDING — évite
+    d'écraser un statut PAID si un webhook est arrivé entre-temps (même
+    principe que guest_payment_cancel côté billetterie). Redirige vers la
+    page de confirmation (qui affiche un message distinct par statut)
+    plutôt que vers la fiche produit, pour rester cohérent avec le parcours
+    billetterie.
+    """
     order = get_object_or_404(GuestProductOrder, order_number=order_number)
-    order.status = GuestProductOrder.Status.CANCELLED
-    order.save(update_fields=['status'])
-    log_action(
-        action=AuditLog.Action.PAYMENT_CANCELLED,
-        description=f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}",
-        model_name='GuestProductOrder', object_id=order_number,
-        ip_address=get_client_ip(request),
-    )
-    messages.warning(request, "Commande annulée.")
-    return redirect('store:detail', slug=order.product.slug)
+    if order.status == GuestProductOrder.Status.PENDING:
+        order.status = GuestProductOrder.Status.CANCELLED
+        order.save(update_fields=['status'])
+        log_action(
+            action=AuditLog.Action.PAYMENT_CANCELLED,
+            description=f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}",
+            model_name='GuestProductOrder', object_id=order_number,
+            ip_address=get_client_ip(request),
+        )
+    return redirect('store:guest_confirmation', order_number=order.order_number)

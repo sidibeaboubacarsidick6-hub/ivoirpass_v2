@@ -136,7 +136,34 @@ def _recover_confirmed_payment(payment, token, result, now):
         _flag_anomaly(payment, "Paiement confirmé chez PayDunya mais sans commande associée en base")
         return False
 
-    newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+    # ✅ H-2 : mark_as_paid() peut lever ValueError si le stock (boutique
+    # physique) est devenu insuffisant entre-temps. Avant ce correctif,
+    # cette exception n'était interceptée nulle part dans cette tâche : elle
+    # remontait telle quelle, interrompant tout le batch de réconciliation
+    # en cours (les autres paiements PENDING du même lot n'étaient alors
+    # traités qu'au cycle suivant), et se reproduisait à l'identique toutes
+    # les 20 minutes tant que personne n'intervenait manuellement.
+    try:
+        newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+    except ValueError as e:
+        logger.error(
+            f"[H-2] Réconciliation : paiement {token} confirmé chez PayDunya "
+            f"pour {order.order_number} mais non confirmable (stock) : {e}"
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_PAID_STOCK_UNAVAILABLE,
+            description=(
+                f"Réconciliation : paiement PayDunya confirmé pour "
+                f"{order.order_number}, mais confirmation impossible (stock "
+                f"produit insuffisant). Intervention manuelle requise."
+            ),
+            model_name=order.__class__.__name__, object_id=order.order_number,
+            metadata={'paydunya_token': token, 'amount': str(payment.amount), 'error': str(e)[:200]},
+        )
+        # Réutilise l'alerte email existante (même destinataires, même
+        # format) plutôt que d'en dupliquer une nouvelle.
+        _send_anomaly_alert([_describe_anomaly(payment, f"Payé mais stock indisponible : {e}")])
+        return False
 
     Payment.objects.filter(pk=payment.pk).update(
         status=Payment.Status.COMPLETED,
@@ -204,6 +231,118 @@ def _send_anomaly_alert(anomaly_details):
         fail_silently=True,
     )
     logger.info(f"Alerte réconciliation envoyée à {len(recipient_list)} admin(s)")
+
+
+# ============================================================
+# ✅ CORRECTIF AUDIT — H-1 : libération du stock billetterie
+# réservé par des commandes abandonnées (jamais payées).
+#
+# guest_checkout / le tunnel "avec compte" réservent quantity_sold dès la
+# CRÉATION de la commande (statut PENDING), avant tout paiement — voir
+# apps/tickets/views.py. Si l'acheteur n'initie jamais de paiement (aucun
+# Payment associé, ou un Payment resté PENDING sans jamais avoir de token
+# PayDunya), ce stock reste bloqué indéfiniment : reconcile_pending_payments
+# ne fait qu'alerter les admins après 48h, il ne libère rien.
+#
+# Cette tâche annule automatiquement ces commandes fantômes et restaure le
+# stock, sous le même verrou (select_for_update) que guest_checkout / le
+# tunnel "avec compte", pour rester cohérente avec eux en cas de concurrence.
+# ============================================================
+
+# Délai de grâce avant de considérer une commande PENDING comme abandonnée.
+# Volontairement plus long que RECONCILE_MIN_AGE_MINUTES (15 min) pour ne
+# jamais entrer en conflit avec un paiement PayDunya encore en cours côté
+# opérateur au moment où cette tâche tourne.
+ORDER_ABANDON_GRACE_MINUTES = 30
+
+
+@shared_task(bind=True)
+def release_expired_pending_orders(self):
+    """
+    Tâche périodique : annule les commandes billetterie (Order / GuestOrder)
+    encore PENDING depuis plus de ORDER_ABANDON_GRACE_MINUTES ET sans aucun
+    paiement PayDunya initié (pas de Payment, ou Payment sans token — donc
+    jamais redirigé vers PayDunya), et restaure le stock correspondant.
+
+    Ne touche JAMAIS une commande dont un Payment a un token PayDunya : ce
+    cas est du ressort de reconcile_pending_payments (le paiement peut être
+    réellement en cours ou confirmé côté PayDunya).
+    """
+    from django.db import transaction
+    from apps.tickets.models import Order, GuestOrder
+    from apps.events.models import TicketType
+    from apps.dashboard.models import AuditLog
+    from apps.dashboard.services import log_action
+
+    cutoff = timezone.now() - timedelta(minutes=ORDER_ABANDON_GRACE_MINUTES)
+    released = 0
+
+    for model in (Order, GuestOrder):
+        stale_qs = model.objects.filter(
+            status=model.Status.PENDING,
+            created_at__lte=cutoff,
+        ).exclude(
+            payments__paydunya_token__gt=''
+        )
+
+        for order in stale_qs:
+            released += _release_order_stock(order, AuditLog, log_action)
+
+    summary = f"Libération stock billetterie : {released} commande(s) expirée(s) annulée(s)."
+    logger.info(summary)
+    return summary
+
+
+def _release_order_stock(order, AuditLog, log_action):
+    """
+    Annule une commande PENDING abandonnée et restaure le stock des
+    TicketType concernés, verrouillés le temps de l'opération — même
+    patron que la réservation initiale (guest_checkout / checkout).
+    Retourne 1 si la commande a bien été libérée par cet appel, 0 sinon
+    (déjà traitée entre-temps par un appel concurrent).
+    """
+    from django.db import transaction
+    from apps.events.models import TicketType
+
+    items_related_name = 'guest_items' if hasattr(order, 'guest_items') else 'items'
+    items = list(getattr(order, items_related_name).select_related('ticket_type', 'ticket_type__event'))
+    if not items:
+        return 0
+
+    with transaction.atomic():
+        locked_order = type(order).objects.select_for_update().get(pk=order.pk)
+        if locked_order.status != order.Status.PENDING:
+            # Confirmée ou déjà annulée entre-temps par un autre appel —
+            # rien à faire, on ne touche pas au stock une deuxième fois.
+            return 0
+
+        locked_order.status = order.Status.CANCELLED
+        locked_order.save(update_fields=['status'])
+
+        ticket_type_ids = {item.ticket_type_id for item in items}
+        locked_types = {
+            tt.pk: tt for tt in
+            TicketType.objects.select_for_update().select_related('event').filter(pk__in=ticket_type_ids)
+        }
+
+        for item in items:
+            tt = locked_types[item.ticket_type_id]
+            tt.quantity_sold = max(0, tt.quantity_sold - item.quantity)
+            tt.event.tickets_sold = max(0, tt.event.tickets_sold - item.quantity)
+            tt.save(update_fields=['quantity_sold'])
+            tt.event.save(update_fields=['tickets_sold'])
+
+    log_action(
+        action=AuditLog.Action.ORDER_STOCK_RELEASED,
+        description=(
+            f"Commande {order.order_number} annulée automatiquement "
+            f"(abandonnée depuis plus de {ORDER_ABANDON_GRACE_MINUTES} min "
+            f"sans paiement initié) — stock restauré."
+        ),
+        model_name=type(order).__name__, object_id=order.order_number,
+        metadata={'items_count': len(items)},
+    )
+    return 1
 
 
 def _flag_anomaly(payment, reason):

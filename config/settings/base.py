@@ -335,6 +335,13 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.payments.tasks.reconcile_pending_payments',
         'schedule': crontab(minute='*/20'),
     },
+    'release-expired-pending-orders': {
+        # ✅ Correctif audit H-1 : libère le stock billetterie réservé par
+        # des commandes PENDING abandonnées (jamais de paiement initié),
+        # voir apps/payments/tasks.py::release_expired_pending_orders.
+        'task': 'apps.payments.tasks.release_expired_pending_orders',
+        'schedule': crontab(minute='*/15'),
+    },
     'generate-bceao-report': {
         'task': 'apps.dashboard.tasks.generate_bceao_report',
         'schedule': crontab(hour=8, day_of_month=1),  # 1er de chaque mois à 8h
