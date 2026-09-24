@@ -3,6 +3,12 @@ Test d'audit — Anti-survente (Phase 5 du script de test MVP).
 Vérifie qu'un seul acheteur peut obtenir le dernier billet en stock,
 même en cas d'achats simultanés (race condition).
 
+✅ H-3 (audit) : ces tests ciblaient à l'origine le tunnel d'achat "avec
+compte" (add_to_cart + checkout), retiré car mort (toujours remplacé par
+un simple redirect vers 'home'). Ils ont été réécrits pour exercer le
+tunnel réellement actif : guest_checkout — la protection anti-survente
+(select_for_update) est strictement la même dans les deux tunnels.
+
 Lancer :
     DJANGO_SETTINGS_MODULE=config.settings.testlocal python manage.py test tests.test_stock_race_condition_audit -v 2
 """
@@ -15,7 +21,7 @@ from django.utils import timezone
 
 from apps.accounts.models import CustomUser
 from apps.events.models import Event, Category, TicketType
-from apps.tickets.models import Order
+from apps.tickets.models import GuestOrder
 
 
 def _setup_event_last_ticket(organizer):
@@ -32,6 +38,19 @@ def _setup_event_last_ticket(organizer):
     return event, ticket_type
 
 
+def _guest_checkout_post(client, event, ticket_type, email):
+    return client.post(
+        reverse('tickets:guest_checkout', args=[event.slug]),
+        {
+            'first_name': 'Test',
+            'last_name': 'Acheteur',
+            'email': email,
+            'phone': '0700000000',
+            f'quantity_{ticket_type.pk}': 1,
+        },
+    )
+
+
 class StockOversellSequentialTests(TestCase):
     """Vérifie qu'un deuxième achat séquentiel est bien refusé une fois le stock épuisé."""
 
@@ -39,25 +58,19 @@ class StockOversellSequentialTests(TestCase):
         self.organizer = CustomUser.objects.create_user(
             email='orga-stock@test.com', password='Pass123!', role='organizer', is_organizer_verified=True,
         )
-        self.buyer1 = CustomUser.objects.create_user(email='buyer1-stock@test.com', password='Pass123!')
-        self.buyer2 = CustomUser.objects.create_user(email='buyer2-stock@test.com', password='Pass123!')
         self.event, self.ticket_type = _setup_event_last_ticket(self.organizer)
 
-    def _add_to_cart_and_checkout(self, client):
-        client.get(reverse('tickets:add_to_cart', args=[self.ticket_type.id]))
-        return client.post(reverse('tickets:checkout'))
-
     def test_deuxieme_achat_refuse_une_fois_stock_epuise(self):
-        c1 = Client(); c1.force_login(self.buyer1)
-        c2 = Client(); c2.force_login(self.buyer2)
+        c1 = Client()
+        c2 = Client()
 
-        self._add_to_cart_and_checkout(c1)
+        _guest_checkout_post(c1, self.event, self.ticket_type, 'buyer1-stock@test.com')
         self.ticket_type.refresh_from_db()
         self.assertEqual(self.ticket_type.quantity_sold, 1, "Le premier achat doit consommer le dernier billet")
 
-        orders_before = Order.objects.filter(buyer=self.buyer2).count()
-        self._add_to_cart_and_checkout(c2)
-        orders_after = Order.objects.filter(buyer=self.buyer2).count()
+        orders_before = GuestOrder.objects.filter(email='buyer2-stock@test.com').count()
+        _guest_checkout_post(c2, self.event, self.ticket_type, 'buyer2-stock@test.com')
+        orders_after = GuestOrder.objects.filter(email='buyer2-stock@test.com').count()
 
         self.assertEqual(orders_before, orders_after, "Aucune commande ne doit être créée si le stock est épuisé")
         self.ticket_type.refresh_from_db()
@@ -68,14 +81,12 @@ class StockOversellSequentialTests(TestCase):
 
 
 class StockOversellConcurrencyTests(TransactionTestCase):
-    """Deux acheteurs qui tentent d'acheter LE MÊME dernier billet en même temps."""
+    """Deux acheteurs invités qui tentent d'acheter LE MÊME dernier billet en même temps."""
 
     def setUp(self):
         self.organizer = CustomUser.objects.create_user(
             email='orga-stock-conc@test.com', password='Pass123!', role='organizer', is_organizer_verified=True,
         )
-        self.buyer1 = CustomUser.objects.create_user(email='buyer1-conc@test.com', password='Pass123!')
-        self.buyer2 = CustomUser.objects.create_user(email='buyer2-conc@test.com', password='Pass123!')
         self.event, self.ticket_type = _setup_event_last_ticket(self.organizer)
 
     def test_deux_achats_simultanes_du_dernier_billet(self):
@@ -90,15 +101,13 @@ class StockOversellConcurrencyTests(TransactionTestCase):
 
         results = []
 
-        def buy(buyer):
+        def buy(email):
             client = Client()
-            client.force_login(buyer)
-            client.get(reverse('tickets:add_to_cart', args=[self.ticket_type.id]))
-            response = client.post(reverse('tickets:checkout'))
+            response = _guest_checkout_post(client, self.event, self.ticket_type, email)
             results.append(response.status_code)
 
-        t1 = threading.Thread(target=buy, args=(self.buyer1,))
-        t2 = threading.Thread(target=buy, args=(self.buyer2,))
+        t1 = threading.Thread(target=buy, args=('buyer1-conc@test.com',))
+        t2 = threading.Thread(target=buy, args=('buyer2-conc@test.com',))
         t1.start(); t2.start()
         t1.join(); t2.join()
 
@@ -107,7 +116,7 @@ class StockOversellConcurrencyTests(TransactionTestCase):
             self.ticket_type.quantity_sold, self.ticket_type.quantity,
             f"Survente détectée : quantity_sold={self.ticket_type.quantity_sold} > quantity={self.ticket_type.quantity}"
         )
-        orders_count = Order.objects.filter(
-            buyer__in=[self.buyer1, self.buyer2], status=Order.Status.PENDING
+        orders_count = GuestOrder.objects.filter(
+            email__in=['buyer1-conc@test.com', 'buyer2-conc@test.com'],
         ).count()
         self.assertEqual(orders_count, 1, f"Une seule commande doit réussir sur les deux tentatives simultanées, obtenu : {orders_count}")

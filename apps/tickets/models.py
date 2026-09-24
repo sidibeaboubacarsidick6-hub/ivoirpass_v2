@@ -6,6 +6,7 @@ import hmac
 import hashlib
 import random
 import string
+import logging
 from django.db import models, transaction
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -400,6 +401,33 @@ class GuestOrder(models.Model):
     payment_reference = models.CharField(max_length=200, blank=True)
     paid_at           = models.DateTimeField(null=True, blank=True)
 
+    # ============================================
+    # ✅ CORRECTIF CRITIQUE — commande annulée qui se confirmait toute
+    # seule quelques minutes plus tard.
+    #
+    # mark_as_paid() ne vérifiait que "déjà payée ?" (idempotence normale),
+    # jamais "annulée ?". Résultat : guest_payment_cancel() passait bien
+    # order.status à CANCELLED, mais le Payment associé restait PENDING
+    # (jamais mis à jour) → reconcile_pending_payments (toutes les ~20 min)
+    # retombait dessus, revérifiait chez PayDunya, obtenait "completed"
+    # (le client avait parfois quand même fini par payer après avoir cru
+    # annuler, ou PayDunya confirme un paiement initié avant l'annulation
+    # côté IvoirPass), et appelait mark_as_paid() qui ne voyait aucune
+    # raison de refuser → la commande annulée redevenait PAID, billets
+    # générés. Mêmes champs et même méthode que Order (voir plus haut),
+    # pour une protection strictement identique sur les deux tunnels.
+    # ============================================
+    payment_cancelled_at = models.DateTimeField(
+        _('annulation paiement'),
+        null=True, blank=True,
+        help_text="Enregistre quand le paiement a été annulé (sécurité race condition)"
+    )
+    last_payment_webhook_token = models.CharField(
+        _('dernier token webhook'),
+        max_length=200, blank=True, default='',
+        help_text="Token du dernier webhook traité (détecte les doublons)"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -411,6 +439,8 @@ class GuestOrder(models.Model):
             models.Index(fields=['order_number']),
             models.Index(fields=['email', 'status']),
             models.Index(fields=['status']),
+            models.Index(fields=['payment_cancelled_at'], name='guestord_pay_cancelled_idx'),
+            models.Index(fields=['last_payment_webhook_token'], name='guestord_webhook_tok_idx'),
         ]
 
     def __str__(self):
@@ -423,6 +453,24 @@ class GuestOrder(models.Model):
             self.order_number = f"IP-{year}-{suffix}"
         super().save(*args, **kwargs)
 
+    def is_payment_cancelled(self):
+        """
+        True si le paiement a été annulé il y a moins de 2h — bloque toute
+        tentative de confirmation tardive (retour navigateur, webhook,
+        tâche de réconciliation) pendant cette fenêtre. Même règle que
+        Order.is_payment_cancelled().
+        """
+        if not self.payment_cancelled_at:
+            return False
+        return (timezone.now() - self.payment_cancelled_at).total_seconds() < 7200
+
+    def mark_payment_cancelled(self):
+        """Enregistre l'annulation — appelé par guest_payment_cancel()."""
+        self.payment_cancelled_at = timezone.now()
+        self.save(update_fields=['payment_cancelled_at'])
+        logger = logging.getLogger(__name__)
+        logger.info(f"Paiement invité annulé pour la commande {self.order_number} à {self.payment_cancelled_at}")
+
     def mark_as_paid(self, payment_method='', payment_reference=''):
         """
         Marque la commande invité comme payée et génère les tickets.
@@ -431,13 +479,30 @@ class GuestOrder(models.Model):
         confirme que si elle est encore PENDING, pour rester idempotent face
         aux appels concurrents (retour navigateur / webhook / polling).
 
+        ✅ Vérifie désormais AUSSI qu'elle n'a pas été annulée récemment
+        (voir is_payment_cancelled) — c'est ce contrôle qui manquait et
+        permettait à une commande annulée de redevenir payée toute seule.
+
         Returns:
             bool: True si cet appel a confirmé la commande, False si elle
-                  était déjà payée par un appel concurrent.
+                  était déjà payée par un appel concurrent, ou si son
+                  paiement a été annulé il y a moins de 2h.
         """
+        if self.is_payment_cancelled():
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Tentative de confirmation après annulation pour la commande "
+                f"invité {self.order_number}. Annulation: {self.payment_cancelled_at}, "
+                f"Maintenant: {timezone.now()}"
+            )
+            return False
+
         with transaction.atomic():
             locked_order = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked_order.status == self.Status.PAID:
+            if locked_order.status != self.Status.PENDING:
+                # PAID (déjà confirmée par un appel concurrent) ou
+                # CANCELLED (annulée entre-temps) : dans les deux cas, on
+                # ne confirme pas.
                 return False
 
             self.status = self.Status.PAID

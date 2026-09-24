@@ -31,12 +31,22 @@ class WalletModelTest(TestCase):
         self.assertEqual(wallet.transactions.count(), 1)
 
     def test_wallet_debit(self):
+        """
+        ✅ (audit M-3) : debit() délègue désormais entièrement à
+        complete_reserved() et exige un reserve() préalable (le flux réel
+        de reversement automatique réserve toujours les fonds avant de les
+        finaliser — voir apps/dashboard/models.py). L'appeler directement
+        sans réservation, comme le faisait ce test, échoue désormais avec
+        une ValueError explicite.
+        """
         wallet, _ = OrganizerWallet.objects.get_or_create(
             organizer=self.organizer
         )
         wallet.credit(20000, description='Vente')
+        wallet.reserve(5000, description='Réservation reversement', reference='REV-001')
         wallet.debit(5000, description='Reversement', reference='REV-001')
         self.assertEqual(wallet.balance_available, 15000)
+        self.assertEqual(wallet.balance_pending, 0)
         self.assertEqual(wallet.balance_withdrawn, 5000)
 
     def test_wallet_debit_insufficient(self):

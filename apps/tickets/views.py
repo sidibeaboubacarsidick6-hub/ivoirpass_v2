@@ -11,256 +11,35 @@ from django.db import transaction
 from apps.events.models import Event, TicketType
 from apps.dashboard.models import AuditLog
 from apps.dashboard.services import log_action, get_client_ip
-from .models import Order, OrderItem, Ticket
-from .utils import generate_ticket_pdf
 
 
 # ============================================
-# PANIER
+# ✅ CORRECTIF AUDIT — H-3 : suppression du code mort
+#
+# L'achat "avec compte" (panier, checkout, mes billets, téléchargement PDF
+# authentifié) a été entièrement remplacé par le tunnel invité ci-dessous
+# (GUEST CHECKOUT). Les vues correspondantes contenaient un
+# `return redirect('home')` suivi de logique inatteignable — supprimée ici.
+#
+# Trois routes sont conservées à l'état de simples redirections, car
+# apps/payments/views.py (ancien flux de paiement "avec compte") les
+# référence encore explicitement (initiate_payment, payment_return,
+# payment_cancel) : 'tickets:cart', 'tickets:checkout', 'tickets:confirmation'.
+# Les routes sans dépendance externe (panier ajouter/retirer, mes billets,
+# détail billet, PDF) ont été supprimées avec leurs templates et leurs URLs.
 # ============================================
-
-def get_cart(request):
-    return request.session.get('cart', {})
-
-def save_cart(request, cart):
-    request.session['cart'] = cart
-    request.session.modified = True
-
-
-def add_to_cart(request, ticket_type_id):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    ticket_type = get_object_or_404(TicketType, pk=ticket_type_id)
-    event = ticket_type.event
-
-    if not event.is_on_sale:
-        messages.error(request, "Cet événement n'est pas en vente.")
-        return redirect('events:detail', slug=event.slug)
-
-    if ticket_type.is_sold_out:
-        messages.error(request, "Ce type de ticket est épuisé.")
-        return redirect('events:detail', slug=event.slug)
-
-    cart = get_cart(request)
-    key = str(ticket_type_id)
-    quantity = int(request.POST.get('quantity', 1))
-    quantity = max(1, min(quantity, ticket_type.max_per_order))
-
-    if key in cart:
-        new_qty = cart[key]['quantity'] + quantity
-        new_qty = min(new_qty, ticket_type.max_per_order)
-        cart[key]['quantity'] = new_qty
-    else:
-        cart[key] = {
-            'ticket_type_id': ticket_type_id,
-            'event_id': event.id,
-            'event_title': event.title,
-            'event_slug': event.slug,
-            'ticket_name': ticket_type.name,
-            'price': str(ticket_type.price),
-            'quantity': quantity,
-        }
-
-    save_cart(request, cart)
-    messages.success(request, f"{quantity} billet(s) « {ticket_type.name} » ajouté(s).")
-    return redirect('tickets:cart')
-
-
-def remove_from_cart(request, ticket_type_id):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    cart = get_cart(request)
-    key = str(ticket_type_id)
-    if key in cart:
-        del cart[key]
-        save_cart(request, cart)
-        messages.success(request, "Article retiré du panier.")
-    return redirect('tickets:cart')
-
 
 def cart_view(request):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    cart = get_cart(request)
-    items = []
-    total = 0
+    return redirect('home')
 
-    for key, item in cart.items():
-        subtotal = int(float(item['price'])) * item['quantity']
-        total += subtotal
-        items.append({**item, 'subtotal': subtotal, 'key': key})
-
-    return render(request, 'tickets/cart.html', {
-        'items': items,
-        'total': total,
-    })
-
-
-# ============================================
-# CHECKOUT
-# ============================================
 
 @login_required
 def checkout(request):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    cart = get_cart(request)
-
-    if not cart:
-        messages.warning(request, "Votre panier est vide.")
-        return redirect('tickets:cart')
-
-    items = []
-    total = 0
-    all_free = True
-
-    for key, item in cart.items():
-        try:
-            tt = TicketType.objects.select_related('event').get(pk=item['ticket_type_id'])
-        except TicketType.DoesNotExist:
-            continue
-        subtotal = int(float(item['price'])) * item['quantity']
-        total += subtotal
-        if subtotal > 0:
-            all_free = False
-        items.append({**item, 'subtotal': subtotal, 'ticket_type_obj': tt})
-
-    if request.method == 'POST':
-        # Verrouille chaque type de billet le temps de vérifier ET de
-        # décrémenter le stock — empêche deux acheteurs de valider
-        # simultanément le(s) dernier(s) billet(s) disponible(s) (survente).
-        with transaction.atomic():
-            locked_types = {
-                tt.pk: TicketType.objects.select_for_update().select_related('event').get(pk=tt.pk)
-                for tt in {item['ticket_type_obj'].pk: item['ticket_type_obj'] for item in items}.values()
-            }
-
-            for item_data in items:
-                tt_locked = locked_types[item_data['ticket_type_obj'].pk]
-                if tt_locked.quantity > 0 and tt_locked.quantity_sold + item_data['quantity'] > tt_locked.quantity:
-                    messages.error(
-                        request,
-                        f"Stock insuffisant pour « {tt_locked.name} » — "
-                        f"il ne reste que {max(0, tt_locked.quantity - tt_locked.quantity_sold)} billet(s)."
-                    )
-                    return redirect('tickets:cart')
-
-            order = Order.objects.create(
-                buyer=request.user,
-                subtotal=total,
-                commission=0,
-                total=total,
-                status=Order.Status.PENDING,
-            )
-
-            for item_data in items:
-                tt = locked_types[item_data['ticket_type_obj'].pk]
-                OrderItem.objects.create(
-                    order=order,
-                    ticket_type=tt,
-                    quantity=item_data['quantity'],
-                    unit_price=tt.price,
-                )
-                tt.quantity_sold += item_data['quantity']
-                tt.save(update_fields=['quantity_sold'])
-                tt.event.tickets_sold += item_data['quantity']
-                tt.event.save(update_fields=['tickets_sold'])
-
-                if tt.quantity > 0 and tt.quantity_sold >= tt.quantity:
-                    tt.event.status = 'completed'
-                    tt.event.save(update_fields=['status'])
-
-        log_action(
-            action=AuditLog.Action.ORDER_CREATED,
-            description=f"Commande {order.order_number} créée ({len(items)} ligne(s))",
-            user=request.user,
-            obj=order,
-            metadata={'total': str(total), 'is_free': all_free, 'items_count': len(items)},
-            ip_address=get_client_ip(request),
-        )
-
-        save_cart(request, {})
-
-        if all_free:
-            order.mark_as_paid(payment_method='free', payment_reference=f"FREE-{order.order_number}")
-            log_action(
-                action=AuditLog.Action.PAYMENT_SUCCESS,
-                description=f"Commande {order.order_number} confirmée (gratuite, aucun paiement requis)",
-                user=request.user,
-                model_name='Payment', object_id=order.order_number,
-                metadata={'provider': 'free', 'amount': '0'},
-                ip_address=get_client_ip(request),
-            )
-            log_action(
-                action=AuditLog.Action.TICKET_CREATED,
-                description=f"Billets générés pour la commande gratuite {order.order_number}",
-                user=request.user,
-                obj=order,
-                ip_address=get_client_ip(request),
-            )
-            # Envoi asynchrone des billets par email (commande gratuite, utilisateur connecté)
-            from apps.notifications.tasks import send_ticket_email_async
-            send_ticket_email_async.delay(str(order.uuid))
-            messages.success(request, "🎉 Inscription confirmée !")
-            return redirect('tickets:confirmation', order_number=order.order_number)
-        else:
-            return redirect('payments:initiate', order_number=order.order_number)
-
-    return render(request, 'tickets/checkout.html', {
-        'items': items,
-        'total': total,
-        'all_free': all_free,
-    })
-
-
-# ============================================
-# CONFIRMATION
-# ============================================
+    return redirect('home')
 
 
 def order_confirmation(request, order_number):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    order = get_object_or_404(Order, order_number=order_number, buyer=request.user, status=Order.Status.PAID)
-    tickets = Ticket.objects.filter(order_item__order=order)
-    return render(request, 'tickets/confirmation.html', {'order': order, 'tickets': tickets})
-
-
-@login_required
-def my_tickets(request):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    tickets = Ticket.objects.filter(
-        order_item__order__buyer=request.user,
-        order_item__order__status=Order.Status.PAID
-    ).select_related(
-        'order_item__ticket_type__event',
-        'order_item__order__buyer'
-    )
-    now = timezone.now()
-    upcoming = [t for t in tickets if t.event.start_date >= now]
-    past = [t for t in tickets if t.event.start_date < now]
-    return render(request, 'tickets/my_tickets.html', {
-        'upcoming': upcoming,
-        'past': past
-    })
-
-
-@login_required
-def ticket_detail(request, ticket_number):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    ticket = get_object_or_404(
-        Ticket.objects.select_related(
-            'order_item__ticket_type__event',
-            'order_item__order__buyer'
-        ),
-        ticket_number=ticket_number,
-        order_item__order__buyer=request.user
-    )
-
-
-@login_required
-def download_ticket_pdf(request, ticket_number):
-    return redirect('home')  # Achat compte désactivé — tunnel invité uniquement
-    ticket = get_object_or_404(Ticket, ticket_number=ticket_number, order_item__order__buyer=request.user)
-    pdf_bytes = generate_ticket_pdf(ticket)
-    response = HttpResponse(pdf_bytes, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="billet-{ticket.ticket_number}.pdf"'
-    return response
+    return redirect('home')
 
 
 # ============================================
@@ -456,6 +235,19 @@ def guest_payment_return(request, order_number):
         result = PayDunyaService.verify_payment(token)
         
         if result.get('success') and result.get('status') == 'completed':
+            # ✅ CORRECTIF CRITIQUE : mark_as_paid() refuse désormais
+            # explicitement si order.is_payment_cancelled() (annulée il y a
+            # moins de 2h) — voir apps/tickets/models.py. On distingue ce
+            # cas pour afficher un message clair plutôt que de laisser
+            # croire que le paiement est "en cours de vérification".
+            if order.is_payment_cancelled():
+                messages.error(
+                    request,
+                    "❌ Votre paiement avait été annulé. Il ne peut pas être "
+                    "relancé dans les 2 heures. Veuillez contacter le support."
+                )
+                return redirect('tickets:guest_confirmation', order_number=order_number)
+
             # mark_as_paid() est verrouillé et idempotent : si le webhook a
             # déjà confirmé la commande entre-temps, il renvoie False et on
             # évite de dupliquer le log d'audit et l'email des billets.
@@ -498,13 +290,42 @@ def guest_payment_cancel(request, order_number):
     Marque la commande comme annulee (au lieu de rester PENDING
     indefiniment) et affiche un message clair, distinct de l'attente
     de confirmation.
+
+    ✅ CORRECTIF CRITIQUE : avant, cette vue changeait le statut de la
+    commande mais ne touchait jamais le Payment associé (resté PENDING)
+    ni n'enregistrait de timestamp d'annulation. La tâche de
+    réconciliation périodique retombait alors sur ce Payment PENDING,
+    revérifiait chez PayDunya, et confirmait la commande malgré son
+    annulation — d'où une commande annulée qui « ressuscitait » payée
+    quelques minutes plus tard. mark_payment_cancelled() + le passage
+    des Payment PENDING à CANCELLED ferment ce trou, avec la même
+    fenêtre de sécurité de 2h que le tunnel "avec compte".
     """
     from .models import GuestOrder, GuestTicket
+    from apps.payments.models import Payment
+
     order = get_object_or_404(GuestOrder, order_number=order_number)
 
     if order.status == GuestOrder.Status.PENDING:
         order.status = GuestOrder.Status.CANCELLED
         order.save(update_fields=['status'])
+        order.mark_payment_cancelled()
+
+        Payment.objects.filter(
+            guest_order=order, status=Payment.Status.PENDING,
+        ).update(status=Payment.Status.CANCELLED)
+
+        log_action(
+            action=AuditLog.Action.PAYMENT_CANCELLED,
+            description=(
+                f"Paiement annulé par l'acheteur pour la commande invité "
+                f"{order_number}. Timestamp d'annulation enregistré pour "
+                f"sécurité race condition."
+            ),
+            model_name='Payment', object_id=order_number,
+            metadata={'cancelled_at': str(order.payment_cancelled_at)},
+            ip_address=get_client_ip(request),
+        )
 
     tickets = GuestTicket.objects.filter(order_item__order=order)
     return render(request, 'tickets/guest_confirmation.html', {'order': order, 'tickets': tickets})
@@ -559,9 +380,11 @@ def guest_webhook(request):
         if status == 'completed' and order_number:
             try:
                 order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
-                # mark_as_paid() est verrouillé et idempotent : si le retour
-                # navigateur a déjà confirmé la commande entre-temps, il
-                # renvoie False et on évite de dupliquer log/email.
+                # mark_as_paid() est verrouillé et idempotent, et refuse
+                # désormais aussi toute commande annulée il y a moins de 2h
+                # (voir apps/tickets/models.py) : si le retour navigateur a
+                # déjà confirmé la commande entre-temps, il renvoie False et
+                # on évite de dupliquer log/email.
                 newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
                 if newly_confirmed:
                     from apps.payments.models import Payment
@@ -581,9 +404,21 @@ def guest_webhook(request):
                     from apps.notifications.tasks import send_guest_ticket_email_async
                     send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
+                # ✅ Couvre aussi le cas d'une commande CANCELLED : le
+                # filtre status=PENDING ci-dessus l'exclut déjà (protection
+                # « par accident » avant ce correctif), on le trace
+                # explicitement pour ne pas le confondre avec une commande
+                # réellement inexistante.
+                cancelled = GuestOrder.objects.filter(
+                    order_number=order_number, status=GuestOrder.Status.CANCELLED,
+                ).exists()
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
-                    description=f"Webhook invité : commande {order_number} introuvable ou déjà traitée",
+                    description=(
+                        f"Webhook invité : commande {order_number} annulée, paiement non relancé"
+                        if cancelled else
+                        f"Webhook invité : commande {order_number} introuvable ou déjà traitée"
+                    ),
                     model_name='Payment', object_id=order_number,
                     ip_address=get_client_ip(request),
                 )
