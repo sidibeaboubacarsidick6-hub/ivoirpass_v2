@@ -1016,12 +1016,25 @@ def guest_store_payment_cancel(request, order_number):
     """
     order = get_object_or_404(GuestProductOrder, order_number=order_number)
     if order.status == GuestProductOrder.Status.PENDING:
+        from apps.payments.models import Payment
+
+        # Ferme les deux portes de la course annulation/réconciliation :
+        # la commande devient terminalement CANCELLED et son Payment PENDING
+        # ne doit plus être candidat à reconcile_pending_payments.
         order.status = GuestProductOrder.Status.CANCELLED
         order.save(update_fields=['status'])
+        Payment.objects.filter(
+            guest_product_order=order, status=Payment.Status.PENDING,
+        ).update(status=Payment.Status.CANCELLED)
+
         log_action(
             action=AuditLog.Action.PAYMENT_CANCELLED,
-            description=f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}",
-            model_name='GuestProductOrder', object_id=order_number,
+            description=(
+                f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}. "
+                f"Les paiements PENDING associés ont été clôturés pour empêcher toute "
+                f"confirmation tardive par la réconciliation."
+            ),
+            model_name='Payment', object_id=order_number,
             ip_address=get_client_ip(request),
         )
     return redirect('store:guest_confirmation', order_number=order.order_number)

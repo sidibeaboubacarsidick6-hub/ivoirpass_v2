@@ -913,7 +913,10 @@ class GuestProductOrder(models.Model):
         """
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked.status == self.Status.PAID:
+            # Une commande boutique annulée est terminale : un retour navigateur,
+            # un webhook tardif ou la réconciliation ne doit jamais pouvoir la
+            # faire repasser à PAID.
+            if locked.status != self.Status.PENDING:
                 return False
 
             self.status = self.Status.PAID
