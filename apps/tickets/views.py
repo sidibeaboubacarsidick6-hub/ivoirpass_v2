@@ -52,6 +52,16 @@ def guest_checkout(request, slug):
     event = get_object_or_404(Event, slug=slug, status='published')
     ticket_types = event.ticket_types.filter(is_visible=True).order_by('order', 'price')
 
+    # 🔒 Vérification serveur : la vente doit être ouverte. Le template
+    # cache le bouton "Acheter" quand is_on_sale est False, mais un POST
+    # direct vers cette URL contournerait ce garde-fou. On ferme le trou.
+    if not event.is_on_sale:
+        messages.error(
+            request,
+            "❌ Les ventes pour cet événement ne sont pas (ou plus) ouvertes."
+        )
+        return redirect('events:detail', slug=event.slug)
+
     if request.method == 'POST':
         first_name = request.POST.get('first_name', '').strip()
         last_name = request.POST.get('last_name', '').strip()

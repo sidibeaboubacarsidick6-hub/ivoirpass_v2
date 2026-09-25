@@ -356,7 +356,9 @@ class Event(models.Model):
         if self.status != self.Status.PUBLISHED:
             return False
         sale_start = self.sale_start or self.published_at or now
-        sale_end = self.sale_end or self.start_date
+        # Vente ouverte jusqu'à la FIN de l'événement (pas le début) :
+        # l'acheteur peut encore prendre un billet pendant l'événement.
+        sale_end = self.sale_end or self.end_date
         return sale_start <= now <= sale_end
 
     @property
