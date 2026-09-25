@@ -132,6 +132,48 @@
   flex-direction: column;
   color: rgba(255,255,255,0.4);
 }
+/* ============================================
+   DESKTOP : carrousel agrandi (~60vh)
+   Mobile inchangé.
+   ============================================ */
+@media (min-width: 992px) {
+  .hero-carousel {
+    max-width: 640px;
+    aspect-ratio: auto;
+    height: 60vh;
+    min-height: 480px;
+    max-height: 760px;
+  }
+
+  .hero-card img,
+  .hero-card-no-img {
+    height: 62%;
+  }
+
+  .hero-card-body {
+    padding: 18px 22px;
+  }
+
+  .hero-card-title {
+    font-size: 1.15rem;
+  }
+
+  .hero-card-meta {
+    font-size: 0.88rem;
+  }
+
+  .hero-card-price {
+    font-size: 1rem;
+  }
+
+  .hero-placeholder {
+    max-width: 640px;
+    aspect-ratio: auto;
+    height: 60vh;
+    min-height: 480px;
+    max-height: 760px;
+  }
+}
 </style>
 {% endblock %}
 
