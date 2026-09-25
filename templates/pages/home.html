@@ -262,9 +262,7 @@
                   </div>
 
                   <div class="hero-card-price">
-                    {% if event.is_free %}
-                      Gratuit
-                    {% elif event.min_price > 0 %}
+                    {% if event.min_price > 0 %}
                       À partir de {{ event.min_price|floatformat:0 }} FCFA
                     {% else %}
                       Voir les tarifs
@@ -421,12 +419,6 @@
                          font-weight:700; padding:3px 10px; border-radius:20px;">
               Complet
             </span>
-            {% elif event.is_free %}
-            <span style="position:absolute; top:10px; right:10px;
-                         background:#1B7A3E; color:white; font-size:0.72rem;
-                         font-weight:700; padding:3px 10px; border-radius:20px;">
-              Gratuit
-            </span>
             {% endif %}
           </div>
 
@@ -464,9 +456,7 @@
             <div class="d-flex justify-content-between align-items-center
                         mt-auto pt-2 border-top">
               <span class="fw-bold text-green">
-                {% if event.is_free %}
-                  Gratuit
-                {% elif event.min_price > 0 %}
+                {% if event.min_price > 0 %}
                   À partir de {{ event.min_price|floatformat:0 }} FCFA
                 {% else %}
                   Voir les tarifs

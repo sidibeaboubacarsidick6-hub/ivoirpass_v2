@@ -12,7 +12,7 @@
 | 3 | "Description courte" → "InfoLine" | Moyenne | ✅ fait |
 | 4 | Supprimer "Date de début" / "Date de fin" dans Dates et horaires | Moyenne | ✅ fait (sale_start/sale_end retirés) |
 || 5 | Carrousel agrandi à 50% de l'écran | Moyenne | ✅ fait |
-| 6 | Retirer la logique d'événement gratuit | Haute | ⏳ à faire |
+| 6 | Retirer la logique d'événement gratuit | Haute | ✅ fait |
 
 ## Décisions prises
 - Help text InfoLine : "Numéro de contact de l'organisateur"
@@ -37,3 +37,4 @@
 - 2026-09-25 : Session 2 — Tâche 1 terminée : lien d'accès en ligne (guest online_access_token), page /billets/live/<token>/, email guest online, retrait valid_date du formulaire
 - 2026-09-25 : Session 3 — Tâche 5 terminée : carrousel hero agrandi (~60vh desktop, mobile inchangé)
 - 2026-09-25 : Session 4 — Tâche 4 terminée : retrait de sale_start/sale_end du formulaire Event et TicketType (modèle inchangé, valeurs NULL → fallback automatique publication/date event)
+- 2026-09-25 : Session 5 — Tâche 6 terminée : suppression de Event.is_free (migration), MinValueValidator(100) sur TicketType.price, nettoyage complet code + templates. Toutes les 6 tâches fermées ✅

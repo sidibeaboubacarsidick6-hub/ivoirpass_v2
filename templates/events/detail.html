@@ -397,7 +397,7 @@
           <div class="d-flex justify-content-between align-items-start mb-1">
             <div class="fw-bold">{{ ticket.name }}</div>
             <div class="fw-bold text-green">
-              {% if ticket.is_free %}Gratuit{% else %}{{ ticket.price|floatformat:0 }} FCFA{% endif %}
+              {{ ticket.price|floatformat:0 }} FCFA
             </div>
           </div>
           {% if ticket.valid_date %}

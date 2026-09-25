@@ -96,7 +96,7 @@
               </div>
               <div class="text-end ms-3">
                 <div class="fw-bold text-green fs-6 mb-2">
-                  {% if tt.is_free %}Gratuit{% else %}{{ tt.price|floatformat:0 }} FCFA{% endif %}
+                  {{ tt.price|floatformat:0 }} FCFA
                 </div>
                 {% if not tt.is_sold_out %}
                 <select name="quantity_{{ tt.pk }}"
@@ -121,13 +121,8 @@
         <!-- Bouton payer / générer -->
         <button type="submit" class="btn btn-orange btn-lg w-100 py-3"
                 style="font-size:1.1rem; font-weight:700;">
-          {% if event.is_free %}
-            <i class="bi bi-ticket-perforated me-2"></i>
-            Générer mon billet
-          {% else %}
-            <i class="bi bi-lock me-2"></i>
-            Procéder au paiement via PayDunya
-          {% endif %}
+          <i class="bi bi-lock me-2"></i>
+          Procéder au paiement via PayDunya
         </button>
 
         <p class="text-muted small text-center mt-3">

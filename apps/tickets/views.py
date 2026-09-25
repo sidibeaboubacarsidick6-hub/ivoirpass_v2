@@ -128,23 +128,10 @@ def guest_checkout(request, slug):
             action=AuditLog.Action.ORDER_CREATED,
             description=f"Commande invité {order.order_number} créée ({email})",
             obj=order,
-            metadata={'total': str(total), 'is_free': total == 0, 'email': email},
+            metadata={'total': str(total), 'email': email},
             ip_address=get_client_ip(request),
         )
 
-        if total == 0:
-            order.mark_as_paid(payment_method='free', payment_reference=f'FREE-{order.order_number}')
-            log_action(
-                action=AuditLog.Action.PAYMENT_SUCCESS,
-                description=f"Commande invité {order.order_number} confirmée (gratuite)",
-                model_name='Payment', object_id=order.order_number,
-                metadata={'provider': 'free', 'amount': '0'},
-                ip_address=get_client_ip(request),
-            )
-            # Envoi asynchrone des billets par email (commande gratuite, invité)
-            from apps.notifications.tasks import send_guest_ticket_email_async
-            send_guest_ticket_email_async.delay(str(order.uuid))
-            return redirect('tickets:guest_confirmation', order_number=order.order_number)
         return redirect('tickets:guest_payment', order_number=order.order_number)
 
     return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})

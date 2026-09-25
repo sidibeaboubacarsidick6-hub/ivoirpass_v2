@@ -97,7 +97,7 @@ class EventAdmin(admin.ModelAdmin):
         }),
         ('Billetterie', {
             'fields': (
-                'is_free', 'min_price',
+                'min_price',
                 'total_capacity', 'tickets_sold'
             )
         }),

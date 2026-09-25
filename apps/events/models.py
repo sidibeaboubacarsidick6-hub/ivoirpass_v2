@@ -4,6 +4,7 @@ IvoirPass V2 — Modèles des événements
 import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.core.validators import MinValueValidator
 from django.utils.text import slugify
 from django.utils import timezone
 from django.conf import settings
@@ -233,10 +234,6 @@ class Event(models.Model):
     # ============================================
     # BILLETTERIE
     # ============================================
-    is_free = models.BooleanField(
-        _('événement gratuit'),
-        default=False
-    )
     min_price = models.DecimalField(
         _('prix minimum'),
         max_digits=10,
@@ -406,7 +403,8 @@ class TicketType(models.Model):
         _('prix (FCFA)'),
         max_digits=10,
         decimal_places=0,
-        help_text="0 pour gratuit"
+        validators=[MinValueValidator(100)],
+        help_text="Minimum 100 FCFA"
     )
     valid_date = models.DateField(
         _('jour de validité'),
@@ -459,9 +457,6 @@ class TicketType(models.Model):
     def __str__(self):
         return f"{self.event.title} — {self.name} ({self.price} FCFA)"
 
-    @property
-    def is_free(self):
-        return self.price == 0
 
     @property
     def remaining(self):
@@ -490,6 +485,12 @@ class TicketType(models.Model):
     def clean(self):
         from django.core.exceptions import ValidationError
         super().clean()
+
+        if self.price is not None and self.price < 100:
+            raise ValidationError({
+                'price': "Le prix minimum est de 100 FCFA."
+            })
+
         if self.valid_date and self.event_id:
             event_start = self.event.start_date.date()
             event_end = self.event.end_date.date()

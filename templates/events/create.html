@@ -593,17 +593,6 @@
             {% endif %}
           </div>
 
-          <div class="mb-3 form-check">
-            {{ form.is_free }}
-            <label class="form-check-label small fw-semibold">{{ form.is_free.label }}</label>
-            {% if form.is_free.errors %}
-              {% for error in form.is_free.errors %}
-              <div class="text-danger small mt-1">
-                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-              </div>
-              {% endfor %}
-            {% endif %}
-          </div>
 
           <hr>
 

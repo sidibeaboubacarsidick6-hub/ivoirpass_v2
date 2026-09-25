@@ -19,7 +19,7 @@ class EventForm(forms.ModelForm):
             'venue_name', 'venue_address', 'venue_city',
             'online_link',
             'cover_image', 'thumbnail', 'video_url',
-            'is_free', 'total_capacity',
+            'total_capacity',
             'status',
         ]
         widgets = {
@@ -114,7 +114,6 @@ class EventForm(forms.ModelForm):
             'cover_image':       'Image de couverture (1200×600px)',
             'thumbnail':         'Miniature (400×400px)',
             'video_url':         'Vidéo de présentation',
-            'is_free':           'Événement gratuit',
             'total_capacity':    'Capacité totale (0 = illimité)',
             'status':            'Statut',
         }
@@ -169,8 +168,8 @@ TicketTypeFormSet = inlineformset_factory(
         }),
         'price': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
-            'placeholder': '0',
-            'min': '0',
+            'placeholder': '100',
+            'min': '100',
         }),
         'quantity': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
