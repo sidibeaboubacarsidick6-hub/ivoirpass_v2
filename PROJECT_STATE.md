@@ -7,8 +7,8 @@
 ## Tâches
 | # | Tâche | Priorité | Statut |
 |---|-------|----------|--------|
-| 1 | Lien de connexion pour événements en ligne (au lieu du ticket) | Haute | ⏳ à faire |
-| 2 | Message KYC visible plus longtemps avec instructions complètes | Haute | 🟡 email fait, UI à faire |
+| 1 | Lien de connexion pour événements en ligne (au lieu du ticket) | Haute | ✅ fait |
+| 2 | Message KYC visible plus longtemps avec instructions complètes | Haute | ✅ fait |
 | 3 | "Description courte" → "InfoLine" | Moyenne | ✅ fait |
 | 4 | Supprimer "Date de début" / "Date de fin" dans Dates et horaires | Moyenne | ⏳ à faire |
 | 5 | Carrousel agrandi à 50% de l'écran | Moyenne | ⏳ à faire |
@@ -33,3 +33,5 @@
 
 ## Historique des sessions
 - 2026-09-25 : Session 1 — cadrage, InfoLine, email KYC, push à venir
+- 2026-09-25 : Session 1 — InfoLine ✅, Email KYC ✅, Message KYC persistant ✅ (commit 25ea5aa)
+- 2026-09-25 : Session 2 — Tâche 1 terminée : lien d'accès en ligne (guest online_access_token), page /billets/live/<token>/, email guest online, retrait valid_date du formulaire

@@ -100,37 +100,86 @@ class NotificationService:
         from apps.tickets.models import GuestTicket
         from apps.tickets.utils import generate_guest_ticket_pdf
 
-        tickets = GuestTicket.objects.filter(order_item__order=order).select_related('order_item__ticket_type__event')
+        tickets = (
+            GuestTicket.objects
+            .filter(order_item__order=order)
+            .select_related('order_item__ticket_type__event')
+        )
         if not tickets.exists():
             return False
 
         base_url = settings.PAYDUNYA_BASE_URL
-        attachments = []
-        for ticket in tickets:
-            try:
-                pdf_bytes = generate_guest_ticket_pdf(ticket)
-                attachments.append((f"billet-{ticket.ticket_number}.pdf", pdf_bytes, 'application/pdf'))
-            except Exception as e:
-                logger.error(f"Erreur PDF invité {ticket.ticket_number}: {e}")
+        first_ticket = tickets[0]
+        event = first_ticket.event
 
-        tickets_with_links = [{'ticket': t, 'download_url': f"{base_url}/billets/guest/billet/{t.ticket_number}/pdf/"} for t in tickets]
+        # Routage selon le type d'événement. Une GuestOrder ne contient
+        # toujours qu'un seul type d'événement (voir guest_checkout qui
+        # prend un slug unique), donc on regarde le premier ticket.
+        is_online_only = (event.event_type == 'online')
 
-        subject = f"Vos billets — {order.order_number}"
-        context = {
-            'order': order, 'tickets': tickets, 'tickets_with_links': tickets_with_links,
-            'buyer_name': order.buyer_name, 'platform_name': 'IvoirPass',
-            'platform_url': base_url, 'support_email': settings.IVOIRPASS.get('CONTACT_EMAIL', 'infos@mks-soft-technologies.com'),
-            'year': timezone.now().year,
-        }
+        if is_online_only:
+            # --- Email "accès en ligne" : lien + instructions, pas de QR/PDF
+            access_url = f"{base_url}/billets/live/{first_ticket.online_access_token}/"
+            subject = f"Votre accès à {event.title}"
+            context = {
+                'order': order,
+                'event': event,
+                'buyer_name': order.buyer_name,
+                'access_url': access_url,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'support_email': settings.IVOIRPASS.get(
+                    'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+                ),
+                'year': timezone.now().year,
+            }
+            template_base = 'notifications/email/guest_online_access'
+            attachments = []  # Pas de PDF pour les événements en ligne purs
+        else:
+            # --- Email classique : QR + PDF joints
+            attachments = []
+            for ticket in tickets:
+                try:
+                    pdf_bytes = generate_guest_ticket_pdf(ticket)
+                    attachments.append(
+                        (f"billet-{ticket.ticket_number}.pdf", pdf_bytes, 'application/pdf')
+                    )
+                except Exception as e:
+                    logger.error(f"Erreur PDF invité {ticket.ticket_number}: {e}")
+
+            tickets_with_links = [
+                {'ticket': t,
+                 'download_url': f"{base_url}/billets/guest/billet/{t.ticket_number}/pdf/"}
+                for t in tickets
+            ]
+            subject = f"Vos billets — {order.order_number}"
+            context = {
+                'order': order,
+                'tickets': tickets,
+                'tickets_with_links': tickets_with_links,
+                'buyer_name': order.buyer_name,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'support_email': settings.IVOIRPASS.get(
+                    'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+                ),
+                'year': timezone.now().year,
+            }
+            template_base = 'notifications/email/guest_ticket_confirmed'
 
         try:
-            html_message  = render_to_string('notifications/email/guest_ticket_confirmed.html', context)
-            plain_message = render_to_string('notifications/email/guest_ticket_confirmed.txt', context)
+            html_message = render_to_string(f'{template_base}.html', context)
+            plain_message = render_to_string(f'{template_base}.txt', context)
         except Exception as e:
-            logger.error(f"Template guest_ticket_confirmed introuvable: {e}")
+            logger.error(f"Template {template_base} introuvable: {e}")
             return False
 
-        email = EmailMultiAlternatives(subject=subject, body=plain_message, from_email=settings.DEFAULT_FROM_EMAIL, to=[order.email])
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.email],
+        )
         email.attach_alternative(html_message, "text/html")
         for filename, content, mimetype in attachments:
             email.attach(filename, content, mimetype)
@@ -141,16 +190,21 @@ class NotificationService:
             logger.error(f"Erreur envoi email guest : {e}")
             return False
 
+        # SMS de confirmation (inchangé)
         if getattr(order, 'phone', None):
             try:
                 from apps.notifications.sms import send_sms
                 send_sms(
                     order.phone,
                     f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
-                    f"Commande {order.order_number}. Billets envoyés par email."
+                    f"Commande {order.order_number}. "
+                    + ("Votre lien de connexion vous a été envoyé par email."
+                       if is_online_only else "Billets envoyés par email.")
                 )
             except Exception as e:
-                logger.error(f"Erreur envoi SMS confirmation billet invité {order.order_number}: {e}")
+                logger.error(
+                    f"Erreur envoi SMS confirmation billet invité {order.order_number}: {e}"
+                )
 
         return True
 

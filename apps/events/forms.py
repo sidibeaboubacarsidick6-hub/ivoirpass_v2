@@ -166,7 +166,7 @@ TicketTypeFormSet = inlineformset_factory(
     fields=[
         'name', 'description', 'price',
         'quantity', 'max_per_order',
-        'sale_start', 'sale_end', 'valid_date',
+        'sale_start', 'sale_end',
         'is_visible', 'order'
     ],
     widgets={
@@ -200,9 +200,7 @@ TicketTypeFormSet = inlineformset_factory(
             attrs={'class': 'form-control form-control-sm', 'type': 'datetime-local'},
             format='%Y-%m-%dT%H:%M'
         ),
-        'valid_date': forms.DateInput(
-            attrs={'class': 'form-control form-control-sm', 'type': 'date'},
-        ),
+        
         'order': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
             'min': '0',

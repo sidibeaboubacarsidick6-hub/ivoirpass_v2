@@ -467,6 +467,8 @@ class AuditLog(models.Model):
         PAYOUT_CANCELLED = 'payout_cancelled', _('Reversement annulé')
         EXPORT = 'export', _('Export données')
         SCAN = 'scan', _('Scan QR')
+        ONLINE_ACCESS = 'online_access', _('Accès événement en ligne')
+
         # --- Commandes ---
         ORDER_CREATED = 'order_created', _('Commande créée')
         ORDER_CANCELLED = 'order_cancelled', _('Commande annulée')

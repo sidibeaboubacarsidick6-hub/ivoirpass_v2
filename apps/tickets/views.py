@@ -445,3 +445,66 @@ def download_guest_ticket_pdf(request, ticket_number):
         f'attachment; filename="billet-{ticket.ticket_number}.pdf"'
     )
     return response
+
+def online_access_redirect(request, token):
+    """
+    Page d'accès à un événement en ligne.
+
+    L'acheteur reçoit dans son email une URL unique
+    (/billets/live/<token>/) qui pointe ici. On vérifie le jeton, on
+    logue l'accès dans AuditLog, puis on affiche une page avec un
+    bouton vers le lien réel (Zoom / Meet).
+
+    Le vrai lien n'est jamais exposé dans l'email : ça limite le
+    partage sauvage et permet de tracer qui a cliqué, quand.
+    """
+    from .models import GuestTicket
+
+    ticket = get_object_or_404(GuestTicket, online_access_token=token)
+    event = ticket.event
+
+    # Vérifications
+    invalid_reason = None
+    if ticket.status == GuestTicket.Status.VOID:
+        invalid_reason = "Ce billet a été annulé. Le lien d'accès n'est plus valide."
+    elif event.event_type not in ('online', 'hybrid'):
+        invalid_reason = "Cet événement n'est pas un événement en ligne."
+    elif not event.online_link:
+        invalid_reason = (
+            "Le lien de connexion n'a pas encore été renseigné par "
+            "l'organisateur. Merci de réessayer plus tard."
+        )
+    elif event.status == Event.Status.CANCELLED:
+        invalid_reason = "Cet événement a été annulé."
+
+    # Log de l'accès (même si invalide : trace utile pour audit)
+    log_action(
+        action=AuditLog.Action.ONLINE_ACCESS,
+        description=(
+            f"Accès en ligne pour le billet {ticket.ticket_number} "
+            f"(commande {ticket.order_item.order.order_number})"
+            + (f" — refusé : {invalid_reason}" if invalid_reason else "")
+        ),
+        model_name='GuestTicket',
+        object_id=str(ticket.pk),
+        metadata={
+            'ticket_number': ticket.ticket_number,
+            'order_number': ticket.order_item.order.order_number,
+            'event_slug': event.slug,
+            'valid': invalid_reason is None,
+        },
+        ip_address=get_client_ip(request),
+    )
+
+    if invalid_reason:
+        return render(request, 'tickets/online_access_invalid.html', {
+            'reason': invalid_reason,
+            'event': event,
+            'ticket': ticket,
+        })
+
+    return render(request, 'tickets/online_access.html', {
+        'event': event,
+        'ticket': ticket,
+        'online_link': event.online_link,
+    })

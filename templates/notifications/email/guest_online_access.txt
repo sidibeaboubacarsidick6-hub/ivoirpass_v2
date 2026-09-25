@@ -1,0 +1,19 @@
+Votre accès en ligne IvoirPass
+
+Bonjour {{ buyer_name }},
+
+Votre paiement a été confirmé. Voici votre accès à l'événement en ligne.
+
+Événement   : {{ event.title }}
+Date        : {{ event.start_date|date:"d F Y à H\hi" }}
+Commande    : {{ order.order_number }}
+Total payé  : {{ order.total|floatformat:0 }} FCFA
+
+Rejoindre l'événement :
+{{ access_url }}
+
+⚠️ Ce lien est personnel. Ne le partagez pas.
+
+💡 Conservez cet email : le lien reste actif.
+
+© {{ year }} IvoirPass
