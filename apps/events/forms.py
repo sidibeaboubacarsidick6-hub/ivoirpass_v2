@@ -42,7 +42,7 @@ class EventForm(forms.ModelForm):
                 'class': 'form-control',
                 'maxlength': 150,
                 'required': True,
-                'placeholder': 'Information courte sur votre événement (150 caractères max)',
+                'placeholder': "Numéro de contact de l'organisateur",
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -109,7 +109,7 @@ class EventForm(forms.ModelForm):
             'subtitle':          'Sous-titre',
             'category':          'Catégorie *',
             'description':       'Description complète *',
-            'short_description': 'Description courte',
+            'short_description': 'InfoLine',
             'tags':              'Mots-clés',
             'event_type':        'Type d\'événement',
             'start_date':        'Date et heure de début *',

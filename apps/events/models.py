@@ -93,7 +93,7 @@ class Event(models.Model):
     short_description = models.CharField(
         _('InfoLine'),
         max_length=150,
-        help_text="Information courte affichée sur les cartes et aperçus (max 150 caractères)"
+        help_text="Numéro de contact de l'organisateur"
     )
 
     # ============================================

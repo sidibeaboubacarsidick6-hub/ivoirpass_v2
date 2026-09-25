@@ -11,6 +11,12 @@ Une fois confirmé, vous pourrez :
 ✅ Vendre des produits culturels
 ✅ Accéder à votre dashboard et wallet
 
+⚠️ Pour publier des événements payants, vous devez compléter votre KYC :
+
+✅ Rendez-vous dans votre espace compte, cliquez sur "Mon profil", cliquez sur "Organisation", "Complétez mon profil organisateur", puis dans "Vérifications KYC" téléchargez votre CNI et cliquez sur "Enregistrer" pour terminer.
+
+✅ Une fois confirmé, vous pourrez publier des événements payants.
+
 Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email en toute sécurité.
 
 ---
