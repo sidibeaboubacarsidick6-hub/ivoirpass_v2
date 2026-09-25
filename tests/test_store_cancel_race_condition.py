@@ -1,24 +1,31 @@
 """Régression : une commande boutique invitée annulée ne doit pas ressusciter."""
 from datetime import timedelta
-
+from apps.accounts.models import CustomUser
+from apps.payments.models import Payment
+from apps.store.models import Product, ProductCategory, GuestProductOrder
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.payments.models import Payment
-from apps.store.models import Product, ProductCategory, GuestProductOrder
 
 
 class GuestProductOrderCancelRaceTests(TestCase):
     def _make_order(self):
+        seller = CustomUser.objects.create_user(
+            email='seller-cancel-race@test.com',
+            password='Pass123!',
+            role='organizer',
+            is_organizer_verified=True,
+        )
         category = ProductCategory.objects.create(name='Test Annulation Boutique')
         product = Product.objects.create(
+            seller=seller,
             name='Produit test annulation',
             category=category,
             price=5000,
             status=Product.Status.PUBLISHED,
-            is_digital=False,
-            stock_quantity=10,
+            product_type=Product.ProductType.PHYSICAL,
+            stock=10,
         )
         order = GuestProductOrder.objects.create(
             first_name='Test', last_name='Annulation',
