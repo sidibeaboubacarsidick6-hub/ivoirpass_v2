@@ -1,40 +1,47 @@
 # IvoirPass V2 — État du projet
 
-## Chantier en cours
-**Branche :** preprod-corrections-audit
-**Objectif :** 6 modifications événements (prompt du 2026-09-25)
+## Statut chantier (2026-09-25)
+✅ **Toutes les tâches terminées, mergées en preprod.**
+**Branche :** preprod-corrections-audit (commit 44b0f8c)
+**Tag rollback :** preprod-avant-chantier-6 → f7cca51
 
-## Tâches
-| # | Tâche | Priorité | Statut |
-|---|-------|----------|--------|
-| 1 | Lien de connexion pour événements en ligne (au lieu du ticket) | Haute | ✅ fait |
-| 2 | Message KYC visible plus longtemps avec instructions complètes | Haute | ✅ fait |
-| 3 | "Description courte" → "InfoLine" | Moyenne | ✅ fait |
-| 4 | Supprimer "Date de début" / "Date de fin" dans Dates et horaires | Moyenne | ✅ fait (sale_start/sale_end retirés) |
-|| 5 | Carrousel agrandi à 50% de l'écran | Moyenne | ✅ fait |
-| 6 | Retirer la logique d'événement gratuit | Haute | ✅ fait |
+## Tâches livrées
+| # | Tâche | Statut |
+|---|-------|--------|
+| 1 | Lien d'accès en ligne (guest) | ✅ |
+| 2 | Message KYC persistant | ✅ |
+| 3 | InfoLine (ex-Description courte) | ✅ |
+| 4 | Retrait sale_start/sale_end du formulaire | ✅ |
+| 5 | Carrousel ~60vh desktop | ✅ |
+| 6 | Retrait logique événement gratuit | ✅ |
+| Bonus | Fix is_on_sale (vente jusqu'à fin) + garde-fou | ✅ |
+| Bonus | Fix tests store (is_digital, stock, seller) | ✅ |
+| Bonus | Config Celery (dev local) | ✅ |
 
-## Décisions prises
-- Help text InfoLine : "Numéro de contact de l'organisateur"
-- Label : "InfoLine" (casse exacte)
-- Périmètre InfoLine : événements uniquement (pas store)
-- Email KYC : version validée le 2026-09-25
+## Décisions verrouillées
+- InfoLine : label + help "Numéro de contact de l'organisateur"
+- KYC : obligatoire pour publier (pas de distinction gratuit/payant)
+- Prix minimum : 100 FCFA (MinValueValidator)
+- Vente : jusqu'à end_date de l'événement
+- Événements online : URL interne `/billets/live/<token>/` qui redirige vers Zoom
 
-## Environnement
-- Local : WSL Ubuntu + venv + PostgreSQL natif + Redis natif
-- Lancement : ./run_dev.sh (runserver + celery + beat)
-- Preprod : VPS, docker-compose.preprod.yml
-- Settings local : config.settings.development
+## En attente (à valider en preprod)
+- [ ] Test KYC (organisateur non vérifié → message persistant)
+- [ ] Test achat guest physique (email + QR + PDF)
+- [ ] Test achat guest online (email avec lien /live/)
+- [ ] Surveiller Sentry 24-48h
+- [ ] Merge preprod → master → déploiement prod
 
-## Points de vigilance
-- ALERTE SÉCURITÉ : Sentry DSN exposé le 2026-09-25 → à révoquer
-- ALERTE SÉCURITÉ : ngrok PAYDUNYA_BASE_URL exposé → tunnel à fermer
-- Le working tree reste sale tant qu'on n'a pas commité le chantier InfoLine/email
+## Leçons apprises
+- **Docker :** toujours `docker compose build` (sans argument) + `up -d --force-recreate`.
+  Ne JAMAIS faire `build web` seul — celery/beat gardent l'ancienne image.
+- **Ne JAMAIS supprimer un Event qui a des commandes PAID** (cascade → perte de traçabilité BCEAO).
+- **Migrations destructives :** vérifier en preprod avant prod.
 
-## Historique des sessions
-- 2026-09-25 : Session 1 — cadrage, InfoLine, email KYC, push à venir
-- 2026-09-25 : Session 1 — InfoLine ✅, Email KYC ✅, Message KYC persistant ✅ (commit 25ea5aa)
-- 2026-09-25 : Session 2 — Tâche 1 terminée : lien d'accès en ligne (guest online_access_token), page /billets/live/<token>/, email guest online, retrait valid_date du formulaire
-- 2026-09-25 : Session 3 — Tâche 5 terminée : carrousel hero agrandi (~60vh desktop, mobile inchangé)
-- 2026-09-25 : Session 4 — Tâche 4 terminée : retrait de sale_start/sale_end du formulaire Event et TicketType (modèle inchangé, valeurs NULL → fallback automatique publication/date event)
-- 2026-09-25 : Session 5 — Tâche 6 terminée : suppression de Event.is_free (migration), MinValueValidator(100) sur TicketType.price, nettoyage complet code + templates. Toutes les 6 tâches fermées ✅
+## Commandes utiles
+- Lancer en local : `./run_dev.sh` (Redis doit tourner)
+- Tests ciblés : `DJANGO_SETTINGS_MODULE=config.settings.testlocal python manage.py test tests.xxx`
+- Redis local : `redis-server --daemonize yes`
+
+## Historique
+- 2026-09-25 : Session unique (longue) — 6 tâches + 3 bonus livrées, mergées, déployées preprod
