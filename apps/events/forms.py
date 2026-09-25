@@ -16,7 +16,6 @@ class EventForm(forms.ModelForm):
             'description', 'short_description', 'tags',
             'event_type',
             'start_date', 'end_date', 'doors_open',
-            'sale_start', 'sale_end',
             'venue_name', 'venue_address', 'venue_city',
             'online_link',
             'cover_image', 'thumbnail', 'video_url',
@@ -60,14 +59,7 @@ class EventForm(forms.ModelForm):
             'doors_open': forms.TimeInput(
                 attrs={'class': 'form-control', 'type': 'time'}
             ),
-            'sale_start': forms.DateTimeInput(
-                attrs={'class': 'form-control', 'type': 'datetime-local'},
-                format='%Y-%m-%dT%H:%M'
-            ),
-            'sale_end': forms.DateTimeInput(
-                attrs={'class': 'form-control', 'type': 'datetime-local'},
-                format='%Y-%m-%dT%H:%M'
-            ),
+
             'venue_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Palais de la Culture, Sofitel...',
@@ -115,8 +107,6 @@ class EventForm(forms.ModelForm):
             'start_date':        'Date et heure de début *',
             'end_date':          'Date et heure de fin *',
             'doors_open':        'Ouverture des portes',
-            'sale_start':        'Début des ventes',
-            'sale_end':          'Fin des ventes',
             'venue_name':        'Nom du lieu',
             'venue_address':     'Adresse',
             'venue_city':        'Ville',
@@ -133,7 +123,7 @@ class EventForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Formate les dates pour le widget datetime-local
         if self.instance.pk:
-            for field_name in ['start_date', 'end_date', 'sale_start', 'sale_end']:
+            for field_name in ['start_date', 'end_date']:
                 val = getattr(self.instance, field_name, None)
                 if val:
                     self.initial[field_name] = val.strftime('%Y-%m-%dT%H:%M')
@@ -166,7 +156,6 @@ TicketTypeFormSet = inlineformset_factory(
     fields=[
         'name', 'description', 'price',
         'quantity', 'max_per_order',
-        'sale_start', 'sale_end',
         'is_visible', 'order'
     ],
     widgets={
@@ -192,14 +181,6 @@ TicketTypeFormSet = inlineformset_factory(
             'class': 'form-control form-control-sm',
             'min': '1',
         }),
-        'sale_start': forms.DateTimeInput(
-            attrs={'class': 'form-control form-control-sm', 'type': 'datetime-local'},
-            format='%Y-%m-%dT%H:%M'
-        ),
-        'sale_end': forms.DateTimeInput(
-            attrs={'class': 'form-control form-control-sm', 'type': 'datetime-local'},
-            format='%Y-%m-%dT%H:%M'
-        ),
         
         'order': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',

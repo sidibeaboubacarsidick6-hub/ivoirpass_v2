@@ -10,7 +10,7 @@
 | 1 | Lien de connexion pour événements en ligne (au lieu du ticket) | Haute | ✅ fait |
 | 2 | Message KYC visible plus longtemps avec instructions complètes | Haute | ✅ fait |
 | 3 | "Description courte" → "InfoLine" | Moyenne | ✅ fait |
-| 4 | Supprimer "Date de début" / "Date de fin" dans Dates et horaires | Moyenne | ⏳ à faire |
+| 4 | Supprimer "Date de début" / "Date de fin" dans Dates et horaires | Moyenne | ✅ fait (sale_start/sale_end retirés) |
 || 5 | Carrousel agrandi à 50% de l'écran | Moyenne | ✅ fait |
 | 6 | Retirer la logique d'événement gratuit | Haute | ⏳ à faire |
 
@@ -36,3 +36,4 @@
 - 2026-09-25 : Session 1 — InfoLine ✅, Email KYC ✅, Message KYC persistant ✅ (commit 25ea5aa)
 - 2026-09-25 : Session 2 — Tâche 1 terminée : lien d'accès en ligne (guest online_access_token), page /billets/live/<token>/, email guest online, retrait valid_date du formulaire
 - 2026-09-25 : Session 3 — Tâche 5 terminée : carrousel hero agrandi (~60vh desktop, mobile inchangé)
+- 2026-09-25 : Session 4 — Tâche 4 terminée : retrait de sale_start/sale_end du formulaire Event et TicketType (modèle inchangé, valeurs NULL → fallback automatique publication/date event)

@@ -154,28 +154,6 @@
                 {% endfor %}
               {% endif %}
             </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">{{ form.sale_start.label }}</label>
-              {{ form.sale_start }}
-              {% if form.sale_start.errors %}
-                {% for error in form.sale_start.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">{{ form.sale_end.label }}</label>
-              {{ form.sale_end }}
-              {% if form.sale_end.errors %}
-                {% for error in form.sale_end.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
-            </div>
           </div>
         </div>
 
@@ -395,28 +373,6 @@
                   {{ ticket_form.description }}
                   {% if ticket_form.description.errors %}
                     {% for error in ticket_form.description.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold">Début vente</label>
-                  {{ ticket_form.sale_start }}
-                  {% if ticket_form.sale_start.errors %}
-                    {% for error in ticket_form.sale_start.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold">Fin vente</label>
-                  {{ ticket_form.sale_end }}
-                  {% if ticket_form.sale_end.errors %}
-                    {% for error in ticket_form.sale_end.errors %}
                     <div class="text-danger small mt-1">
                       <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                     </div>
