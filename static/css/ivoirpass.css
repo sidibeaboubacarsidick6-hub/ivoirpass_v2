@@ -696,6 +696,7 @@ a:hover { color: var(--ip-orange); }
     overflow-y: auto;
   }
 }
+.ip-alert.alert-error { border-left-color: #dc3545; background: #fdf0f0; color: #8b1a1a; }
 
 /* ============================================
    FIN DU FICHIER
