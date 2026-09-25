@@ -318,7 +318,7 @@ def generate_guest_ticket_pdf(ticket):
 
     info_block("Type de billet", ticket_type.name, col1_x, y)
     info_block("Prix",
-               f"{ticket_type.price:,.0f} FCFA" if ticket_type.price > 0 else "Gratuit",
+               f"{ticket_type.price:,.0f} FCFA",
                col2_x, y)
     y -= 38
 

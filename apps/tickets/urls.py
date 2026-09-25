@@ -31,4 +31,8 @@ urlpatterns = [
     path('guest/billet/<str:ticket_number>/pdf/',
      views.download_guest_ticket_pdf,
      name='guest_download_pdf'),
+         # Accès événement en ligne — URL unique envoyée à l'acheteur
+    path('live/<str:token>/',
+         views.online_access_redirect,
+         name='online_access'),
 ]

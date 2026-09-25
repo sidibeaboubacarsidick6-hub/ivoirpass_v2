@@ -576,6 +576,17 @@ class GuestTicket(models.Model):
         blank=True,
         null=True
     )
+    online_access_token = models.CharField(
+        _("jeton d'accès en ligne"),
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text=(
+            "Jeton unique pour accéder à l'événement en ligne. "
+            "Rempli uniquement pour les événements online/hybrid."
+        ),
+    )
     order_item = models.ForeignKey(
         GuestOrderItem,
         on_delete=models.CASCADE,
@@ -607,6 +618,15 @@ class GuestTicket(models.Model):
             self.ticket_number = 'TK-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         if not self.qr_code_data:
             self.qr_code_data = self._generate_qr_data()
+
+        # Jeton d'accès en ligne : uniquement pour les événements online
+        # ou hybrid. Généré une seule fois, à la création du ticket.
+        if not self.online_access_token and self.order_item_id:
+            import secrets
+            event_type = self.order_item.ticket_type.event.event_type
+            if event_type in ('online', 'hybrid'):
+                self.online_access_token = secrets.token_urlsafe(32)
+
         super().save(*args, **kwargs)
         if not self.qr_code_image:
             self._generate_qr_image()

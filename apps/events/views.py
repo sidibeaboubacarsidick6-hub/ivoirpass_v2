@@ -168,10 +168,14 @@ def event_create(request):
                 if has_paid_tickets and not request.user.is_organizer_verified:
                     messages.error(
                         request,
-                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
-                        "Veuillez soumettre vos documents KYC (pièce d'identité, "
-                        "justificatif de domicile, document professionnel) dans "
-                        "votre profil avant de publier un événement payant."
+                        "🔒 Pour publier un événement payant, vous devez d'abord "
+                        "compléter votre KYC. Rendez-vous dans votre espace compte, "
+                        "cliquez sur \"Mon profil\", cliquez sur \"Organisation\", "
+                        "\"Complétez mon profil organisateur\", puis dans "
+                        "\"Vérifications KYC\" téléchargez votre CNI et cliquez sur "
+                        "\"Enregistrer\" pour terminer. Une fois confirmé, vous pourrez "
+                        "publier des événements payants.",
+                        extra_tags='danger kyc-persistent'
                     )
                     return render(request, 'events/create.html', {
                         'form':            form,
@@ -298,9 +302,14 @@ def event_edit(request, slug):
                 if has_paid_tickets and not request.user.is_organizer_verified:
                     messages.error(
                         request,
-                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
-                        "Veuillez soumettre vos documents KYC dans votre profil "
-                        "avant de publier un événement payant."
+                        "🔒 Pour publier un événement payant, vous devez d'abord "
+                        "compléter votre KYC. Rendez-vous dans votre espace compte, "
+                        "cliquez sur \"Mon profil\", cliquez sur \"Organisation\", "
+                        "\"Complétez mon profil organisateur\", puis dans "
+                        "\"Vérifications KYC\" téléchargez votre CNI et cliquez sur "
+                        "\"Enregistrer\" pour terminer. Une fois confirmé, vous pourrez "
+                        "publier des événements payants.",
+                        extra_tags='danger kyc-persistent'
                     )
                     return render(request, 'events/create.html', {
                         'form':            form,
