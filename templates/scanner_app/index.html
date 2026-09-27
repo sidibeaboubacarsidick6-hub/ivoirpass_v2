@@ -119,7 +119,16 @@
     <div id="scanScreen">
         <div class="scan-header">
             <div class="event-badge">🎫 Événement #<span id="eventIdDisplay"></span></div>
-            <button class="close-btn" onclick="stopScan()">✕</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="syncBtn" onclick="syncQueue()"
+                        style="background:rgba(255,255,255,0.08);border:none;color:white;
+                               padding:6px 12px;border-radius:20px;font-size:0.75rem;
+                               font-weight:600;cursor:pointer;width:auto;"
+                        title="Synchroniser les scans en attente">
+                    <span id="pendingBadge">🔄</span>
+                </button>
+                <button class="close-btn" onclick="stopScan()">✕</button>
+            </div>
         </div>
 
         <div class="scan-container">
@@ -525,6 +534,13 @@
             html5QrCode=new Html5Qrcode("reader",{formatsToSupport:[0]});
             html5QrCode.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1},onScan,()=>{})
             .then(()=>{scanning=true}).catch(e=>{alert('Caméra: '+e.message);stopScan();});
+
+            // B-6 : au démarrage du scan, afficher le badge + tenter une
+            // sync initiale (rattraper les scans accumulés hors ligne).
+            updatePendingBadge();
+            if (navigator.onLine) {
+                setTimeout(() => syncQueue(), 500);
+            }
         }
 
         function stopScan() {
@@ -575,9 +591,16 @@
             if(history.length>30)history.pop();
             updateHistory();
 
+            // B-6 : mettre à jour le badge et tenter une sync rapide
+            // si on est en ligne (le scan n'est pas bloqué, la sync
+            // tourne en arrière-plan).
+            updatePendingBadge();
+            if (navigator.onLine) {
+                setTimeout(() => syncQueue(), 800);
+            }
+
             setTimeout(()=>{hideResult();scanning=true;},1500);
         }
-
         // ── Décision de scan : cache-first + fallback API ──────────
         async function processScan(decodedText) {
             const parts = decodedText.split(':');
@@ -784,6 +807,105 @@
             }
         }
         document.getElementById('eventIdInput').addEventListener('input', refreshCachedCount);
+
+                // ============================================================
+        // CHANTIER B — B-6 : sync auto de la queue offline
+        // ============================================================
+        // Stratégie (décisions Q-B6) :
+        //   - Push par batches de 100
+        //   - Le serveur fait foi : on retire les scans traités de la queue
+        //     quel que soit le résultat (valid, already_used, etc.)
+        //   - Pas de retry auto — l'event 'online' + bouton manuel couvrent
+        //   - Déclenchée après "Démarrer le scan" et après chaque scan online
+        //   - Le scan n'est PAS bloqué pendant la sync
+        // ============================================================
+
+        const SYNC_BATCH_SIZE = 100;
+        let _syncInProgress = false;
+
+        async function updatePendingBadge() {
+            try {
+                if (!eventId) return;
+                const pending = await dbGetPendingScans(eventId);
+                const badge = document.getElementById('pendingBadge');
+                if (!badge) return;
+                if (pending.length > 0) {
+                    badge.textContent = `🔄 ${pending.length} en attente`;
+                } else {
+                    badge.textContent = '🔄';
+                }
+            } catch(e) {
+                console.warn('[sync] badge update échoué', e);
+            }
+        }
+
+        async function syncQueue() {
+            if (_syncInProgress) return;
+            if (!navigator.onLine) return;
+            if (!eventId) return;
+
+            _syncInProgress = true;
+            try {
+                let allPending = await dbGetPendingScans(eventId);
+                if (allPending.length === 0) {
+                    console.log('[sync] rien à synchroniser');
+                    return;
+                }
+
+                console.log(`[sync] ${allPending.length} scan(s) à synchroniser`);
+
+                // Découper en batches de 100
+                for (let i = 0; i < allPending.length; i += SYNC_BATCH_SIZE) {
+                    const batch = allPending.slice(i, i + SYNC_BATCH_SIZE);
+                    const payload = {
+                        event_id: eventId,
+                        scans: batch.map(s => ({
+                            client_uuid: s.client_uuid,
+                            qr_data: s.qr_data,
+                        })),
+                    };
+
+                    try {
+                        const res = await fetch(SYNC_URL, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCSRF(),
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        if (!res.ok) {
+                            console.warn('[sync] réponse serveur non-OK', res.status);
+                            break;
+                        }
+
+                        const data = await res.json();
+
+                        // Retirer de la queue les scans traités par le serveur
+                        for (const r of (data.results || [])) {
+                            if (r.client_uuid) {
+                                await dbDeleteQueueEntry(r.client_uuid);
+                            }
+                        }
+                        console.log(`[sync] batch ${Math.floor(i/SYNC_BATCH_SIZE) + 1} OK`, 
+                                    (data.results || []).length);
+                    } catch(e) {
+                        console.error('[sync] échec batch', e);
+                        break;
+                    }
+                }
+            } finally {
+                _syncInProgress = false;
+                await updatePendingBadge();
+            }
+        }
+
+        // Déclencheur : retour en ligne
+        window.addEventListener('online', () => {
+            console.log('[sync] retour en ligne — sync auto');
+            updatePendingBadge().then(() => syncQueue());
+        });
 
 
         async function checkSession() {
