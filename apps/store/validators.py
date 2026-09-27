@@ -133,3 +133,24 @@ def validate_digital_file_type(file):
                     ) % {'ext': ext, 'size': size_mb, 'max': max_mb}
                 )
             return
+
+def django_file_extensions(*kinds):
+    """
+    Retourne la liste des extensions à passer à FileExtensionValidator
+    de Django — SANS le point initial.
+
+    Django 4.2 fait `os.path.splitext(value.name)[1][1:].lower()` avant
+    la comparaison, donc `['.png']` ne matche jamais `png`.
+
+    Ex :
+        django_file_extensions('cover')          → ['jpg', 'jpeg', 'png', 'webp']
+        django_file_extensions('audio', 'video') → ['mp3', 'wav', ..., 'mp4', ...]
+
+    Garde les constantes `EXTENSIONS` avec le point (plus lisible pour
+    nos messages d'erreur) et utilise cette fonction UNIQUEMENT au moment
+    de construire le validator Django.
+    """
+    result = []
+    for kind in kinds:
+        result.extend([e.lstrip('.').lower() for e in EXTENSIONS[kind]])
+    return result

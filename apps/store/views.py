@@ -412,6 +412,14 @@ def product_create(request):
             )
             return redirect('store:my_products')
         else:
+            # Log côté serveur pour diagnostiquer les cas où le client
+            # ne voit pas l'erreur (bug d'affichage du template).
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[product_create] form invalide pour user={request.user.email} — "
+                f"erreurs={form.errors.as_json()}"
+            )
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'store/product_form.html', {
@@ -461,6 +469,12 @@ def product_edit(request, slug):
             messages.success(request, "Produit mis à jour.")
             return redirect('store:my_products')
         else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[product_edit] form invalide pour user={request.user.email} "
+                f"sur product={slug} — erreurs={form.errors.as_json()}"
+            )
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'store/product_form.html', {

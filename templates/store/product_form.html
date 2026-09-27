@@ -21,6 +21,32 @@
   <form method="POST" enctype="multipart/form-data"
         x-data="{ type: '{{ product.product_type|default:'physical' }}' }">
     {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="alert alert-danger mb-4">
+      <h6 class="fw-bold mb-2">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        Erreurs à corriger
+      </h6>
+      <ul class="mb-0 small">
+        {% for field_name, errors in form.errors.items %}
+          {% for error in errors %}
+            <li>
+              <strong>
+                {% if field_name == '__all__' %}
+                  Formulaire
+                {% else %}
+                  {{ field_name }}
+                {% endif %}
+              </strong>
+              : {{ error }}
+            </li>
+          {% endfor %}
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     <div class="row g-4">
 
       <!-- Colonne principale -->

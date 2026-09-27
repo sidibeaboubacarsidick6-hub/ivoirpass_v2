@@ -39,6 +39,36 @@ class FileSizeValidatorTests(TestCase):
 class DigitalFileTypeValidatorTests(TestCase):
     """Test #1 : extension + type réel."""
 
+    def test_png_upload_accepted_by_django_validator(self):
+        """
+        Régression 2026-09-27 : un .png uploadé était refusé par
+        FileExtensionValidator (Django strip le point avant comparaison
+        → il faut passer les extensions SANS point).
+        """
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.store.validators import django_file_extensions
+
+        v = FileExtensionValidator(django_file_extensions('cover'))
+        f = SimpleUploadedFile("photo.png", b"fake png bytes")
+        v(f)  # ne lève pas
+
+    def test_jpg_upload_accepted_by_django_validator(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.store.validators import django_file_extensions
+
+        v = FileExtensionValidator(django_file_extensions('cover'))
+        f = SimpleUploadedFile("photo.jpg", b"fake jpg bytes")
+        v(f)  # ne lève pas
+
+    def test_gif_rejected_by_django_validator(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.store.validators import django_file_extensions
+
+        v = FileExtensionValidator(django_file_extensions('cover'))
+        f = SimpleUploadedFile("anim.gif", b"fake gif bytes")
+        with self.assertRaises(ValidationError):
+            v(f)
+
     def test_exe_rejected(self):
         with self.assertRaises(ValidationError):
             validate_digital_file_type(_uploaded("virus.exe", 0.01))
@@ -105,14 +135,19 @@ class ModelFieldValidatorsTests(TestCase):
         self.assertTrue(has_min)
 
     def test_cover_image_extensions(self):
+        """
+        Les extensions passées à Django doivent être SANS point
+        (Django strip le point avant comparaison).
+        """
         ext_validators = [
             v for v in self._validators_for('cover_image')
             if isinstance(v, FileExtensionValidator)
         ]
         self.assertEqual(len(ext_validators), 1)
+        # Sans point, en minuscules
         self.assertEqual(
             sorted(ext_validators[0].allowed_extensions),
-            sorted(EXTENSIONS['cover'])
+            sorted([e.lstrip('.').lower() for e in EXTENSIONS['cover']])
         )
 
     def test_digital_file_has_type_validator(self):

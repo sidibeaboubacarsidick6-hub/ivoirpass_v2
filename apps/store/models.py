@@ -21,6 +21,7 @@ from .validators import (
     ALLOWED_DIGITAL_EXTENSIONS,
     validate_file_size,
     validate_digital_file_type,
+    django_file_extensions,
 )
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ class Product(models.Model):
         null=True,
         blank=True,
         validators=[
-            FileExtensionValidator(EXTENSIONS['cover']),
+            FileExtensionValidator(django_file_extensions('cover')),
             validate_file_size(MAX_MB['cover']),
         ]
     )
@@ -144,7 +145,7 @@ class Product(models.Model):
         blank=True,
         help_text="Extrait gratuit (PDF, MP3...)",
         validators=[
-            FileExtensionValidator(EXTENSIONS['preview']),
+            FileExtensionValidator(django_file_extensions('preview')),
             validate_file_size(MAX_MB['preview']),
         ]
     )
@@ -155,8 +156,10 @@ class Product(models.Model):
         blank=True,
         help_text="Fichier complet — non accessible publiquement",
         validators=[
-            FileExtensionValidator(ALLOWED_DIGITAL_EXTENSIONS),
-            validate_digital_file_type,  # limite par type réel (audio/vidéo/etc.)
+            FileExtensionValidator(
+                django_file_extensions('audio', 'video', 'book', 'image', 'archive')
+            ),
+            validate_digital_file_type,
         ]
     )
 
