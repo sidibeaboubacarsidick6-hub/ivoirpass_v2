@@ -370,19 +370,28 @@ class Product(models.Model):
 
 
 # ============================================================
-# LEGACY — Tunnel "achat avec compte" désactivé (audit H-3).
+# LEGACY — Tunnel "achat avec compte" désactivé (audit H-3)
 #
 # ProductOrder + DownloadLink ne reçoivent plus AUCUNE nouvelle
 # ligne depuis le passage à l'achat invité (GuestProductOrder).
-# MAIS ils restent LUS par :
-#   - le back-office financier (apps/dashboard/views.py)
-#   - les exports admin CSV/Excel (apps/dashboard/admin.py)
-#   - le rapport BCEAO mensuel (apps/dashboard/tasks.py)
-#   - les factures PDF (apps/accounts/views.py)
+# MAIS ils restent LUS activement par :
 #
-# ⚠️ NE PAS SUPPRIMER sans un chantier dédié (réécriture des
-# consommateurs ci-dessus + FK Payment + signaux dashboard).
-# Voir état du chantier : PROJECT_STATE.md — "Reporté étape 4".
+#   - Le back-office financier (apps/dashboard/views.py)
+#   - Les exports admin CSV/Excel (apps/dashboard/admin.py)
+#   - Le rapport BCEAO mensuel (apps/dashboard/tasks.py)
+#   - Les factures PDF (apps/accounts/views.py)
+#   - La FK Payment.store_order (apps/payments/models.py)
+#   - Les signaux dashboard (apps/dashboard/signals.py)
+#
+# ⚠️ NE PAS SUPPRIMER sans un chantier dédié qui couvre :
+#     1. La réécriture des consommateurs ci-dessus
+#     2. La FK Payment.store_order
+#     3. Les signaux dashboard
+#     4. La validation d'absence de données en preprod/prod
+#
+# Vérifié en preprod le 2026-09-27 : 0 ProductOrder, 0 DownloadLink.
+# Décision chantier boutique : suppression reportée.
+# Voir PROJECT_STATE.md — section "Chantier Boutique Culturelle".
 # ============================================================
 class ProductOrder(models.Model):
     """
@@ -704,6 +713,9 @@ class ProductOrder(models.Model):
                 )
 
 
+# LEGACY — voir commentaire ci-dessus (ProductOrder).
+# Consommé uniquement par l'admin ProductOrderAdmin (retiré du site).
+# Ne pas supprimer : dépendance historique du tunnel "avec compte".
 class DownloadLink(models.Model):
     """
     Lien de téléchargement sécurisé et temporaire.
