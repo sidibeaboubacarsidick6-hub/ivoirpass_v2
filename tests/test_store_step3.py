@@ -99,12 +99,9 @@ class KYCPublishProductTests(TestCase):
             reverse('store:product_create'), data=self._form_data(),
         )
 
-        # Reste sur le formulaire (200), pas de redirect vers my_products
         self.assertEqual(response.status_code, 200)
-        # Message KYC visible
         self.assertContains(response, 'KYC')
         self.assertContains(response, 'CNI')
-        # Aucun produit créé
         self.assertEqual(Product.objects.count(), before_count)
 
     def test_publish_with_kyc_succeeds(self):
@@ -114,7 +111,6 @@ class KYCPublishProductTests(TestCase):
         response = self.client.post(
             reverse('store:product_create'), data=self._form_data(),
         )
-        # Redirect vers my_products
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             Product.objects.filter(name='Album KYC Test').exists(),
@@ -134,6 +130,22 @@ class KYCPublishProductTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             Product.objects.filter(name='Album KYC Test').exists(),
+        )
+
+    def test_get_product_create_returns_200(self):
+        """
+        Régression : la vue product_create doit retourner la page sur un
+        GET (500 observé en preprod le 2026-09-27 — le `return render`
+        final avait été perdu lors d'un copier-coller).
+        """
+        user = _make_organizer(kyc=True)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('store:product_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'store/product_form.html',
+            [t.name for t in response.templates],
         )
 
 
@@ -176,7 +188,6 @@ class BundleStockZeroTests(TestCase):
                 'delivery_method': 'download',
             },
         )
-        # Redirect vers le paiement PayDunya
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             GuestProductOrder.objects.filter(
@@ -202,11 +213,8 @@ class BundleStockZeroTests(TestCase):
                 'delivery_city': 'Abidjan',
             },
         )
-        # Reste sur le formulaire (200)
         self.assertEqual(response.status_code, 200)
-        # Message clair
         self.assertContains(response, 'épuisée')
-        # Aucune commande créée
         self.assertFalse(
             GuestProductOrder.objects.filter(email='acheteur@test.com').exists()
         )
@@ -250,8 +258,6 @@ class GuestOrderCancelRestoreStockTests(TestCase):
 
     def test_cancel_after_physical_purchase_restores_stock(self):
         """Si la livraison physique avait été engagée, cancel restaure."""
-        # Simulation manuelle de la décrémentation (mark_as_paid le fait,
-        # mais on veut un test unitaire de cancel).
         product, order = self._make_paid_order(
             GuestProductOrder.DeliveryMethod.DELIVERY,
             quantity=2, initial_stock=10,
@@ -271,12 +277,10 @@ class GuestOrderCancelRestoreStockTests(TestCase):
             GuestProductOrder.DeliveryMethod.DOWNLOAD,
             quantity=2, initial_stock=10,
         )
-        # Stock reste à 10 (mark_as_paid ne décrémente pas pour download)
-
         order.cancel()
 
         product.refresh_from_db()
-        self.assertEqual(product.stock, 10)  # inchangé
+        self.assertEqual(product.stock, 10)
 
     def test_refund_after_physical_purchase_restores_stock(self):
         product, order = self._make_paid_order(
@@ -297,11 +301,10 @@ class GuestOrderCancelRestoreStockTests(TestCase):
             GuestProductOrder.DeliveryMethod.DOWNLOAD,
             quantity=2, initial_stock=10,
         )
-
         order.refund()
 
         product.refresh_from_db()
-        self.assertEqual(product.stock, 10)  # inchangé
+        self.assertEqual(product.stock, 10)
 
     def test_cancel_twice_is_idempotent(self):
         """Deux cancel() ne doivent pas restituer 2× le stock."""
@@ -313,7 +316,7 @@ class GuestOrderCancelRestoreStockTests(TestCase):
         product.save(update_fields=['stock'])
 
         order.cancel()
-        order.cancel()  # 2e appel : ne doit rien faire
+        order.cancel()
 
         product.refresh_from_db()
-        self.assertEqual(product.stock, 10)  # 10, pas 12
+        self.assertEqual(product.stock, 10)

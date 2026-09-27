@@ -28,42 +28,9 @@ logger = logging.getLogger(__name__)
 # ✅ CORRECTIF AUDIT — H-2 : confirmation boutique invité robuste
 # face à un stock devenu insuffisant entre la création de la
 # commande et la confirmation du paiement.
-#
-# GuestProductOrder.mark_as_paid() lève une ValueError si le stock
-# physique manque au moment de décrémenter (voir apps/store/models.py).
-# Avant ce correctif :
-#   - guest_store_payment_return : l'exception n'était pas interceptée
-#     -> 500 renvoyée à un client qui vient de payer.
-#   - guest_store_webhook : l'exception était avalée par un
-#     `except Exception` générique -> silence total, PayDunya reçoit
-#     quand même "OK" (pas de retry), personne n'est alerté.
-#   - reconcile_pending_payments (apps/payments/tasks.py) : replante à
-#     chaque exécution (toutes les 20 min) sur la même commande.
-#
-# Ce helper centralise la confirmation : en cas de ValueError, il trace
-# une AuditLog dédiée (paiement encaissé, stock indisponible) et alerte
-# les admins par email immédiatement, au lieu de laisser planter ou
-# disparaître silencieusement l'incident.
 # ============================================================
 def _confirm_guest_product_order_safely(order, token, raw_data, source):
-    """
-    Tente de confirmer une GuestProductOrder après paiement PayDunya.
-
-    Args:
-        order: la GuestProductOrder à confirmer.
-        token: le token PayDunya du paiement.
-        raw_data: la réponse brute PayDunya (pour le Payment.raw_response).
-        source: 'retour' ou 'webhook' — uniquement pour le message d'audit.
-
-    Returns:
-        (newly_confirmed: bool, stock_conflict: bool)
-        - newly_confirmed=True  : commande confirmée par cet appel.
-        - newly_confirmed=False, stock_conflict=False : déjà confirmée par
-          un appel concurrent (cas normal d'idempotence).
-        - newly_confirmed=False, stock_conflict=True : paiement réellement
-          encaissé par PayDunya, mais stock insuffisant — nécessite une
-          intervention humaine (remboursement ou réapprovisionnement).
-    """
+    """..."""
     try:
         newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
     except ValueError as e:
@@ -107,12 +74,7 @@ def _confirm_guest_product_order_safely(order, token, raw_data, source):
 
 
 def _alert_admins_stock_conflict(order, token):
-    """
-    Alerte immédiate des admins — même patron que
-    apps.payments.tasks._send_anomaly_alert — dès qu'un paiement encaissé
-    ne peut pas être confirmé faute de stock. Best-effort : ne doit jamais
-    faire planter la confirmation elle-même.
-    """
+    """..."""
     try:
         from django.conf import settings
         from django.core.mail import send_mail
@@ -150,7 +112,6 @@ def _alert_admins_stock_conflict(order, token):
 
 def store_list(request):
     """Boutique publique — liste de tous les produits."""
-    # 🔥 Cache par query string (5 minutes)
     query = request.GET.get('q', '')
     category_slug = request.GET.get('category', '')
     product_type = request.GET.get('type', '')
@@ -212,13 +173,11 @@ def store_detail(request, slug):
         status=Product.Status.PUBLISHED
     )
 
-    # Produits similaires
     similar = Product.objects.filter(
         status=Product.Status.PUBLISHED,
         category=product.category
     ).exclude(pk=product.pk).order_by('-sold_count')[:4]
 
-    # L'utilisateur a-t-il déjà acheté ce produit ?
     already_purchased = False
     download_links    = []
     if request.user.is_authenticated:
@@ -243,25 +202,13 @@ def store_detail(request, slug):
 
 @login_required
 def my_orders(request):
-    """
-    Achat "avec compte" retiré (audit H-3) : le tunnel d'achat boutique
-    passe désormais uniquement par l'achat invité (guest_buy_product /
-    GuestProductOrder). Cette vue reste une simple redirection car elle
-    est encore référencée par le lien "Commandes boutique" du menu
-    vendeur (templates/dashboard/base_dashboard.html).
-    """
+    """Redirect vers l'accueil (achat "avec compte" retiré, audit H-3)."""
     return redirect('home')
 
 
 @login_required
 def download_file(request, token):
-    """
-    Achat "avec compte" retiré (audit H-3) : conservée en simple
-    redirection car référencée par templates/store/detail.html (section
-    "déjà acheté") et templates/pages/my_orders_history.html. Le
-    téléchargement des achats invité passe par guest_download_file /
-    GuestDownloadLink.
-    """
+    """Redirect vers l'accueil (achat "avec compte" retiré, audit H-3)."""
     return redirect('home')
 
 
@@ -305,7 +252,7 @@ def my_products(request):
 
 @seller_required
 def product_stats(request, slug):
-    """Statistiques detaillees d'un produit boutique (comparable a event_stats)."""
+    """Statistiques detaillees d'un produit boutique."""
     from decimal import Decimal
     from django.db.models import Sum
     from datetime import timedelta
@@ -324,7 +271,6 @@ def product_stats(request, slug):
     commission      = gross_decimal * commission_rate
     net_revenue     = gross_decimal - commission
 
-    # Repartition par format choisi (surtout utile pour les bundles)
     format_stats = []
     for method_value, method_label in GuestProductOrder.DeliveryMethod.choices:
         method_orders = orders.filter(delivery_method=method_value)
@@ -336,15 +282,12 @@ def product_stats(request, slug):
                 'revenue': method_orders.aggregate(t=Sum('subtotal'))['t'] or 0,
             })
 
-    # Telechargements (produits numeriques/bundle)
     download_links  = GuestDownloadLink.objects.filter(product=product)
     downloads_used  = download_links.aggregate(t=Sum('download_count'))['t'] or 0
     downloads_total = download_links.aggregate(t=Sum('max_downloads'))['t'] or 0
 
-    # Commandes recentes
     recent_orders = orders[:20]
 
-    # Timeline des ventes (30 derniers jours)
     sales_timeline = []
     today = timezone.now().date()
     for i in range(29, -1, -1):
@@ -369,11 +312,7 @@ def product_stats(request, slug):
 
 @seller_required
 def product_buyers(request, slug):
-    """
-    Liste complète des acheteurs d'un produit — recherche/filtrage,
-    export CSV et impression. Même patron que la liste des participants
-    d'un événement (apps/dashboard/views.py:participants).
-    """
+    """Liste des acheteurs d'un produit."""
     product = get_object_or_404(Product, slug=slug, seller=request.user)
 
     orders = GuestProductOrder.objects.filter(
@@ -404,7 +343,7 @@ def product_buyers(request, slug):
 
 @seller_required
 def export_product_buyers_csv(request, slug):
-    """Exporte la liste complète des acheteurs d'un produit en CSV."""
+    """Exporte la liste des acheteurs d'un produit en CSV."""
     import csv
 
     product = get_object_or_404(Product, slug=slug, seller=request.user)
@@ -414,7 +353,7 @@ def export_product_buyers_csv(request, slug):
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="acheteurs_{product.slug}.csv"'
-    response.write('﻿')
+    response.write('\ufeff')
     writer = csv.writer(response)
     writer.writerow(['Commande', 'Nom', 'Email', 'Téléphone', 'Format', 'Qté', 'Montant', 'Date'])
     for order in orders:
@@ -446,10 +385,6 @@ def product_create(request):
             product.seller = request.user
 
             # ── Garde-fou KYC : publication d'un produit payant ──────
-            # Aligné sur la billetterie (apps/events/views.py:218).
-            # `extra_tags='danger kyc-persistent'` = même mécanisme que
-            # pour la publication d'événement payant (message persistant
-            # rendu côté template avec un timeout ≥ 15s).
             if (
                 product.status == Product.Status.PUBLISHED
                 and not request.user.is_organizer_verified
@@ -568,7 +503,6 @@ def store_webhook(request):
         logger.warning("Store webhook: body vide")
         return HttpResponse('OK', status=200)
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Store webhook rejeté : signature PayDunya invalide")
@@ -592,7 +526,6 @@ def store_webhook(request):
 
         logger.info(f"Store webhook: order={order_number}, status={status}, token={token}")
 
-        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
@@ -601,11 +534,6 @@ def store_webhook(request):
 
         if status == 'completed' and order_number:
             try:
-                # Verrouille la ligne commande pour rester robuste face aux
-                # retries de webhook PayDunya (deux livraisons quasi
-                # simultanées ne doivent confirmer/décrémenter le stock
-                # qu'une seule fois) — même patron que pour les commandes
-                # de billetterie (apps/tickets/models.py mark_as_paid).
                 with transaction.atomic():
                     order = ProductOrder.objects.select_for_update().get(
                         order_number=order_number,
@@ -660,10 +588,7 @@ def store_webhook(request):
 # ============================================
 
 def guest_buy_product(request, slug):
-    """
-    Achat sans compte — formulaire dynamique selon le type de produit.
-    Le client peut acheter le même produit autant de fois qu'il veut.
-    """
+    """Achat sans compte — formulaire dynamique selon le type de produit."""
     product = get_object_or_404(Product, slug=slug, status=Product.Status.PUBLISHED)
 
     if not product.is_available:
@@ -686,7 +611,6 @@ def guest_buy_product(request, slug):
         if not last_name:  errors.append("Le nom est requis.")
         if not email:      errors.append("L'email est requis.")
 
-        # Adresse obligatoire si livraison physique (seule ou en bundle)
         if delivery_method in ('delivery', 'both'):
             delivery_name    = request.POST.get('delivery_name', '').strip()
             delivery_phone   = request.POST.get('delivery_phone', '').strip()
@@ -698,9 +622,6 @@ def guest_buy_product(request, slug):
             if not delivery_city:    errors.append("La ville est requise.")
 
         # ── Fix bundle stock=0 : bloquer la livraison physique si épuisée ─
-        # Un bundle avec stock=0 doit rester achetable UNIQUEMENT en
-        # version numérique (delivery_method='download'). Message clair
-        # pour guider l'acheteur.
         if delivery_method in ('delivery', 'both') and not product.is_available_physical:
             errors.append(
                 "Version physique épuisée. Choisissez la version numérique "
@@ -714,7 +635,6 @@ def guest_buy_product(request, slug):
                 messages.error(request, e)
             return render(request, 'store/guest_checkout.html', {'product': product})
 
-        # Calcul montants — pour un bundle, le prix depend du format choisi
         if product.product_type == Product.ProductType.BUNDLE:
             if delivery_method == 'download':
                 unit_price = product.price_digital
@@ -728,9 +648,8 @@ def guest_buy_product(request, slug):
         else:
             unit_price = product.price
         subtotal = unit_price * quantity
-        total    = subtotal  # Commission prélevée sur le vendeur, pas sur l'acheteur
+        total    = subtotal
 
-        # 🔒 Verrouillage du stock pour éviter les race conditions
         from django.db import transaction
 
         with transaction.atomic():
@@ -842,11 +761,6 @@ def guest_store_payment_initiate(request, order_number):
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
 
-            # Enregistrement Payment (traçabilité back-office/réconciliation —
-            # voir audit : la boutique ne créait jusqu'ici aucune ligne
-            # Payment, contrairement à la billetterie, et n'apparaissait donc
-            # ni dans le back-office financier ni dans la réconciliation
-            # automatique).
             from apps.payments.models import Payment
             Payment.objects.get_or_create(
                 guest_product_order=order,
@@ -908,13 +822,6 @@ def guest_store_payment_return(request, order_number):
         status = result.get('status', '') or result.get('data', {}).get('invoice', {}).get('status', '')
 
         if result.get('success') and status == 'completed':
-            # mark_as_paid() est verrouillé et idempotent : si le webhook a
-            # déjà confirmé la commande entre-temps, il renvoie False et on
-            # évite de dupliquer le log d'audit et l'email de confirmation.
-            # ✅ H-2 : passe désormais par le helper sécurisé — une
-            # ValueError (stock insuffisant) est tracée et alertée au lieu
-            # de faire planter cette vue avec une 500 pour un client qui
-            # vient de payer.
             newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
                 order, token, result, source='retour'
             )
@@ -926,9 +833,6 @@ def guest_store_payment_return(request, order_number):
                     logger.error(f"Email guest store erreur: {e}")
                 messages.success(request, f"Commande {order.order_number} confirmée !")
             elif stock_conflict:
-                # ✅ H-2 : le client a bien payé — on ne lui montre jamais
-                # d'erreur serveur brute, mais un message clair. Le back-
-                # office a déjà été alerté par _confirm_guest_product_order_safely.
                 messages.warning(
                     request,
                     "Votre paiement a bien été reçu. Votre commande est en "
@@ -961,7 +865,6 @@ def guest_store_webhook(request):
     if not request.body:
         return HttpResponse('EMPTY', status=200)
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Guest store webhook rejeté : signature PayDunya invalide")
@@ -981,7 +884,6 @@ def guest_store_webhook(request):
         token        = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_store_order_number', '')
 
-        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
@@ -994,15 +896,6 @@ def guest_store_webhook(request):
                     order_number=order_number,
                     status=GuestProductOrder.Status.PENDING
                 )
-                # mark_as_paid() est verrouillé et idempotent : si le retour
-                # navigateur a déjà confirmé la commande entre-temps, il
-                # renvoie False et on évite de dupliquer log/email.
-                # ✅ H-2 : passe par le helper sécurisé — avant ce correctif,
-                # une ValueError (stock insuffisant) ici était avalée par le
-                # `except Exception` générique de cette vue, qui renvoyait
-                # quand même "OK" à PayDunya (donc jamais de retry) sans que
-                # personne ne soit alerté. Le conflit est maintenant tracé
-                # en AuditLog et notifié aux admins par email.
                 newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
                     order, token, data, source='webhook'
                 )
@@ -1030,14 +923,9 @@ def guest_download_file(request, token):
     """
     Téléchargement sécurisé invité.
 
-    Comportement selon le produit :
-    - Si `product.external_url` est renseigné → incrémente
-      `external_click_count` puis redirige vers cette URL. Ne consomme
-      PAS la limite de téléchargements (décision Q11 du chantier boutique).
-    - Sinon → sert le fichier `digital_file` avec filigrane (comportement
-      historique inchangé).
-
-    Si les deux sont renseignés, `external_url` est prioritaire (décision Q8).
+    - Si `product.external_url` renseigné → incrémente `external_click_count`
+      puis redirige. Ne consomme PAS la limite de téléchargements (Q11).
+    - Sinon → sert le fichier `digital_file` avec filigrane.
     """
     link = get_object_or_404(GuestDownloadLink, token=token)
 
@@ -1054,9 +942,7 @@ def guest_download_file(request, token):
 
     product = link.product
 
-    # ── Cas 1 : lien externe (Spotify, Deezer, Bandcamp...) ──────────
-    # Incrément atomique via F() — évite une race si l'utilisateur
-    # double-clique (deux requêtes concurrentes).
+    # ── Cas 1 : lien externe ─────────────────────────────────────────
     if product.external_url:
         GuestDownloadLink.objects.filter(pk=link.pk).update(
             external_click_count=F('external_click_count') + 1
@@ -1065,12 +951,8 @@ def guest_download_file(request, token):
 
     # ── Cas 2 : fichier interne → filigrane ──────────────────────────
     if not product.digital_file:
-        # Ni fichier ni URL externe : impossible normalement (bloqué
-        # en amont par ProductForm.clean), mais on reste défensif.
         raise Http404("Produit sans fichier téléchargeable")
 
-    # Incrémente la limite UNIQUEMENT pour un vrai téléchargement de
-    # fichier (pas pour une redirection externe, cf. Q11).
     link.download_count += 1
     link.save(update_fields=['download_count'])
 
@@ -1093,44 +975,13 @@ def guest_download_file(request, token):
 
     return response
 
-    buyer_name = link.order.buyer_name
-    order_number = link.order.order_number
-
-    from .watermark import add_watermark
-    watermarked, filename = add_watermark(
-        product.digital_file.path, buyer_name, order_number
-    )
-
-    if watermarked:
-        response = FileResponse(watermarked, as_attachment=True, filename=filename)
-    else:
-        response = FileResponse(
-            open(product.digital_file.path, 'rb'),
-            as_attachment=True,
-            filename=os.path.basename(product.digital_file.path)
-        )
-
-    return response
-
 
 def guest_store_payment_cancel(request, order_number):
-    """
-    Annulation paiement boutique invité.
-
-    Ne marque annulé que si la commande est encore PENDING — évite
-    d'écraser un statut PAID si un webhook est arrivé entre-temps (même
-    principe que guest_payment_cancel côté billetterie). Redirige vers la
-    page de confirmation (qui affiche un message distinct par statut)
-    plutôt que vers la fiche produit, pour rester cohérent avec le parcours
-    billetterie.
-    """
+    """Annulation paiement boutique invité."""
     order = get_object_or_404(GuestProductOrder, order_number=order_number)
     if order.status == GuestProductOrder.Status.PENDING:
         from apps.payments.models import Payment
 
-        # Ferme les deux portes de la course annulation/réconciliation :
-        # la commande devient terminalement CANCELLED et son Payment PENDING
-        # ne doit plus être candidat à reconcile_pending_payments.
         order.status = GuestProductOrder.Status.CANCELLED
         order.save(update_fields=['status'])
         Payment.objects.filter(
