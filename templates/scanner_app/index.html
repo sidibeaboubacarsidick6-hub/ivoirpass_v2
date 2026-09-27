@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -6,8 +6,10 @@
     <meta name="theme-color" content="#0d0d0d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="IvoirPass">
     <title>IvoirPass Scanner</title>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <link rel="manifest" href="/scanner/app/manifest.json">
+    <script src="{% static 'scanner-app/html5-qrcode.min.js' %}"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -266,6 +268,41 @@
         function updateCounters(){document.getElementById('validCount').textContent=validCount;document.getElementById('invalidCount').textContent=invalidCount;}
         function updateHistory(){document.getElementById('historyDrawer').innerHTML=history.map(h=>`<div class="item ${h.result==='valid'?'valid':'invalid'}">${h.result==='valid'?'✅':'❌'} ${h.time} — ${h.msg}</div>`).join('');}
         function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
+
+
+                // ── Chantier B : enregistrement du Service Worker ──────────
+        // Permet à l'app de fonctionner hors ligne (mode avion).
+        // Le SW est servi par une vue Django à /scanner/app/sw.js
+        // (voir apps/scanner/views.py:serve_service_worker).
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker
+                    .register('/scanner/app/sw.js', { scope: '/scanner/app/' })
+                    .then((reg) => console.log('[SW] enregistré', reg.scope))
+                    .catch((err) => console.warn('[SW] échec enregistrement', err));
+            });
+        }
+
+        // Badge "hors ligne" : affiche un bandeau rouge quand pas de réseau.
+        function updateOnlineStatus() {
+            const offline = !navigator.onLine;
+            let banner = document.getElementById('offlineBanner');
+            if (offline && !banner) {
+                banner = document.createElement('div');
+                banner.id = 'offlineBanner';
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;' +
+                    'background:#dc3545;color:white;padding:8px;text-align:center;' +
+                    'font-weight:700;z-index:9999;font-size:0.85rem;';
+                banner.textContent = '🔴 Hors ligne — les scans sont enregistrés localement';
+                document.body.prepend(banner);
+            } else if (!offline && banner) {
+                banner.remove();
+            }
+        }
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+
 
         async function checkSession() {
             try {

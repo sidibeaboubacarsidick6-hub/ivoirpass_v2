@@ -267,3 +267,66 @@ def scanner_app(request):
     return render(request, 'scanner_app/index.html', {
         'already_logged_in': already_logged_in,
     })
+
+
+
+# ============================================================
+# CHANTIER B — Scanner PWA offline : servir SW + manifest
+# ============================================================
+# Le Service Worker DOIT être servi depuis un chemin qui contrôle
+# son scope (par défaut = son dossier). On le met à /scanner/app/sw.js
+# pour que son scope soit exactement /scanner/app/.
+#
+# On ne peut PAS le mettre dans /static/ (scope trop restreint).
+# On le sert donc via une vue qui renvoie le contenu du fichier
+# statique avec les bons headers.
+# ============================================================
+
+def serve_service_worker(request):
+    """
+    Sert le Service Worker du scanner PWA.
+
+    Headers critiques :
+      - Content-Type: application/javascript
+      - Cache-Control: no-cache (sinon les mises à jour du SW ne se
+        propagent pas → l'app reste sur une vieille version)
+      - Service-Worker-Allowed: /scanner/app/ (autorise le scope)
+    """
+    from django.http import FileResponse
+    from django.conf import settings
+    import os
+
+    path = os.path.join(
+        settings.BASE_DIR, 'static', 'scanner-app', 'sw.js'
+    )
+    if not os.path.exists(path):
+        from django.http import Http404
+        raise Http404("Service worker introuvable")
+
+    response = FileResponse(open(path, 'rb'), content_type='application/javascript')
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Service-Worker-Allowed'] = '/scanner/app/'
+    return response
+
+
+def serve_manifest(request):
+    """
+    Sert le manifest PWA du scanner.
+
+    Pas de cache agressif : si on change le nom/start_url/icônes, on
+    veut que le navigateur le voie rapidement.
+    """
+    from django.http import FileResponse
+    from django.conf import settings
+    import os
+
+    path = os.path.join(
+        settings.BASE_DIR, 'static', 'scanner-app', 'manifest.json'
+    )
+    if not os.path.exists(path):
+        from django.http import Http404
+        raise Http404("Manifest introuvable")
+
+    response = FileResponse(open(path, 'rb'), content_type='application/manifest+json')
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
