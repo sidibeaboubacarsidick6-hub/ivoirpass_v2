@@ -15,7 +15,7 @@
  * purgés à l'activation (voir event 'activate').
  */
 
-const CACHE_NAME = 'ivoirpass-scanner-v1';
+const CACHE_NAME = 'ivoirpass-scanner-v2';
 
 // Ressources pré-cachées à l'installation (chemin relatifs à /scanner/app/)
 const PRECACHE_URLS = [
