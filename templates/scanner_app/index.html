@@ -538,25 +538,180 @@
             updateCounters();updateHistory();
         }
 
-        function onScan(decodedText) {
+        // ============================================================
+        // CHANTIER B — B-5 : scan offline (cache-first)
+        // ============================================================
+        // Stratégie :
+        //   1. Chercher le billet dans IndexedDB (rapide, offline OK)
+        //   2. Si trouvé → décision locale + queue pour sync
+        //   3. Si PAS trouvé :
+        //      - En ligne → fallback API (comportement historique)
+        //      - Hors ligne → refus "non reconnu (mode hors ligne)"
+        //
+        // ⚠️ Pas de vérif HMAC côté client (Q-B5-3) : la validation
+        // locale se fait sur uuid+ticket_number. Le serveur revérifie
+        // la signature HMAC au moment du sync (voir _process_scan).
+        // ============================================================
+
+        async function onScan(decodedText) {
             if(!scanning)return;scanning=false;
-            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
-            .then(r=>r.json()).then(data=>{
-                if(data.result==='unauthorized'){alert('Session expirée.');stopScan();return;}
-                showResult(data);
-                data.result==='valid'?validCount++:invalidCount++;
-                updateCounters();
-                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:data.result,msg:data.message.substring(0,30)});
-                if(history.length>30)history.pop();
-                updateHistory();
-                setTimeout(()=>{hideResult();scanning=true;},1500);
-            }).catch(()=>{
-                showResult({result:'error',message:'Erreur réseau',color:'red'});
-                invalidCount++;updateCounters();
-                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:'error',msg:'Erreur réseau'});
-                updateHistory();
-                setTimeout(()=>{hideResult();scanning=true;},1500);
+
+            const data = await processScan(decodedText);
+
+            if(data.result === 'unauthorized') {
+                alert('Session expirée.');
+                stopScan();
+                return;
+            }
+
+            showResult(data);
+            data.result === 'valid' ? validCount++ : invalidCount++;
+            updateCounters();
+            history.unshift({
+                time: new Date().toLocaleTimeString().slice(0,5),
+                result: data.result,
+                msg: data.message.substring(0,30) + (data.offline ? ' (hors ligne)' : ''),
             });
+            if(history.length>30)history.pop();
+            updateHistory();
+
+            setTimeout(()=>{hideResult();scanning=true;},1500);
+        }
+
+        // ── Décision de scan : cache-first + fallback API ──────────
+        async function processScan(decodedText) {
+            const parts = decodedText.split(':');
+            if (parts.length < 4) {
+                return {result:'invalid_qr', message:'QR Code invalide', color:'red'};
+            }
+            const ticketNumber = parts[1];
+
+            // 1) Cache local
+            let cached = null;
+            try {
+                cached = await dbGetTicketByNumber(eventId, ticketNumber);
+            } catch(e) {
+                console.warn('[scan] cache lookup échoué', e);
+            }
+
+            if (cached) {
+                return await decideLocally(cached, decodedText);
+            }
+
+            // 2) Fallback API si en ligne
+            if (navigator.onLine) {
+                return await callScanApi(decodedText);
+            }
+
+            // 3) Hors ligne + non caché
+            return {
+                result: 'not_found',
+                message: 'Billet non reconnu (mode hors ligne)',
+                color: 'red',
+                offline: true,
+            };
+        }
+
+        // ── Décision locale (même ordre que _process_scan serveur) ──
+        async function decideLocally(cached, decodedText) {
+            // 1) Mauvais événement
+            if (cached.event_id !== eventId) {
+                return {
+                    result: 'wrong_event',
+                    message: 'Ce billet est pour un autre événement',
+                    color: 'orange',
+                    offline: true,
+                };
+            }
+
+            // 2) Déjà utilisé
+            if (cached.status === 'used') {
+                return {
+                    result: 'already_used',
+                    message: 'Déjà utilisé',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 3) Annulé (void)
+            if (cached.status === 'void') {
+                return {
+                    result: 'ticket_void',
+                    message: 'Billet annulé',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 4) Expiré
+            if (cached.status === 'expired') {
+                return {
+                    result: 'invalid_qr',
+                    message: 'Billet expiré',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 5) Valide → valider localement
+            if (cached.status === 'valid') {
+                try {
+                    // Empêche le double-scan sur cet appareil
+                    await dbUpdateTicketStatus(cached.uuid, 'used');
+                    // Queue pour sync serveur (avec client_uuid pour idempotence)
+                    await dbAddToQueue(eventId, decodedText);
+                } catch(e) {
+                    console.error('[scan] échec écriture cache/queue', e);
+                }
+
+                return {
+                    result: 'valid',
+                    message: 'Accès autorisé ✅',
+                    color: 'green',
+                    offline: !navigator.onLine,
+                    ticket_info: {
+                        ticket_number: cached.ticket_number,
+                        ticket_type: cached.ticket_type,
+                        buyer_name: cached.buyer_name,
+                    },
+                };
+            }
+
+            // Statut inconnu → fallback API si possible
+            if (navigator.onLine) {
+                return await callScanApi(decodedText);
+            }
+
+            return {
+                result: 'invalid_qr',
+                message: 'Billet dans un état inconnu',
+                color: 'red',
+                offline: true,
+            };
+        }
+
+        // ── Appel API online (comportement historique conservé) ────
+        async function callScanApi(decodedText) {
+            try {
+                const r = await fetch(SCAN_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRF(),
+                    },
+                    body: JSON.stringify({qr_data: decodedText, event_id: eventId}),
+                });
+                const data = await r.json();
+                return data;
+            } catch(e) {
+                console.error('[scan] API échouée', e);
+                return {
+                    result: 'error',
+                    message: 'Erreur réseau',
+                    color: 'red',
+                };
+            }
         }
 
         function showResult(d){
