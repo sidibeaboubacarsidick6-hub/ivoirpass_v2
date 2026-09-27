@@ -160,6 +160,18 @@ class Product(models.Model):
         ]
     )
 
+    external_url = models.URLField(
+        _('lien externe (album/streaming)'),
+        max_length=500,
+        blank=True,
+        help_text=(
+            "Spotify, Apple Music, Deezer, Bandcamp... "
+            "Remplis ce champ OU uploade un fichier numérique. "
+            "Si les deux sont renseignés, l'URL externe est servie "
+            "en priorité (pour compter les clics)."
+        ),
+    )
+
     # Métadonnées produit
     author = models.CharField(_('auteur/artiste'), max_length=200, blank=True)
     publisher = models.CharField(_('éditeur/label'), max_length=200, blank=True)
@@ -1121,6 +1133,14 @@ class GuestDownloadLink(models.Model):
     download_count = models.PositiveIntegerField(
         _('téléchargements effectués'),
         default=0
+    )
+    external_click_count = models.PositiveIntegerField(
+        _('clics vers lien externe'),
+        default=0,
+        help_text=(
+            "Compteur informatif des clics vers product.external_url. "
+            "Ne consomme PAS la limite de téléchargements."
+        ),
     )
     max_downloads = models.PositiveIntegerField(
         _('limite de téléchargements'),

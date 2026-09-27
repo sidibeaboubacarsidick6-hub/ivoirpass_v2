@@ -15,7 +15,7 @@ class ProductForm(forms.ModelForm):
             'description', 'short_description', 'tags',
             'author', 'publisher', 'year', 'language',
             'pages', 'duration', 'isbn',
-            'cover_image', 'preview_file', 'digital_file',
+            'cover_image', 'preview_file', 'digital_file', 'external_url',
             'price', 'price_physical', 'price_digital',
             'stock',
             'status',
@@ -91,6 +91,10 @@ class ProductForm(forms.ModelForm):
                     '.zip'
                 ),
             }),
+            'external_url': forms.URLInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'https://open.spotify.com/album/...',
+            }),
             'price': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '5000',
@@ -131,9 +135,36 @@ class ProductForm(forms.ModelForm):
             'cover_image':            'Image de couverture',
             'preview_file':           'Fichier aperçu (extrait gratuit)',
             'digital_file':           'Fichier numérique complet',
+            'external_url':           'Lien externe (album/streaming)',
             'price':                  'Prix (FCFA) *',
             'price_physical':         'Prix version physique',
             'price_digital':          'Prix version numérique',
             'stock':                  'Stock physique (0 = illimité pour numérique)',
             'status':                 'Statut',
         }
+
+    def clean(self):
+        """
+        Validation croisée :
+        - Un produit DIGITAL ou BUNDLE doit avoir AU MOINS un mode
+          de livraison numérique : soit un fichier uploadé (digital_file),
+          soit un lien externe (external_url).
+        - Les deux peuvent coexister (external_url est alors prioritaire
+          côté téléchargement, pour tracer les clics — voir vue
+          guest_download_file).
+        """
+        cleaned = super().clean()
+
+        product_type = cleaned.get('product_type')
+        digital_file = cleaned.get('digital_file') or getattr(self.instance, 'digital_file', None)
+        external_url = cleaned.get('external_url') or getattr(self.instance, 'external_url', '')
+
+        if product_type in (Product.ProductType.DIGITAL, Product.ProductType.BUNDLE):
+            if not digital_file and not external_url:
+                raise forms.ValidationError(
+                    "Un produit numérique (ou bundle) doit avoir soit un "
+                    "fichier à télécharger, soit un lien externe "
+                    "(Spotify, Deezer, Bandcamp...)."
+                )
+
+        return cleaned

@@ -134,6 +134,7 @@
                 Extrait gratuit visible publiquement
               </div>
             </div>
+            <!-- Fichier numérique (upload) -->
             <div class="col-12" x-show="type !== 'physical'">
               <label class="form-label fw-semibold small">{{ form.digital_file.label }}</label>
               {{ form.digital_file }}
@@ -145,6 +146,43 @@
               <div class="mt-1 text-muted small">
                 Fichier actuel : {{ product.file_extension }}
                 ({{ product.file_size_mb }} Mo)
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- Séparateur "OU" -->
+            <div class="col-12" x-show="type !== 'physical'">
+              <div class="d-flex align-items-center gap-3 text-muted small">
+                <hr class="flex-grow-1 m-0" />
+                <span class="fw-bold text-uppercase">OU</span>
+                <hr class="flex-grow-1 m-0" />
+              </div>
+            </div>
+
+            <!-- Lien externe (streaming / album en ligne) -->
+            <div class="col-12" x-show="type !== 'physical'">
+              <label class="form-label fw-semibold small">
+                {{ form.external_url.label }}
+              </label>
+              {{ form.external_url }}
+              <div class="text-muted small mt-1">
+                <i class="bi bi-link-45deg me-1 text-orange"></i>
+                {{ form.external_url.help_text }}
+              </div>
+              <div class="alert alert-light border small mt-2 mb-0 py-2">
+                <i class="bi bi-info-circle me-1 text-green"></i>
+                <strong>Au moins l'un des deux est obligatoire</strong> pour un
+                produit numérique ou bundle : soit un fichier uploadé, soit
+                un lien externe. Si les deux sont renseignés,
+                <strong>le lien externe est servi en priorité</strong>
+                (les clics sont alors comptés).
+              </div>
+              {% if product.external_url %}
+              <div class="mt-1 text-muted small">
+                Lien actuel :
+                <a href="{{ product.external_url }}" target="_blank" rel="noopener">
+                  {{ product.external_url|truncatechars:60 }}
+                </a>
               </div>
               {% endif %}
             </div>
