@@ -366,6 +366,21 @@ class Product(models.Model):
         return 0
 
 
+# ============================================================
+# LEGACY — Tunnel "achat avec compte" désactivé (audit H-3).
+#
+# ProductOrder + DownloadLink ne reçoivent plus AUCUNE nouvelle
+# ligne depuis le passage à l'achat invité (GuestProductOrder).
+# MAIS ils restent LUS par :
+#   - le back-office financier (apps/dashboard/views.py)
+#   - les exports admin CSV/Excel (apps/dashboard/admin.py)
+#   - le rapport BCEAO mensuel (apps/dashboard/tasks.py)
+#   - les factures PDF (apps/accounts/views.py)
+#
+# ⚠️ NE PAS SUPPRIMER sans un chantier dédié (réécriture des
+# consommateurs ci-dessus + FK Payment + signaux dashboard).
+# Voir état du chantier : PROJECT_STATE.md — "Reporté étape 4".
+# ============================================================
 class ProductOrder(models.Model):
     """
     Commande d'un produit culturel.
