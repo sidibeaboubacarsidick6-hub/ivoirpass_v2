@@ -10,9 +10,18 @@ import logging
 from django.db import models, transaction, IntegrityError
 from django.db.models import F
 from django.conf import settings
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify
 from django.utils import timezone
+
+from .validators import (
+    EXTENSIONS,
+    MAX_MB,
+    ALLOWED_DIGITAL_EXTENSIONS,
+    validate_file_size,
+    validate_digital_file_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +92,10 @@ class Product(models.Model):
     )
     description = models.TextField(_('description'))
     short_description = models.TextField(
-        _('description courte'),
+        _('InfoLine'),
         max_length=500,
-        blank=True
+        blank=True,
+        help_text="Numéro de contact du propriétaire"
     )
 
     # Classification
@@ -121,21 +131,45 @@ class Product(models.Model):
         _('image de couverture'),
         upload_to='store/covers/%Y/%m/',
         null=True,
-        blank=True
+        blank=True,
+        validators=[
+            FileExtensionValidator(EXTENSIONS['cover']),
+            validate_file_size(MAX_MB['cover']),
+        ]
     )
     preview_file = models.FileField(
         _('fichier aperçu'),
         upload_to='store/previews/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Extrait gratuit (PDF, MP3...)"
+        help_text="Extrait gratuit (PDF, MP3...)",
+        validators=[
+            FileExtensionValidator(EXTENSIONS['preview']),
+            validate_file_size(MAX_MB['preview']),
+        ]
     )
     digital_file = models.FileField(
         _('fichier numérique'),
         upload_to='store/digital/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Fichier complet — non accessible publiquement"
+        help_text="Fichier complet — non accessible publiquement",
+        validators=[
+            FileExtensionValidator(ALLOWED_DIGITAL_EXTENSIONS),
+            validate_digital_file_type,  # limite par type réel (audio/vidéo/etc.)
+        ]
+    )
+
+    external_url = models.URLField(
+        _('lien externe (album/streaming)'),
+        max_length=500,
+        blank=True,
+        help_text=(
+            "Spotify, Apple Music, Deezer, Bandcamp... "
+            "Remplis ce champ OU uploade un fichier numérique. "
+            "Si les deux sont renseignés, l'URL externe est servie "
+            "en priorité (pour compter les clics)."
+        ),
     )
 
     # Métadonnées produit
@@ -166,7 +200,8 @@ class Product(models.Model):
     price = models.DecimalField(
         _('prix (FCFA)'),
         max_digits=10,
-        decimal_places=0
+        decimal_places=0,
+        validators=[MinValueValidator(500)]
     )
     price_physical = models.DecimalField(
         _('prix version physique'),
@@ -174,7 +209,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie physique"
+        help_text="Pour les bundles : prix partie physique",
+        validators=[MinValueValidator(500)]
     )
     price_digital = models.DecimalField(
         _('prix version numérique'),
@@ -182,7 +218,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie numérique"
+        help_text="Pour les bundles : prix partie numérique",
+        validators=[MinValueValidator(500)]
     )
     stock = models.PositiveIntegerField(
         _('stock physique'),
@@ -286,11 +323,28 @@ class Product(models.Model):
 
     @property
     def is_available(self):
+        """
+        Disponible si publié ET :
+        - PHYSICAL pur : stock > 0
+        - DIGITAL pur  : toujours (le form garantit fichier OU URL externe)
+        - BUNDLE       : toujours (au moins la version numérique est vendable)
+        """
         if self.status != self.Status.PUBLISHED:
             return False
-        if self.is_physical and self.stock == 0:
+        # Un bundle avec stock=0 reste achetable en version numérique seule
+        if self.product_type == self.ProductType.PHYSICAL and self.stock == 0:
             return False
         return True
+
+    @property
+    def is_available_physical(self):
+        """Disponible en physique uniquement si stock > 0."""
+        return self.stock > 0
+
+    @property
+    def is_available_digital(self):
+        """Disponible en numérique si un contenu est fourni (fichier ou URL)."""
+        return bool(self.digital_file or self.external_url)
 
     @property
     def file_extension(self):
@@ -312,6 +366,21 @@ class Product(models.Model):
         return 0
 
 
+# ============================================================
+# LEGACY — Tunnel "achat avec compte" désactivé (audit H-3).
+#
+# ProductOrder + DownloadLink ne reçoivent plus AUCUNE nouvelle
+# ligne depuis le passage à l'achat invité (GuestProductOrder).
+# MAIS ils restent LUS par :
+#   - le back-office financier (apps/dashboard/views.py)
+#   - les exports admin CSV/Excel (apps/dashboard/admin.py)
+#   - le rapport BCEAO mensuel (apps/dashboard/tasks.py)
+#   - les factures PDF (apps/accounts/views.py)
+#
+# ⚠️ NE PAS SUPPRIMER sans un chantier dédié (réécriture des
+# consommateurs ci-dessus + FK Payment + signaux dashboard).
+# Voir état du chantier : PROJECT_STATE.md — "Reporté étape 4".
+# ============================================================
 class ProductOrder(models.Model):
     """
     Commande d'un produit culturel.
@@ -964,7 +1033,6 @@ class GuestProductOrder(models.Model):
                         f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
                     )
         return True
-        return True
 
     def _credit_seller_wallet(self):
         """
@@ -1032,34 +1100,60 @@ class GuestProductOrder(models.Model):
     def cancel(self):
         """
         Annule la commande et restaure le stock si nécessaire.
-        """
-        if self.status in [self.Status.PENDING, self.Status.PAID]:
-            self.status = self.Status.CANCELLED
-            self.save()
 
-            # Restaurer le stock si commande était payée et produit physique
-            if self.product.is_physical and self.status == self.Status.PAID:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest annulée {self.order_number}"
-                )
+        ⚠️ Fix 2026-09 : l'ancienne version testait `self.status == PAID`
+        APRÈS avoir muté `self.status` en CANCELLED → condition toujours
+        fausse → le stock n'était JAMAIS restauré. Corrigé en mémorisant
+        `was_paid` AVANT la mutation.
+        """
+        if self.status not in (self.Status.PENDING, self.Status.PAID):
+            return
+
+        was_paid = (self.status == self.Status.PAID)
+        # On ne restaure que si la livraison physique avait réellement
+        # été engagée lors de mark_as_paid (delivery ou both).
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.CANCELLED
+        self.save(update_fields=['status'])
+
+        if was_paid and delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest annulée {self.order_number}"
+            )
 
     def refund(self):
         """
-        Rembourse la commande.
-        """
-        if self.status == self.Status.PAID:
-            self.status = self.Status.REFUNDED
-            self.save()
+        Rembourse la commande et restaure le stock si la livraison
+        physique avait réellement été engagée (delivery/both).
 
-            # Restaurer le stock si produit physique
-            if self.product.is_physical:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest remboursée {self.order_number}"
-                )
+        ⚠️ Fix 2026-09 : l'ancienne version restaurait le stock même pour
+        un achat 100% numérique (delivery_method='download') → stock
+        gonflé artificiellement. On aligne désormais sur mark_as_paid qui
+        ne décrémente QUE si delivery_method ∈ (delivery, both).
+        """
+        if self.status != self.Status.PAID:
+            return
+
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.REFUNDED
+        self.save(update_fields=['status'])
+
+        if delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest remboursée {self.order_number}"
+            )
 
     def has_previously_purchased(self):
         """
@@ -1096,6 +1190,14 @@ class GuestDownloadLink(models.Model):
     download_count = models.PositiveIntegerField(
         _('téléchargements effectués'),
         default=0
+    )
+    external_click_count = models.PositiveIntegerField(
+        _('clics vers lien externe'),
+        default=0,
+        help_text=(
+            "Compteur informatif des clics vers product.external_url. "
+            "Ne consomme PAS la limite de téléchargements."
+        ),
     )
     max_downloads = models.PositiveIntegerField(
         _('limite de téléchargements'),

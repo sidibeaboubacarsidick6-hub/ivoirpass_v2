@@ -10,7 +10,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, F
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -444,6 +444,32 @@ def product_create(request):
         if form.is_valid():
             product        = form.save(commit=False)
             product.seller = request.user
+
+            # ── Garde-fou KYC : publication d'un produit payant ──────
+            # Aligné sur la billetterie (apps/events/views.py:218).
+            # `extra_tags='danger kyc-persistent'` = même mécanisme que
+            # pour la publication d'événement payant (message persistant
+            # rendu côté template avec un timeout ≥ 15s).
+            if (
+                product.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'action': 'Créer',
+                })
+
             product.save()
             messages.success(
                 request,
@@ -452,12 +478,6 @@ def product_create(request):
             return redirect('store:my_products')
         else:
             messages.error(request, "Veuillez corriger les erreurs.")
-
-    return render(request, 'store/product_form.html', {
-        'form':   form,
-        'action': 'Créer',
-    })
-
 
 @seller_required
 def product_edit(request, slug):
@@ -472,7 +492,31 @@ def product_edit(request, slug):
             request.POST, request.FILES, instance=product
         )
         if form.is_valid():
-            form.save()
+            # ── Garde-fou KYC : passage à PUBLISHED ──────────────────
+            product_candidate = form.save(commit=False)
+
+            if (
+                product_candidate.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'product': product,
+                    'action': 'Modifier',
+                })
+
+            product_candidate.save()
             messages.success(request, "Produit mis à jour.")
             return redirect('store:my_products')
         else:
@@ -647,7 +691,16 @@ def guest_buy_product(request, slug):
             if not delivery_address: errors.append("L'adresse est requise.")
             if not delivery_city:    errors.append("La ville est requise.")
 
-        if delivery_method in ('delivery', 'both') and quantity > product.stock:
+        # ── Fix bundle stock=0 : bloquer la livraison physique si épuisée ─
+        # Un bundle avec stock=0 doit rester achetable UNIQUEMENT en
+        # version numérique (delivery_method='download'). Message clair
+        # pour guider l'acheteur.
+        if delivery_method in ('delivery', 'both') and not product.is_available_physical:
+            errors.append(
+                "Version physique épuisée. Choisissez la version numérique "
+                "pour continuer."
+            )
+        elif delivery_method in ('delivery', 'both') and quantity > product.stock:
             errors.append("Quantité demandée supérieure au stock disponible.")
 
         if errors:
@@ -968,20 +1021,71 @@ def guest_store_webhook(request):
 
 
 def guest_download_file(request, token):
-    """Téléchargement sécurisé invité avec filigrane."""
+    """
+    Téléchargement sécurisé invité.
+
+    Comportement selon le produit :
+    - Si `product.external_url` est renseigné → incrémente
+      `external_click_count` puis redirige vers cette URL. Ne consomme
+      PAS la limite de téléchargements (décision Q11 du chantier boutique).
+    - Sinon → sert le fichier `digital_file` avec filigrane (comportement
+      historique inchangé).
+
+    Si les deux sont renseignés, `external_url` est prioritaire (décision Q8).
+    """
     link = get_object_or_404(GuestDownloadLink, token=token)
 
     if link.is_expired:
-        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'expired'})
+        return render(
+            request, 'store/download_expired.html',
+            {'link': link, 'reason': 'expired'},
+        )
     if link.is_exhausted:
-        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'exhausted'})
+        return render(
+            request, 'store/download_expired.html',
+            {'link': link, 'reason': 'exhausted'},
+        )
 
+    product = link.product
+
+    # ── Cas 1 : lien externe (Spotify, Deezer, Bandcamp...) ──────────
+    # Incrément atomique via F() — évite une race si l'utilisateur
+    # double-clique (deux requêtes concurrentes).
+    if product.external_url:
+        GuestDownloadLink.objects.filter(pk=link.pk).update(
+            external_click_count=F('external_click_count') + 1
+        )
+        return redirect(product.external_url)
+
+    # ── Cas 2 : fichier interne → filigrane ──────────────────────────
+    if not product.digital_file:
+        # Ni fichier ni URL externe : impossible normalement (bloqué
+        # en amont par ProductForm.clean), mais on reste défensif.
+        raise Http404("Produit sans fichier téléchargeable")
+
+    # Incrémente la limite UNIQUEMENT pour un vrai téléchargement de
+    # fichier (pas pour une redirection externe, cf. Q11).
     link.download_count += 1
     link.save(update_fields=['download_count'])
 
-    product = link.product
-    if not product.digital_file:
-        raise Http404
+    buyer_name = link.order.buyer_name
+    order_number = link.order.order_number
+
+    from .watermark import add_watermark
+    watermarked, filename = add_watermark(
+        product.digital_file.path, buyer_name, order_number,
+    )
+
+    if watermarked:
+        response = FileResponse(watermarked, as_attachment=True, filename=filename)
+    else:
+        response = FileResponse(
+            open(product.digital_file.path, 'rb'),
+            as_attachment=True,
+            filename=os.path.basename(product.digital_file.path),
+        )
+
+    return response
 
     buyer_name = link.order.buyer_name
     order_number = link.order.order_number

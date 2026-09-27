@@ -37,21 +37,48 @@
 
       {% if download_links %}
       <div class="ip-card p-4 mb-4" style="border-left:4px solid #1B7A3E;">
-        <h6 class="fw-bold mb-3">
-          <i class="bi bi-download me-2 text-green"></i>Vos téléchargements
-        </h6>
-        {% for link in download_links %}
-        <div class="mb-2">
-          <a href="{% url 'store:guest_download' link.token %}"
-             class="btn btn-green w-100">
-            <i class="bi bi-download me-2"></i>
-            Télécharger ({{ link.downloads_remaining }} fois restantes)
-          </a>
-          <div class="text-muted text-center mt-1" style="font-size:0.75rem;">
-            Expire le {{ link.expires_at|date:"d/m/Y à H:i" }}
+        {% if order.product.external_url %}
+          {# ── Cas lien externe : pas de notion de "téléchargement" #}
+          <h6 class="fw-bold mb-3">
+            <i class="bi bi-headphones me-2 text-green"></i>
+            Accédez à votre contenu
+          </h6>
+          {% for link in download_links %}
+          <div class="mb-2">
+            <a href="{% url 'store:guest_download' link.token %}"
+               class="btn btn-green w-100">
+              <i class="bi bi-box-arrow-up-right me-2"></i>
+              Écouter / Accéder
+            </a>
+            <div class="text-muted text-center mt-1" style="font-size:0.75rem;">
+              Lien valable jusqu'au {{ link.expires_at|date:"d/m/Y à H:i" }}
+            </div>
           </div>
-        </div>
-        {% endfor %}
+          {% endfor %}
+          <div class="alert alert-light border small mt-3 mb-0 py-2">
+            <i class="bi bi-info-circle me-1 text-green"></i>
+            Ce contenu est hébergé sur une plateforme partenaire
+            (Spotify, Deezer, Bandcamp...). Vous serez redirigé après
+            avoir cliqué.
+          </div>
+        {% else %}
+          {# ── Cas fichier interne : téléchargement avec filigrane #}
+          <h6 class="fw-bold mb-3">
+            <i class="bi bi-download me-2 text-green"></i>Vos téléchargements
+          </h6>
+          {% for link in download_links %}
+          <div class="mb-2">
+            <a href="{% url 'store:guest_download' link.token %}"
+               class="btn btn-green w-100">
+              <i class="bi bi-download me-2"></i>
+              Télécharger ({{ link.downloads_remaining }} fois restantes)
+            </a>
+            <div class="text-muted text-center mt-1" style="font-size:0.75rem;">
+              Expire le {{ link.expires_at|date:"d/m/Y à H:i" }}
+            </div>
+          </div>
+          {% endfor %}
+        {% endif %}
       </div>
 
       <div class="alert ip-alert alert-info">
