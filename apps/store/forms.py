@@ -39,7 +39,7 @@ class ProductForm(forms.ModelForm):
             'short_description': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
-                'placeholder': 'Résumé court (max 500 caractères)',
+                'placeholder': 'Ex : +225 07 XX XX XX XX',
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -75,28 +75,36 @@ class ProductForm(forms.ModelForm):
             }),
             'cover_image': forms.FileInput(attrs={
                 'class': 'form-control',
-                'accept': 'image/*',
+                'accept': '.jpg,.jpeg,.png,.webp',
             }),
             'preview_file': forms.FileInput(attrs={
                 'class': 'form-control',
+                'accept': '.pdf,.mp3,.jpg,.jpeg,.png',
             }),
             'digital_file': forms.FileInput(attrs={
                 'class': 'form-control',
+                'accept': (
+                    '.mp3,.wav,.flac,.m4a,.aac,.ogg,'
+                    '.mp4,.mov,.webm,'
+                    '.pdf,.epub,'
+                    '.jpg,.jpeg,.png,.webp,'
+                    '.zip'
+                ),
             }),
             'price': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '5000',
-                'min': '0',
+                'min': '500',
             }),
             'price_physical': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '3000',
-                'min': '0',
+                'min': '500',
             }),
             'price_digital': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '2000',
-                'min': '0',
+                'min': '500',
             }),
             'stock': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -111,7 +119,7 @@ class ProductForm(forms.ModelForm):
             'category':               'Catégorie *',
             'product_type':           'Type de produit *',
             'description':            'Description complète *',
-            'short_description':      'Description courte',
+            'short_description':      'InfoLine',
             'tags':                   'Mots-clés',
             'author':                 'Auteur / Artiste',
             'publisher':              'Éditeur / Label',

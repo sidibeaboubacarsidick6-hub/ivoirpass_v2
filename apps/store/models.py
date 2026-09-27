@@ -10,9 +10,18 @@ import logging
 from django.db import models, transaction, IntegrityError
 from django.db.models import F
 from django.conf import settings
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify
 from django.utils import timezone
+
+from .validators import (
+    EXTENSIONS,
+    MAX_MB,
+    ALLOWED_DIGITAL_EXTENSIONS,
+    validate_file_size,
+    validate_digital_file_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +92,10 @@ class Product(models.Model):
     )
     description = models.TextField(_('description'))
     short_description = models.TextField(
-        _('description courte'),
+        _('InfoLine'),
         max_length=500,
-        blank=True
+        blank=True,
+        help_text="Numéro de contact du propriétaire"
     )
 
     # Classification
@@ -121,21 +131,33 @@ class Product(models.Model):
         _('image de couverture'),
         upload_to='store/covers/%Y/%m/',
         null=True,
-        blank=True
+        blank=True,
+        validators=[
+            FileExtensionValidator(EXTENSIONS['cover']),
+            validate_file_size(MAX_MB['cover']),
+        ]
     )
     preview_file = models.FileField(
         _('fichier aperçu'),
         upload_to='store/previews/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Extrait gratuit (PDF, MP3...)"
+        help_text="Extrait gratuit (PDF, MP3...)",
+        validators=[
+            FileExtensionValidator(EXTENSIONS['preview']),
+            validate_file_size(MAX_MB['preview']),
+        ]
     )
     digital_file = models.FileField(
         _('fichier numérique'),
         upload_to='store/digital/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Fichier complet — non accessible publiquement"
+        help_text="Fichier complet — non accessible publiquement",
+        validators=[
+            FileExtensionValidator(ALLOWED_DIGITAL_EXTENSIONS),
+            validate_digital_file_type,  # limite par type réel (audio/vidéo/etc.)
+        ]
     )
 
     # Métadonnées produit
@@ -166,7 +188,8 @@ class Product(models.Model):
     price = models.DecimalField(
         _('prix (FCFA)'),
         max_digits=10,
-        decimal_places=0
+        decimal_places=0,
+        validators=[MinValueValidator(500)]
     )
     price_physical = models.DecimalField(
         _('prix version physique'),
@@ -174,7 +197,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie physique"
+        help_text="Pour les bundles : prix partie physique",
+        validators=[MinValueValidator(500)]
     )
     price_digital = models.DecimalField(
         _('prix version numérique'),
@@ -182,7 +206,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie numérique"
+        help_text="Pour les bundles : prix partie numérique",
+        validators=[MinValueValidator(500)]
     )
     stock = models.PositiveIntegerField(
         _('stock physique'),
