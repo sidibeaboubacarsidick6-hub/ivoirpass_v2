@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0d0d0d">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="IvoirPass">
     <title>IvoirPass Scanner</title>
@@ -148,6 +149,8 @@
         const LOGOUT_URL = '/accounts/logout/';
         const SCAN_URL = '/api/scanner/scan/';
         const CHECK_URL = '/api/scanner/check-event/';
+        const PREPARE_URL = '/api/scanner/prepare/';
+        const SYNC_URL = '/api/scanner/sync/';
         let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
 
         document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
@@ -160,6 +163,238 @@
         function getCSRF() {
             return CSRF_TOKEN;
         }
+
+        // ============================================================
+        // CHANTIER B — IndexedDB wrapper (cache tickets + queue scans)
+        // ============================================================
+        // 2 stores :
+        //   - tickets     (keyPath uuid)  → billets cachés par événement
+        //   - scan_queue  (keyPath uuid)  → file de scans à synchroniser
+        //
+        // Convention : `event_id` est répété sur chaque entrée pour
+        // permettre le filtrage par événement sans index complexe.
+        // ============================================================
+
+        const DB_NAME = 'ivoirpass_scanner';
+        const DB_VERSION = 1;
+        const STORE_TICKETS = 'tickets';
+        const STORE_QUEUE = 'scan_queue';
+
+        let _dbPromise = null;
+
+        function openDB() {
+            if (_dbPromise) return _dbPromise;
+            _dbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+
+                    // Store tickets
+                    if (!db.objectStoreNames.contains(STORE_TICKETS)) {
+                        const store = db.createObjectStore(STORE_TICKETS, { keyPath: 'uuid' });
+                        store.createIndex('event_id', 'event_id', { unique: false });
+                        store.createIndex('ticket_number', 'ticket_number', { unique: false });
+                    }
+
+                    // Store scan_queue
+                    if (!db.objectStoreNames.contains(STORE_QUEUE)) {
+                        const store = db.createObjectStore(STORE_QUEUE, { keyPath: 'client_uuid' });
+                        store.createIndex('event_id', 'event_id', { unique: false });
+                        store.createIndex('synced', 'synced', { unique: false });
+                    }
+                };
+                req.onsuccess = (event) => resolve(event.target.result);
+                req.onerror = (event) => reject(event.target.error);
+            });
+            return _dbPromise;
+        }
+
+        function _tx(storeName, mode) {
+            return openDB().then((db) => db.transaction(storeName, mode).objectStore(storeName));
+        }
+
+        function _req(req) {
+            return new Promise((resolve, reject) => {
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // ── Billets cachés ─────────────────────────────────────────────
+        async function dbSaveTickets(eventId, tickets) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readwrite');
+                const store = tx.objectStore(STORE_TICKETS);
+                const idx = store.index('event_id');
+
+                // 1) Purge des billets de cet événement
+                const cursorReq = idx.openCursor(IDBKeyRange.only(eventId));
+                cursorReq.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        cursor.delete();
+                        cursor.continue();
+                    } else {
+                        // 2) Insertion des nouveaux
+                        tickets.forEach((t) => {
+                            store.put({
+                                uuid: t.uuid,
+                                event_id: eventId,
+                                ticket_number: t.ticket_number,
+                                ticket_type: t.ticket_type,
+                                buyer_name: t.buyer_name,
+                                qr_data: t.qr_data,
+                                status: t.status,
+                                cached_at: Date.now(),
+                            });
+                        });
+                    }
+                };
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbCountTickets(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readonly');
+                const idx = tx.objectStore(STORE_TICKETS).index('event_id');
+                const req = idx.count(IDBKeyRange.only(eventId));
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbGetTicketByNumber(eventId, ticketNumber) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readonly');
+                const store = tx.objectStore(STORE_TICKETS);
+                const req = store.index('ticket_number').get(ticketNumber);
+                req.onsuccess = () => {
+                    const t = req.result;
+                    if (!t || t.event_id !== eventId) return resolve(null);
+                    resolve(t);
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbUpdateTicketStatus(uuid, newStatus) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readwrite');
+                const store = tx.objectStore(STORE_TICKETS);
+                const req = store.get(uuid);
+                req.onsuccess = () => {
+                    const t = req.result;
+                    if (!t) return;
+                    t.status = newStatus;
+                    store.put(t);
+                };
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        // ── Queue de scans ─────────────────────────────────────────────
+        async function dbAddToQueue(eventId, qrData) {
+            const client_uuid = (crypto.randomUUID ? crypto.randomUUID() : _uuidv4Fallback());
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readwrite');
+                const store = tx.objectStore(STORE_QUEUE);
+                const entry = {
+                    client_uuid: client_uuid,
+                    event_id: eventId,
+                    qr_data: qrData,
+                    scanned_at: new Date().toISOString(),
+                    synced: false,
+                };
+                store.put(entry);
+                tx.oncomplete = () => resolve(entry);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbGetPendingScans(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readonly');
+                const store = tx.objectStore(STORE_QUEUE);
+                const results = [];
+                const req = store.openCursor();
+                req.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const v = cursor.value;
+                        if (v.event_id === eventId && !v.synced) results.push(v);
+                        cursor.continue();
+                    } else {
+                        resolve(results);
+                    }
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbDeleteQueueEntry(clientUuid) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readwrite');
+                tx.objectStore(STORE_QUEUE).delete(clientUuid);
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbClearEvent(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction([STORE_TICKETS, STORE_QUEUE], 'readwrite');
+
+                // Purge tickets de l'event
+                const idxT = tx.objectStore(STORE_TICKETS).index('event_id');
+                const reqT = idxT.openCursor(IDBKeyRange.only(eventId));
+                reqT.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) { cursor.delete(); cursor.continue(); }
+                };
+
+                // Purge queue de l'event
+                const idxQ = tx.objectStore(STORE_QUEUE).index('event_id');
+                const reqQ = idxQ.openCursor(IDBKeyRange.only(eventId));
+                reqQ.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) { cursor.delete(); cursor.continue(); }
+                };
+
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbWipeAll() {
+            // Appelé à la déconnexion (décision B-7 : purge totale).
+            return new Promise((resolve) => {
+                const req = indexedDB.deleteDatabase(DB_NAME);
+                req.onsuccess = () => { _dbPromise = null; resolve(true); };
+                req.onerror = () => resolve(false);
+                req.onblocked = () => resolve(false);
+            });
+        }
+
+        function _uuidv4Fallback() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // ── Fin wrapper IndexedDB ─────────────────────────────────────
 
         async function doLogin() {
             const email = document.getElementById('emailInput').value.trim();
@@ -198,6 +433,8 @@
         }
 
         async function doLogout() {
+            // Purge IndexedDB avant déconnexion (décision B-7).
+            try { await dbWipeAll(); } catch(e) { console.warn('Purge DB échouée', e); }
             await fetch(LOGOUT_URL, { method: 'POST', headers: { 'X-CSRFToken': getCSRF() } });
             // Même raison que doLogin() : rechargement pour repartir avec
             // un jeton CSRF cohérent avec l'état déconnecté.
@@ -270,7 +507,7 @@
         function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
 
 
-                // ── Chantier B : enregistrement du Service Worker ──────────
+        // ── Chantier B : enregistrement du Service Worker ──────────────
         // Permet à l'app de fonctionner hors ligne (mode avion).
         // Le SW est servi par une vue Django à /scanner/app/sw.js
         // (voir apps/scanner/views.py:serve_service_worker).

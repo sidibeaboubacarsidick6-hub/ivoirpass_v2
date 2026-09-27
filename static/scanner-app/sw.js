@@ -21,6 +21,8 @@ const CACHE_NAME = 'ivoirpass-scanner-v1';
 const PRECACHE_URLS = [
   '/scanner/app/',
   '/static/scanner-app/html5-qrcode.min.js',
+  '/static/scanner-app/icon-192.svg',
+  '/static/scanner-app/icon-512.svg',
 ];
 
 
