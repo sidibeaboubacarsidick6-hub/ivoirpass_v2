@@ -479,6 +479,12 @@ def product_create(request):
         else:
             messages.error(request, "Veuillez corriger les erreurs.")
 
+    return render(request, 'store/product_form.html', {
+        'form': form,
+        'action': 'Créer',
+    })
+
+
 @seller_required
 def product_edit(request, slug):
     """Modifier un produit existant."""
