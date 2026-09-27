@@ -444,6 +444,32 @@ def product_create(request):
         if form.is_valid():
             product        = form.save(commit=False)
             product.seller = request.user
+
+            # ── Garde-fou KYC : publication d'un produit payant ──────
+            # Aligné sur la billetterie (apps/events/views.py:218).
+            # `extra_tags='danger kyc-persistent'` = même mécanisme que
+            # pour la publication d'événement payant (message persistant
+            # rendu côté template avec un timeout ≥ 15s).
+            if (
+                product.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'action': 'Créer',
+                })
+
             product.save()
             messages.success(
                 request,
@@ -452,12 +478,6 @@ def product_create(request):
             return redirect('store:my_products')
         else:
             messages.error(request, "Veuillez corriger les erreurs.")
-
-    return render(request, 'store/product_form.html', {
-        'form':   form,
-        'action': 'Créer',
-    })
-
 
 @seller_required
 def product_edit(request, slug):
@@ -472,7 +492,31 @@ def product_edit(request, slug):
             request.POST, request.FILES, instance=product
         )
         if form.is_valid():
-            form.save()
+            # ── Garde-fou KYC : passage à PUBLISHED ──────────────────
+            product_candidate = form.save(commit=False)
+
+            if (
+                product_candidate.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'product': product,
+                    'action': 'Modifier',
+                })
+
+            product_candidate.save()
             messages.success(request, "Produit mis à jour.")
             return redirect('store:my_products')
         else:
@@ -647,7 +691,16 @@ def guest_buy_product(request, slug):
             if not delivery_address: errors.append("L'adresse est requise.")
             if not delivery_city:    errors.append("La ville est requise.")
 
-        if delivery_method in ('delivery', 'both') and quantity > product.stock:
+        # ── Fix bundle stock=0 : bloquer la livraison physique si épuisée ─
+        # Un bundle avec stock=0 doit rester achetable UNIQUEMENT en
+        # version numérique (delivery_method='download'). Message clair
+        # pour guider l'acheteur.
+        if delivery_method in ('delivery', 'both') and not product.is_available_physical:
+            errors.append(
+                "Version physique épuisée. Choisissez la version numérique "
+                "pour continuer."
+            )
+        elif delivery_method in ('delivery', 'both') and quantity > product.stock:
             errors.append("Quantité demandée supérieure au stock disponible.")
 
         if errors:

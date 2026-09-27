@@ -36,8 +36,6 @@ class DownloadLinkInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    actions = ['publish_products', 'archive_products', 'approve_and_publish', 'reject_to_draft']
-
     list_display = (
         'name', 'seller', 'category', 'product_type',
         'price', 'stock', 'sold_count', 'status', 'cover_preview'
@@ -96,7 +94,10 @@ class ProductAdmin(admin.ModelAdmin):
         return "—"
     cover_preview.short_description = "Aperçu"
 
-    actions = ['publish_products', 'archive_products']
+    actions = [
+        'publish_products', 'archive_products',
+        'approve_and_publish', 'reject_to_draft',
+    ]
 
     @admin.action(description="✅ Publier les produits sélectionnés")
     def publish_products(self, request, queryset):
@@ -109,6 +110,21 @@ class ProductAdmin(admin.ModelAdmin):
     def archive_products(self, request, queryset):
         updated = queryset.update(status=Product.Status.ARCHIVED)
         self.message_user(request, f"{updated} produit(s) archivé(s).")
+    @admin.action(description="✅ Approuver et publier")
+    def approve_and_publish(self, request, queryset):
+        updated = queryset.filter(
+            status=Product.Status.DRAFT
+        ).update(status=Product.Status.PUBLISHED)
+        self.message_user(
+            request, f"{updated} produit(s) publié(s) après validation."
+        )
+
+    @admin.action(description="🚫 Rejeter (retour brouillon)")
+    def reject_to_draft(self, request, queryset):
+        updated = queryset.update(status=Product.Status.DRAFT)
+        self.message_user(
+            request, f"{updated} produit(s) renvoyé(s) en brouillon."
+        )
 
 
 @admin.register(ProductOrder)
@@ -145,18 +161,6 @@ class ProductOrderAdmin(admin.ModelAdmin):
             shipped_at=timezone.now()
         )
         self.message_user(request, "Commandes marquées comme expédiées.")
-    
-    @admin.action(description="✅ Approuver et publier")
-    def approve_and_publish(self, request, queryset):
-        updated = queryset.filter(
-        status=Product.Status.DRAFT
-        ).update(status=Product.Status.PUBLISHED)
-        self.message_user(request, f"{updated} produit(s) publié(s) après validation.")
-
-    @admin.action(description="🚫 Rejeter (retour brouillon)")
-    def reject_to_draft(self, request, queryset):
-        updated = queryset.update(status=Product.Status.DRAFT)
-        self.message_user(request, f"{updated} produit(s) renvoyé(s) en brouillon.")
 
 # ============================================================
 # COMMANDES BOUTIQUE INVITÉES (achat sans compte)
@@ -182,13 +186,15 @@ class GuestProductOrderAdmin(admin.ModelAdmin):
         'quantity', 'total', 'status', 'created_at'
     )
     list_filter = ('status', 'delivery_method', 'product__product_type')
-    search_fields = ('order_number', 'email', 'phone', 'first_name', 'last_name', 'product__name')
+    search_fields = (
+        'order_number', 'email', 'phone',
+        'first_name', 'last_name', 'product__name',
+    )
     readonly_fields = (
         'order_number', 'uuid', 'subtotal',
-        'created_at', 'updated_at', 'paid_at'
+        'created_at', 'updated_at', 'paid_at',
     )
     inlines = [GuestDownloadLinkInline]
-
     actions = ['mark_paid', 'mark_shipped']
 
     def get_buyer_name(self, obj):
@@ -208,6 +214,6 @@ class GuestProductOrderAdmin(admin.ModelAdmin):
             status=GuestProductOrder.Status.PAID
         ).update(
             status=GuestProductOrder.Status.SHIPPED,
-            shipped_at=timezone.now()
+            shipped_at=timezone.now(),
         )
         self.message_user(request, "Commandes invité marquées comme expédiées.")

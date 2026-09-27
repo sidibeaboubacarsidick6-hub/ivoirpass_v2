@@ -323,11 +323,28 @@ class Product(models.Model):
 
     @property
     def is_available(self):
+        """
+        Disponible si publié ET :
+        - PHYSICAL pur : stock > 0
+        - DIGITAL pur  : toujours (le form garantit fichier OU URL externe)
+        - BUNDLE       : toujours (au moins la version numérique est vendable)
+        """
         if self.status != self.Status.PUBLISHED:
             return False
-        if self.is_physical and self.stock == 0:
+        # Un bundle avec stock=0 reste achetable en version numérique seule
+        if self.product_type == self.ProductType.PHYSICAL and self.stock == 0:
             return False
         return True
+
+    @property
+    def is_available_physical(self):
+        """Disponible en physique uniquement si stock > 0."""
+        return self.stock > 0
+
+    @property
+    def is_available_digital(self):
+        """Disponible en numérique si un contenu est fourni (fichier ou URL)."""
+        return bool(self.digital_file or self.external_url)
 
     @property
     def file_extension(self):
@@ -1001,7 +1018,6 @@ class GuestProductOrder(models.Model):
                         f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
                     )
         return True
-        return True
 
     def _credit_seller_wallet(self):
         """
@@ -1069,34 +1085,60 @@ class GuestProductOrder(models.Model):
     def cancel(self):
         """
         Annule la commande et restaure le stock si nécessaire.
-        """
-        if self.status in [self.Status.PENDING, self.Status.PAID]:
-            self.status = self.Status.CANCELLED
-            self.save()
 
-            # Restaurer le stock si commande était payée et produit physique
-            if self.product.is_physical and self.status == self.Status.PAID:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest annulée {self.order_number}"
-                )
+        ⚠️ Fix 2026-09 : l'ancienne version testait `self.status == PAID`
+        APRÈS avoir muté `self.status` en CANCELLED → condition toujours
+        fausse → le stock n'était JAMAIS restauré. Corrigé en mémorisant
+        `was_paid` AVANT la mutation.
+        """
+        if self.status not in (self.Status.PENDING, self.Status.PAID):
+            return
+
+        was_paid = (self.status == self.Status.PAID)
+        # On ne restaure que si la livraison physique avait réellement
+        # été engagée lors de mark_as_paid (delivery ou both).
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.CANCELLED
+        self.save(update_fields=['status'])
+
+        if was_paid and delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest annulée {self.order_number}"
+            )
 
     def refund(self):
         """
-        Rembourse la commande.
-        """
-        if self.status == self.Status.PAID:
-            self.status = self.Status.REFUNDED
-            self.save()
+        Rembourse la commande et restaure le stock si la livraison
+        physique avait réellement été engagée (delivery/both).
 
-            # Restaurer le stock si produit physique
-            if self.product.is_physical:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest remboursée {self.order_number}"
-                )
+        ⚠️ Fix 2026-09 : l'ancienne version restaurait le stock même pour
+        un achat 100% numérique (delivery_method='download') → stock
+        gonflé artificiellement. On aligne désormais sur mark_as_paid qui
+        ne décrémente QUE si delivery_method ∈ (delivery, both).
+        """
+        if self.status != self.Status.PAID:
+            return
+
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.REFUNDED
+        self.save(update_fields=['status'])
+
+        if delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest remboursée {self.order_number}"
+            )
 
     def has_previously_purchased(self):
         """
