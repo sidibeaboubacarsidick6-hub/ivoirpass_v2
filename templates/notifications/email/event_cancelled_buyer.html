@@ -1,0 +1,51 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title" style="color:#dc3545;">
+  Événement annulé 😔
+</h1>
+
+<p class="email-text">
+  Bonjour <strong>{{ buyer_name }}</strong>,
+</p>
+
+<p class="email-text">
+  Nous vous informons que l'événement suivant, pour lequel vous
+  avez pris un billet, a été annulé <strong>indépendamment de la
+  volonté d'IvoirPass</strong> :
+</p>
+
+<div class="info-box" style="background:#fff5f5; border-color:#dc3545;">
+  <div class="info-row">
+    <span class="info-label">Événement</span>
+    <span class="info-value">{{ event.title }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date prévue</span>
+    <span class="info-value">
+      {{ event.start_date|date:"d F Y à H\hi" }}
+    </span>
+  </div>
+</div>
+
+<p class="email-text">
+  <strong>Remboursement :</strong> l'organisateur procédera au
+  remboursement de votre billet dans les plus brefs délais.
+  Nous vous invitons à le contacter directement pour toute
+  question relative au remboursement.
+</p>
+
+<p class="email-text">
+  Nous sommes désolés pour la gêne occasionnée. Pour toute
+  assistance de notre part :
+  <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+</p>
+
+<center>
+  <a href="{{ platform_url }}/evenements/"
+     class="btn-cta btn-green">
+    Voir d'autres événements
+  </a>
+</center>
+
+{% endblock %}

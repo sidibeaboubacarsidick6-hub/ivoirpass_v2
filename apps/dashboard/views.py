@@ -374,6 +374,21 @@ def withdraw_request(request):
     wallet, _ = OrganizerWallet.objects.get_or_create(organizer=request.user)
     MIN_AMOUNT = 5000
 
+    # ── Chantier A (2026-09-27) : wallet gelé après annulation ──────
+    # Un wallet peut être gelé par cancel_event_organizer_liable() si
+    # l'organisateur a annulé un événement avec tickets vendus. Tant
+    # qu'un admin n'a pas dégelé manuellement, aucune demande de
+    # reversement n'est acceptée.
+    if wallet.is_frozen:
+        messages.error(
+            request,
+            "Votre wallet est actuellement gelé. Aucune demande de "
+            "reversement ne peut être effectuée. Contactez le support "
+            "IvoirPass pour plus d'informations.",
+            extra_tags='danger',
+        )
+        return redirect('dashboard:wallet')
+
     if request.method == 'POST':
         amount = int(request.POST.get('amount', 0))
         method = request.POST.get('payout_method', '')

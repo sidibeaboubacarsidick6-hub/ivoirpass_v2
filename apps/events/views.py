@@ -354,15 +354,26 @@ def event_delete(request, slug):
 
     if request.method == 'POST':
         if event.tickets_sold > 0:
-            from .services import cancel_event_and_refund
+            from .services import cancel_event_organizer_liable
 
-            result = cancel_event_and_refund(event)
-
-            messages.warning(
-                request,
-                f"Événement annulé. {result['orders_refunded']} commande(s) "
-                f"client(s) concernée(s) par le remboursement."
+            reason = request.POST.get(
+                'cancel_reason',
+                "Événement annulé par l'organisateur",
             )
+            result = cancel_event_organizer_liable(event, reason=reason)
+
+            msg = (
+                f"Événement annulé. {result['orders_affected']} commande(s) "
+                f"impactée(s), {result['tickets_voided']} billet(s) invalidé(s)."
+            )
+            if result['wallet_frozen']:
+                msg += (
+                    " Votre wallet a été gelé : aucune demande de "
+                    "reversement ne sera acceptée tant qu'un administrateur "
+                    "n'a pas régularisé la situation. Les acheteurs ont "
+                    "été informés que vous procéderez au remboursement."
+                )
+            messages.warning(request, msg)
         else:
             title = event.title
             event.delete()

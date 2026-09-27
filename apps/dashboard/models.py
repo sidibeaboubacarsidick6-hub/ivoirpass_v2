@@ -68,6 +68,30 @@ class OrganizerWallet(models.Model):
         help_text="Nom enregistré sur le compte Mobile Money"
     )
 
+    # ── Gel du wallet (annulation événement) ────────────────────────
+    # Un wallet est gelé par le service `cancel_event_organizer_liable`
+    # quand un événement avec tickets vendus est annulé. Tant qu'il est
+    # gelé, aucune demande de reversement n'est acceptée (voir
+    # apps/dashboard/views.py:withdraw_request). Le déblocage est
+    # manuel par un admin (aucune UI dédiée pour l'instant).
+    is_frozen = models.BooleanField(
+        _('gelé'),
+        default=False,
+        help_text=(
+            "Wallet gelé — aucune demande de reversement acceptée. "
+            "Se déclenche automatiquement lors d'une annulation "
+            "d'événement avec tickets vendus."
+        )
+    )
+    frozen_reason = models.TextField(
+        _('raison du gel'),
+        blank=True,
+        help_text=(
+            "Détail textuel affiché aux admins (titre événement, "
+            "date, nombre de commandes impactées)."
+        )
+    )
+
     # Dates
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

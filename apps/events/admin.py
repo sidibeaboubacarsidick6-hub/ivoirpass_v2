@@ -144,20 +144,30 @@ class EventAdmin(admin.ModelAdmin):
 
     @admin.action(description="🚫 Annuler les événements sélectionnés")
     def cancel_events(self, request, queryset):
-        from .services import cancel_event_and_refund
+        from .services import cancel_event_organizer_liable
 
         cancelled = 0
-        orders_refunded = 0
+        orders_affected = 0
+        tickets_voided = 0
+        wallets_frozen = 0
 
         for event in queryset:
-            result = cancel_event_and_refund(event)
+            result = cancel_event_organizer_liable(
+                event,
+                reason=f"Annulation admin par {request.user.email}",
+            )
             cancelled += 1
-            orders_refunded += result["orders_refunded"]
+            orders_affected += result['orders_affected']
+            tickets_voided += result['tickets_voided']
+            if result['wallet_frozen']:
+                wallets_frozen += 1
 
         self.message_user(
             request,
             f"{cancelled} événement(s) annulé(s). "
-            f"{orders_refunded} commande(s) concernée(s) par un remboursement."
+            f"{orders_affected} commande(s) impactée(s), "
+            f"{tickets_voided} billet(s) invalidé(s), "
+            f"{wallets_frozen} wallet(s) gelé(s)."
         )
 
     @admin.action(description="⭐ Mettre en avant")

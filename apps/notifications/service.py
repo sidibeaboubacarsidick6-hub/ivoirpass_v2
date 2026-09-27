@@ -75,9 +75,6 @@ class NotificationService:
             logger.error(f"Erreur envoi email tickets : {e}")
             return False
 
-        # SMS de confirmation, en plus de l'email — silencieux si le
-        # numéro est absent ou si l'envoi échoue (l'email reste le canal
-        # principal, le SMS ne doit jamais bloquer la confirmation).
         if getattr(order.buyer, 'phone_number', None):
             try:
                 from apps.notifications.sms import send_sms
@@ -112,13 +109,9 @@ class NotificationService:
         first_ticket = tickets[0]
         event = first_ticket.event
 
-        # Routage selon le type d'événement. Une GuestOrder ne contient
-        # toujours qu'un seul type d'événement (voir guest_checkout qui
-        # prend un slug unique), donc on regarde le premier ticket.
         is_online_only = (event.event_type == 'online')
 
         if is_online_only:
-            # --- Email "accès en ligne" : lien + instructions, pas de QR/PDF
             access_url = f"{base_url}/billets/live/{first_ticket.online_access_token}/"
             subject = f"Votre accès à {event.title}"
             context = {
@@ -134,9 +127,8 @@ class NotificationService:
                 'year': timezone.now().year,
             }
             template_base = 'notifications/email/guest_online_access'
-            attachments = []  # Pas de PDF pour les événements en ligne purs
+            attachments = []
         else:
-            # --- Email classique : QR + PDF joints
             attachments = []
             for ticket in tickets:
                 try:
@@ -190,7 +182,6 @@ class NotificationService:
             logger.error(f"Erreur envoi email guest : {e}")
             return False
 
-        # SMS de confirmation (inchangé)
         if getattr(order, 'phone', None):
             try:
                 from apps.notifications.sms import send_sms
@@ -341,10 +332,116 @@ class NotificationService:
             return False
 
     @classmethod
+    def event_cancelled_buyer(cls, buyer_email, buyer_name, event):
+        """
+        Chantier A (2026-09-27) — Email informatif envoyé à un acheteur
+        après annulation d'un événement.
+
+        IvoirPass n'est PAS responsable du remboursement — c'est
+        l'organisateur qui gère directement.
+        """
+        if not buyer_email:
+            return False
+
+        base_url = settings.PAYDUNYA_BASE_URL
+        context = {
+            'buyer_name': buyer_name or 'client',
+            'event': event,
+            'platform_name': 'IvoirPass',
+            'platform_url': base_url,
+            'support_email': settings.IVOIRPASS.get(
+                'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+            ),
+            'year': timezone.now().year,
+        }
+
+        try:
+            html_message = render_to_string(
+                'notifications/email/event_cancelled_buyer.html', context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/event_cancelled_buyer.txt', context,
+            )
+        except Exception:
+            return False
+
+        email = EmailMultiAlternatives(
+            subject=f"Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[buyer_email],
+        )
+        email.attach_alternative(html_message, "text/html")
+
+        try:
+            email.send()
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def event_cancelled_admin_alert(
+        cls, event, orders_affected, tickets_voided, wallet_frozen, reason,
+    ):
+        """
+        Chantier A (2026-09-27) — Alerte envoyée à tous les admins après
+        annulation d'un événement.
+        """
+        from apps.accounts.models import CustomUser
+
+        admins = CustomUser.objects.filter(
+            role=CustomUser.Role.ADMIN,
+            is_active=True,
+            notify_email=True,
+        )
+        recipient_list = list(admins.values_list('email', flat=True))
+        if not recipient_list:
+            return False
+
+        base_url = settings.PAYDUNYA_BASE_URL
+        context = {
+            'event': event,
+            'organizer': event.organizer,
+            'orders_affected': orders_affected,
+            'tickets_voided': tickets_voided,
+            'wallet_frozen': wallet_frozen,
+            'reason': reason,
+            'admin_event_url': f"{base_url}/admin/events/event/{event.id}/change/",
+            'platform_name': 'IvoirPass',
+            'platform_url': base_url,
+            'year': timezone.now().year,
+        }
+
+        try:
+            html_message = render_to_string(
+                'notifications/email/admin_event_cancelled.html', context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/admin_event_cancelled.txt', context,
+            )
+        except Exception:
+            return False
+
+        email = EmailMultiAlternatives(
+            subject=f"[Admin] Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=recipient_list,
+        )
+        email.attach_alternative(html_message, "text/html")
+
+        try:
+            email.send()
+            return True
+        except Exception:
+            return False
+
+    @classmethod
     def event_cancelled(cls, ticket):
         """
         Notifie le participant invité lorsqu'un événement est annulé.
-        L'adresse email provient du GuestOrder associé au GuestTicket.
+        Ancienne méthode conservée pour compatibilité — utilisée uniquement
+        par l'ancien service cancel_event_and_refund() qui sera retiré en A-11.
         """
         order = ticket.order_item.order
         event = ticket.order_item.ticket_type.event

@@ -1,0 +1,18 @@
+⚠️ Événement annulé — Action requise
+
+Événement : {{ event.title }}
+Date prévue : {{ event.start_date|date:"d/m/Y" }}
+Organisateur : {{ organizer.get_full_name|default:organizer.email }} ({{ organizer.email }})
+Commandes impactées : {{ orders_affected }}
+Tickets annulés : {{ tickets_voided }}
+Wallet organisateur : {% if wallet_frozen %}GELÉ (reversements bloqués){% else %}Non gelé{% endif %}
+Motif : {{ reason }}
+
+Rappel procédure : IvoirPass n'est pas responsable du remboursement.
+C'est l'organisateur qui gère directement. Un email informatif a déjà
+été envoyé à tous les acheteurs concernés.
+
+{% if wallet_frozen %}Le wallet de l'organisateur a été gelé — déblocage
+manuel admin requis.{% endif %}
+
+Lien admin : {{ admin_event_url }}
