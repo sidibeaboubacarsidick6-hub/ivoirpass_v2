@@ -14,6 +14,8 @@ from django.db import transaction
 from django.db.models import Q
 from apps.events.models import Event
 from apps.tickets.models import Ticket, GuestTicket
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action
 from .models import ScanSession, ScanLog
 
 
@@ -153,6 +155,11 @@ def validate_qr(request):
                     result, message, color = ScanLog.Result.INVALID_QR, "QR falsifié.", 'red'
                 elif ticket.event.id != event.id:
                     result, message, color = ScanLog.Result.WRONG_EVENT, f"Billet pour : {ticket.event.title}", 'orange'
+                elif ticket.ticket_type.valid_date and ticket.ticket_type.valid_date != timezone.now().date():
+                    result, message, color = ScanLog.Result.WRONG_EVENT, (
+                        f"Ce billet n'est valable que le "
+                        f"{ticket.ticket_type.valid_date.strftime('%d/%m/%Y')}."
+                    ), 'orange'
                 elif ticket.status == 'void':
                     result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé.", 'red'
                 elif ticket.status == 'used':
@@ -183,6 +190,19 @@ def validate_qr(request):
         ticket=(ticket if ticket and not is_guest_ticket else None),
         qr_data_received=qr_data[:500],
         result=result,
+    )
+
+    # Entrée dans le journal d'audit global — ScanLog reste la source de
+    # détail (compteurs de session, historique fin du scanner), mais un
+    # résumé apparaît aussi ici pour que le scan soit visible dans le même
+    # journal que les paiements/commandes/emails.
+    log_action(
+        action=AuditLog.Action.TICKET_SCANNED,
+        description=f"Scan billet {ticket.ticket_number if ticket else qr_data[:30]} — {result} — {event.title}",
+        user=request.user,
+        model_name='GuestTicket' if is_guest_ticket else 'Ticket',
+        object_id=ticket.ticket_number if ticket else '',
+        metadata={'result': result, 'event': event.title},
     )
 
     session.total_scanned += 1
@@ -234,7 +254,79 @@ def scan_history(request, event_id):
 def scanner_app(request):
     """
     Sert l'application PWA de scan (scanner_app/index.html).
-    L'authentification est gérée par le template lui-même (login intégré).
-    Aucune redirection Django — le template vérifie la session.
+    L'authentification est gérée par le template lui-même (login intégré),
+    mais la vue vérifie tout de même la session pour savoir quel écran
+    afficher au chargement (event screen si déjà connecté, sinon login) —
+    utile après le rechargement de page qui suit une connexion réussie
+    (nécessaire pour obtenir un jeton CSRF à jour, voir index.html).
     """
-    return render(request, 'scanner_app/index.html')
+    already_logged_in = (
+        request.user.is_authenticated and
+        (request.user.is_scanner_agent or request.user.is_organizer or request.user.is_platform_admin)
+    )
+    return render(request, 'scanner_app/index.html', {
+        'already_logged_in': already_logged_in,
+    })
+
+
+
+# ============================================================
+# CHANTIER B — Scanner PWA offline : servir SW + manifest
+# ============================================================
+# Le Service Worker DOIT être servi depuis un chemin qui contrôle
+# son scope (par défaut = son dossier). On le met à /scanner/app/sw.js
+# pour que son scope soit exactement /scanner/app/.
+#
+# On ne peut PAS le mettre dans /static/ (scope trop restreint).
+# On le sert donc via une vue qui renvoie le contenu du fichier
+# statique avec les bons headers.
+# ============================================================
+
+def serve_service_worker(request):
+    """
+    Sert le Service Worker du scanner PWA.
+
+    Headers critiques :
+      - Content-Type: application/javascript
+      - Cache-Control: no-cache (sinon les mises à jour du SW ne se
+        propagent pas → l'app reste sur une vieille version)
+      - Service-Worker-Allowed: /scanner/app/ (autorise le scope)
+    """
+    from django.http import FileResponse
+    from django.conf import settings
+    import os
+
+    path = os.path.join(
+        settings.BASE_DIR, 'static', 'scanner-app', 'sw.js'
+    )
+    if not os.path.exists(path):
+        from django.http import Http404
+        raise Http404("Service worker introuvable")
+
+    response = FileResponse(open(path, 'rb'), content_type='application/javascript')
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Service-Worker-Allowed'] = '/scanner/app/'
+    return response
+
+
+def serve_manifest(request):
+    """
+    Sert le manifest PWA du scanner.
+
+    Pas de cache agressif : si on change le nom/start_url/icônes, on
+    veut que le navigateur le voie rapidement.
+    """
+    from django.http import FileResponse
+    from django.conf import settings
+    import os
+
+    path = os.path.join(
+        settings.BASE_DIR, 'static', 'scanner-app', 'manifest.json'
+    )
+    if not os.path.exists(path):
+        from django.http import Http404
+        raise Http404("Manifest introuvable")
+
+    response = FileResponse(open(path, 'rb'), content_type='application/manifest+json')
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response

@@ -2,12 +2,13 @@
 <div class="container mt-3" id="django-messages">
   {% for message in messages %}
   <div class="alert ip-alert alert-{{ message.tags }} alert-dismissible fade show"
-       role="alert" data-auto-dismiss>
-    {% if message.tags == 'success' %}
+       role="alert"
+       {% if 'kyc-persistent' not in message.tags %}data-auto-dismiss{% endif %}>
+    {% if 'success' in message.tags %}
       <i class="bi bi-check-circle-fill me-2"></i>
-    {% elif message.tags == 'error' or message.tags == 'danger' %}
+    {% elif 'error' in message.tags or 'danger' in message.tags %}
       <i class="bi bi-exclamation-triangle-fill me-2"></i>
-    {% elif message.tags == 'warning' %}
+    {% elif 'warning' in message.tags %}
       <i class="bi bi-exclamation-circle-fill me-2"></i>
     {% else %}
       <i class="bi bi-info-circle-fill me-2"></i>

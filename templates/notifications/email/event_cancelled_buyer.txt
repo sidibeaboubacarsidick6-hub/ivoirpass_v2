@@ -1,0 +1,15 @@
+Événement annulé — IvoirPass
+
+Bonjour {{ buyer_name }},
+
+L'événement « {{ event.title }} » prévu le
+{{ event.start_date|date:"d/m/Y" }} a été annulé indépendamment de
+la volonté d'IvoirPass.
+
+Remboursement : l'organisateur procédera au remboursement de votre
+billet dans les plus brefs délais. Nous vous invitons à le contacter
+directement pour toute question relative au remboursement.
+
+Nous sommes désolés pour la gêne occasionnée.
+
+Assistance IvoirPass : {{ support_email }}

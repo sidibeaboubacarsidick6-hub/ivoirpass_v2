@@ -10,16 +10,100 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.db.models import Q, F
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import Product, ProductCategory, ProductOrder, DownloadLink
 from .models import GuestProductOrder, GuestDownloadLink
 from .forms import ProductForm
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action, get_client_ip
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# ✅ CORRECTIF AUDIT — H-2 : confirmation boutique invité robuste
+# face à un stock devenu insuffisant entre la création de la
+# commande et la confirmation du paiement.
+# ============================================================
+def _confirm_guest_product_order_safely(order, token, raw_data, source):
+    """..."""
+    try:
+        newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+    except ValueError as e:
+        logger.error(
+            f"[H-2] Commande boutique invité {order.order_number} payée chez "
+            f"PayDunya mais non confirmable ({source}) : {e}"
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_PAID_STOCK_UNAVAILABLE,
+            description=(
+                f"Paiement PayDunya encaissé pour la commande boutique invité "
+                f"{order.order_number}, mais confirmation impossible ({source}) : "
+                f"stock produit insuffisant. Intervention manuelle requise "
+                f"(remboursement ou réapprovisionnement)."
+            ),
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={
+                'paydunya_token': token,
+                'amount': str(order.total),
+                'product': order.product.name,
+                'quantity': order.quantity,
+                'error': str(e)[:200],
+            },
+        )
+        _alert_admins_stock_conflict(order, token)
+        return False, True
+
+    if newly_confirmed:
+        from apps.payments.models import Payment
+        Payment.objects.filter(guest_product_order=order).update(
+            status=Payment.Status.COMPLETED, raw_response=raw_data,
+            completed_at=timezone.now(),
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_SUCCESS,
+            description=f"Paiement confirmé ({source}) pour la commande boutique invité {order.order_number}",
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={'provider': 'paydunya', 'amount': str(order.total)},
+        )
+    return newly_confirmed, False
+
+
+def _alert_admins_stock_conflict(order, token):
+    """..."""
+    try:
+        from django.conf import settings
+        from django.core.mail import send_mail
+        from apps.accounts.models import CustomUser
+
+        admins = CustomUser.objects.filter(
+            role=CustomUser.Role.ADMIN, is_active=True, notify_email=True,
+        )
+        recipient_list = list(admins.values_list('email', flat=True))
+        if not recipient_list:
+            logger.warning("[H-2] Conflit stock/paiement mais aucun admin à notifier (notify_email=False ?)")
+            return
+
+        send_mail(
+            subject=f"[IvoirPass] ⚠️ Payé mais stock indisponible — {order.order_number}",
+            message=(
+                f"La commande boutique invité {order.order_number} a été payée "
+                f"({order.total} XOF, token PayDunya {token}) mais ne peut pas être "
+                f"confirmée : stock insuffisant pour « {order.product.name} ».\n\n"
+                f"Action requise : rembourser le client ou réapprovisionner puis "
+                f"confirmer manuellement depuis le back-office.\n\n"
+                f"Client : {order.buyer_name} <{order.email}>"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_list,
+            fail_silently=True,
+        )
+    except Exception as e:
+        logger.error(f"[H-2] Échec envoi alerte conflit stock/paiement pour {order.order_number}: {e}")
 
 
 # ============================================
@@ -28,16 +112,15 @@ logger = logging.getLogger(__name__)
 
 def store_list(request):
     """Boutique publique — liste de tous les produits."""
-    # 🔥 Cache par query string (5 minutes)
     query = request.GET.get('q', '')
     category_slug = request.GET.get('category', '')
     product_type = request.GET.get('type', '')
     sort = request.GET.get('sort', '-created_at')
     page_number = request.GET.get('page', 1)
-    
+
     cache_key = f'store_list_{query}_{category_slug}_{product_type}_{sort}_page_{page_number}'
     cached_data = cache.get(cache_key)
-    
+
     if cached_data is not None:
         return render(request, 'store/list.html', cached_data)
 
@@ -77,7 +160,7 @@ def store_list(request):
         'total':        paginator.count,
         'product_types': Product.ProductType.choices,
     }
-    
+
     cache.set(cache_key, context, 300)
     return render(request, 'store/list.html', context)
 
@@ -90,13 +173,11 @@ def store_detail(request, slug):
         status=Product.Status.PUBLISHED
     )
 
-    # Produits similaires
     similar = Product.objects.filter(
         status=Product.Status.PUBLISHED,
         category=product.category
     ).exclude(pk=product.pk).order_by('-sold_count')[:4]
 
-    # L'utilisateur a-t-il déjà acheté ce produit ?
     already_purchased = False
     download_links    = []
     if request.user.is_authenticated:
@@ -120,475 +201,15 @@ def store_detail(request, slug):
 
 
 @login_required
-def buy_product(request, slug):
-    product = get_object_or_404(
-        Product,
-        slug=slug,
-        status=Product.Status.PUBLISHED
-    )
-
-    if not product.is_available:
-        messages.error(request, "Ce produit n'est plus disponible.")
-        return redirect('store:detail', slug=slug)
-
-    if request.method == 'POST':
-        quantity        = int(request.POST.get('quantity', 1))
-        delivery_method = request.POST.get(
-            'delivery_method',
-            'download' if product.is_digital else 'delivery'
-        )
-        address_id = request.POST.get('address_id')
-
-        # Validation adresse obligatoire pour produit physique
-        if product.is_physical and delivery_method == 'delivery':
-            if not address_id and not request.POST.get('delivery_address', '').strip():
-                messages.error(
-                    request,
-                    "Veuillez sélectionner ou saisir une adresse de livraison."
-                )
-                addresses = request.user.addresses.all()
-                return render(request, 'store/checkout.html', {
-                    'product':   product,
-                    'addresses': addresses,
-                })
-
-        # Commission dynamique depuis le produit
-        commission_rate = float(product.commission_rate) / 100
-        unit_price  = product.price
-        subtotal    = unit_price * quantity
-        commission  = int(float(subtotal) * commission_rate)
-        # Prix payé par l'acheteur = prix sans commission
-        # (commission prélevée sur le vendeur au reversement)
-        total = subtotal
-
-        # 🔒 Verrouillage du stock pour éviter les race conditions
-        from django.db import transaction
-        
-        with transaction.atomic():
-            # Re-vérifier le stock dans la transaction verrouillée
-            product_locked = Product.objects.select_for_update().get(pk=product.pk)
-            
-            if product_locked.is_physical and product_locked.stock < quantity:
-                messages.error(request, "Stock insuffisant. Réessayez.")
-                addresses = request.user.addresses.all() if product.is_physical else []
-                return render(request, 'store/checkout.html', {
-                    'product': product,
-                    'addresses': addresses,
-                })
-            
-            order = ProductOrder.objects.create(
-                buyer           = request.user,
-                product         = product_locked,
-                quantity        = quantity,
-                unit_price      = unit_price,
-                subtotal        = subtotal,
-                commission      = commission,
-                total           = total,
-                delivery_method = delivery_method,
-                status          = ProductOrder.Status.PENDING,
-            )
-
-        # ============================================
-        # Sauvegarde adresse de livraison si produit physique
-        # ============================================
-        if delivery_method == 'delivery':
-            if address_id:
-                from apps.accounts.models import UserAddress
-                try:
-                    addr = UserAddress.objects.get(
-                        pk=address_id,
-                        user=request.user
-                    )
-                    order.delivery_name    = getattr(addr, 'full_name', '') or request.user.get_full_name()
-                    order.delivery_phone   = getattr(addr, 'phone', '')
-                    order.delivery_address = getattr(addr, 'address', '') or str(addr)
-                    order.delivery_city    = getattr(addr, 'city', '')
-                    order.delivery_commune = getattr(addr, 'commune', '')
-                    order.delivery_country = getattr(addr, 'country', "Côte d'Ivoire")
-                except UserAddress.DoesNotExist:
-                    messages.error(request, "Adresse introuvable.")
-                    addresses = request.user.addresses.all()
-                    return render(request, 'store/checkout.html', {
-                        'product':   product,
-                        'addresses': addresses,
-                    })
-            else:
-                order.delivery_name    = request.POST.get('delivery_name', '').strip()
-                order.delivery_phone   = request.POST.get('delivery_phone', '').strip()
-                order.delivery_address = request.POST.get('delivery_address', '').strip()
-                order.delivery_city    = request.POST.get('delivery_city', '').strip()
-                order.delivery_commune = request.POST.get('delivery_commune', '').strip()
-                order.delivery_country = request.POST.get('delivery_country', "Côte d'Ivoire").strip()
-
-            order.delivery_instructions = request.POST.get('delivery_instructions', '').strip()
-            order.save(update_fields=[
-                'delivery_name', 'delivery_phone', 'delivery_address',
-                'delivery_city', 'delivery_commune', 'delivery_country',
-                'delivery_instructions',
-            ])
-
-        return redirect(
-            'store:payment_initiate',
-            order_number=order.order_number
-        )
-
-    # GET — page checkout
-    addresses = request.user.addresses.all() if product.is_physical else []
-    return render(request, 'store/checkout.html', {
-        'product':   product,
-        'addresses': addresses,
-    })
-
-
-@login_required
-def store_payment_initiate(request, order_number):
-    """Initie le paiement PayDunya pour une commande boutique."""
-    order = get_object_or_404(
-        ProductOrder,
-        order_number=order_number,
-        buyer=request.user,
-        status=ProductOrder.Status.PENDING
-    )
-
-    from django.conf import settings
-    import requests as req
-
-    base_url    = settings.PAYDUNYA_BASE_URL
-    return_url  = f"{base_url}/boutique/retour/{order.order_number}/"
-    cancel_url  = f"{base_url}/boutique/annulation/{order.order_number}/"
-    webhook_url = f"{base_url}/boutique/webhook/"
-
-    payload = {
-        "store": {
-            "name":        "IvoirPass Boutique",
-            "tagline":     "Culture ivoirienne",
-            "website_url": base_url,
-        },
-        "invoice": {
-            "items": {
-                "item_1": {
-                    "name":        order.product.name,
-                    "quantity":    order.quantity,
-                    "unit_price":  str(order.unit_price),
-                    "total_price": str(order.subtotal),
-                    "description": order.product.get_product_type_display(),
-                }
-            },
-            "total_amount": str(int(order.total)),
-            "description":  f"Commande boutique {order.order_number}",
-        },
-        "actions": {
-            "cancel_url":   cancel_url,
-            "return_url":   return_url,
-            "callback_url": webhook_url,
-        },
-        "custom_data": {
-            "store_order_number": order.order_number,
-            "order_uuid":         str(order.uuid),
-            "buyer_email":        order.buyer.email,
-        }
-    }
-
-    headers = {
-        'Content-Type':         'application/json',
-        'PAYDUNYA-MASTER-KEY':  settings.PAYDUNYA_MASTER_KEY,
-        'PAYDUNYA-PRIVATE-KEY': settings.PAYDUNYA_PRIVATE_KEY,
-        'PAYDUNYA-TOKEN':       settings.PAYDUNYA_TOKEN,
-    }
-
-    try:
-        response = req.post(
-            settings.PAYDUNYA_API_BASE + '/checkout-invoice/create',
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
-        data = response.json()
-
-        if data.get('response_code') == '00':
-            token = data['token']
-
-            # ✅ On sauvegarde uniquement le token en session
-            request.session[
-                f'store_paydunya_token_{order.order_number}'
-            ] = token
-
-            # Sauvegarde aussi le token sur la commande pour le webhook
-            order.payment_reference = token
-            order.save(update_fields=['payment_reference'])
-
-            return redirect(data['response_text'])
-
-        else:
-            messages.error(
-                request,
-                f"Erreur PayDunya : {data.get('response_text', 'Inconnue')}"
-            )
-
-    except Exception as e:
-        messages.error(request, f"Erreur connexion PayDunya : {e}")
-
-    return redirect('store:detail', slug=order.product.slug)
-
-
-@login_required
-def store_payment_status(request, order_number):
-    """Vérifie le statut du paiement (AJAX)."""
-    from apps.payments.paydunya import PayDunyaService
-    
-    order = get_object_or_404(
-        ProductOrder,
-        order_number=order_number,
-        buyer=request.user
-    )
-    
-    # Si déjà payé
-    if order.status == ProductOrder.Status.PAID:
-        return JsonResponse({
-            'status': 'completed',
-            'redirect_url': f"/boutique/mes-commandes/{order_number}/"
-        })
-    
-    # Récupérer le token
-    token = order.payment_reference or request.session.get(f'store_paydunya_token_{order_number}', '')
-    
-    if not token:
-        # Chercher dans les paiements
-        from apps.payments.models import Payment
-        payment = Payment.objects.filter(order__order_number=order_number).first()
-        if payment:
-            token = payment.paydunya_token or ''
-    
-    if not token:
-        return JsonResponse({'status': 'unknown'})
-    
-    # Vérifier le statut
-    result = PayDunyaService.verify_payment(token)
-    status = result.get('status', '') or result.get('data', {}).get('invoice', {}).get('status', '')
-    
-    logger.info(f"[STATUS] Commande {order_number} - statut: {status}")
-    
-    if status == 'completed':
-        # Marquer comme payé
-        order.status = ProductOrder.Status.PAID
-        order.payment_method = 'paydunya'
-        order.payment_reference = token
-        order.paid_at = timezone.now()
-        order.save()
-        
-        try:
-            order._credit_seller_wallet()
-        except Exception as e:
-            logger.error(f"[STATUS] Wallet error: {e}")
-        
-        if order.product.is_digital:
-            from .models import DownloadLink
-            if not DownloadLink.objects.filter(order=order).exists():
-                order._generate_download_links()
-                logger.info(f"[STATUS] Liens générés")
-                # ✅ Envoyer l'email avec les liens
-                try:
-                    from .utils import send_download_link_email
-                    from apps.notifications.tasks import send_download_link_email_async
-                    send_download_link_email_async.delay(str(order.uuid))
-                except Exception as e:
-                    logger.error(f"[STATUS] Erreur envoi email: {e}")
-        
-        if order.product.is_physical:
-            order.product.stock -= order.quantity
-            order.product.sold_count += order.quantity
-            order.product.save(update_fields=['stock', 'sold_count'])
-        
-        # Nettoyer la session
-        if f'store_paydunya_token_{order_number}' in request.session:
-            del request.session[f'store_paydunya_token_{order_number}']
-        
-        return JsonResponse({
-            'status': 'completed',
-            'redirect_url': f"/boutique/mes-commandes/{order_number}/"
-        })
-    
-    return JsonResponse({'status': status})
-
-
-@login_required
-def store_payment_return(request, order_number):
-    """Retour après paiement PayDunya boutique."""
-    from apps.payments.paydunya import PayDunyaService
-
-    order = get_object_or_404(
-        ProductOrder,
-        order_number=order_number,
-        buyer=request.user
-    )
-
-    if order.status == ProductOrder.Status.PAID:
-        messages.success(request, f"Commande {order.order_number} confirmée !")
-        return redirect('store:order_detail', order_number=order.order_number)
-
-    token = request.GET.get('token', '').strip()
-    if not token:
-        token = request.session.get(f'store_paydunya_token_{order_number}', '')
-    if not token:
-        token = order.payment_reference or ''
-    if not token:
-        from apps.payments.models import Payment
-        payment = Payment.objects.filter(order__order_number=order_number).first()
-        if payment:
-            token = payment.paydunya_token or ''
-
-    logger.info(f"[RETOUR] Commande {order_number} token={token}")
-
-    if not token:
-        messages.error(request, "Token introuvable.")
-        return redirect('store:my_orders')
-
-    result = PayDunyaService.verify_payment(token)
-    
-    status = result.get('status', '')
-    if not status:
-        status = result.get('data', {}).get('invoice', {}).get('status', '')
-    if not status:
-        status = result.get('data', {}).get('status', '')
-
-    logger.info(f"[RETOUR] Status={status}")
-
-    is_completed = (
-        result.get('success') and status == 'completed'
-    ) or (
-        result.get('data', {}).get('response_code') == '00'
-        and status == 'completed'
-    )
-
-    if is_completed:
-        order.status = ProductOrder.Status.PAID
-        order.payment_method = 'paydunya'
-        order.payment_reference = token
-        order.paid_at = timezone.now()
-        order.save()
-        
-        try:
-            order._credit_seller_wallet()
-        except Exception as e:
-            logger.error(f"[RETOUR] Wallet error: {e}")
-        
-        if order.product.is_digital:
-            from .models import DownloadLink
-            if not DownloadLink.objects.filter(order=order).exists():
-                order._generate_download_links()
-                logger.info(f"[RETOUR] Liens générés")
-                try:
-                    from apps.notifications.tasks import send_download_link_email_async
-                    send_download_link_email_async.delay(str(order.uuid))
-                except Exception as e:
-                    logger.error(f"[RETOUR] Erreur envoi email: {e}")
-        
-        if order.product.is_physical:
-            order.product.stock -= order.quantity
-            order.product.sold_count += order.quantity
-            order.product.save(update_fields=['stock', 'sold_count'])
-        
-        if f'store_paydunya_token_{order_number}' in request.session:
-            del request.session[f'store_paydunya_token_{order_number}']
-        
-        messages.success(request, f"Commande {order.order_number} confirmée !")
-        return redirect('store:order_detail', order_number=order.order_number)
-
-    if status in ['pending', 'processing']:
-        messages.info(request, "Paiement en cours de traitement.")
-        return render(request, 'store/payment_pending.html', {
-            'order': order,
-            'token': token,
-        })
-
-    logger.warning(f"[RETOUR] Status non completed: {status}")
-    messages.warning(request, "Paiement en cours de vérification.")
-    return redirect('store:my_orders')
-
-
-@login_required
-def store_payment_cancel(request, order_number):
-    """Annulation paiement boutique."""
-    order = get_object_or_404(
-        ProductOrder,
-        order_number=order_number,
-        buyer=request.user
-    )
-    order.status = ProductOrder.Status.CANCELLED
-    order.save(update_fields=['status'])
-    messages.warning(request, "Commande annulée.")
-    return redirect('store:detail', slug=order.product.slug)
-
-
-@login_required
 def my_orders(request):
-    """Liste des commandes de l'acheteur."""
-    orders = ProductOrder.objects.filter(
-        buyer=request.user
-    ).select_related('product').order_by('-created_at')
-
-    return render(request, 'store/my_orders.html', {
-        'orders': orders,
-    })
-
-
-@login_required
-def order_detail(request, order_number):
-    """Détail d'une commande boutique."""
-    order = get_object_or_404(
-        ProductOrder,
-        order_number=order_number,
-        buyer=request.user
-    )
-    download_links = order.download_links.all()
-
-    return render(request, 'store/order_detail.html', {
-        'order':          order,
-        'download_links': download_links,
-    })
+    """Redirect vers l'accueil (achat "avec compte" retiré, audit H-3)."""
+    return redirect('home')
 
 
 @login_required
 def download_file(request, token):
-    """Téléchargement sécurisé avec filigrane numérique."""
-    link = get_object_or_404(DownloadLink, token=token)
-
-    if link.order.buyer != request.user:
-        raise Http404
-    if link.is_expired:
-        messages.error(request, "Ce lien de téléchargement a expiré.")
-        return redirect('store:order_detail', order_number=link.order.order_number)
-    if link.is_exhausted:
-        messages.error(request, f"Limite de téléchargements atteinte ({link.max_downloads} max).")
-        return redirect('store:order_detail', order_number=link.order.order_number)
-
-    link.download_count += 1
-    link.save(update_fields=['download_count'])
-
-    product = link.product
-    if not product.digital_file:
-        raise Http404
-
-    buyer_name = link.order.buyer.get_full_name() or link.order.buyer.email
-    order_number = link.order.order_number
-
-    # Appliquer le filigrane
-    from .watermark import add_watermark
-    watermarked, filename = add_watermark(
-        product.digital_file.path, buyer_name, order_number
-    )
-
-    if watermarked:
-        response = FileResponse(watermarked, as_attachment=True, filename=filename)
-    else:
-        # Pas de filigrane pour ce type de fichier (MP3, etc.)
-        response = FileResponse(
-            open(product.digital_file.path, 'rb'),
-            as_attachment=True,
-            filename=os.path.basename(product.digital_file.path)
-        )
-
-    return response
+    """Redirect vers l'accueil (achat "avec compte" retiré, audit H-3)."""
+    return redirect('home')
 
 
 # ============================================
@@ -630,6 +251,129 @@ def my_products(request):
 
 
 @seller_required
+def product_stats(request, slug):
+    """Statistiques detaillees d'un produit boutique."""
+    from decimal import Decimal
+    from django.db.models import Sum
+    from datetime import timedelta
+
+    product = get_object_or_404(Product, slug=slug, seller=request.user)
+
+    orders = GuestProductOrder.objects.filter(
+        product=product, status=GuestProductOrder.Status.PAID
+    ).order_by('-paid_at')
+
+    gross_revenue = orders.aggregate(t=Sum('subtotal'))['t'] or 0
+    units_sold    = orders.aggregate(t=Sum('quantity'))['t'] or 0
+
+    commission_rate = Decimal(str(product.commission_rate)) / Decimal('100')
+    gross_decimal   = Decimal(str(gross_revenue))
+    commission      = gross_decimal * commission_rate
+    net_revenue     = gross_decimal - commission
+
+    format_stats = []
+    for method_value, method_label in GuestProductOrder.DeliveryMethod.choices:
+        method_orders = orders.filter(delivery_method=method_value)
+        count = method_orders.count()
+        if count:
+            format_stats.append({
+                'label':   method_label,
+                'count':   count,
+                'revenue': method_orders.aggregate(t=Sum('subtotal'))['t'] or 0,
+            })
+
+    download_links  = GuestDownloadLink.objects.filter(product=product)
+    downloads_used  = download_links.aggregate(t=Sum('download_count'))['t'] or 0
+    downloads_total = download_links.aggregate(t=Sum('max_downloads'))['t'] or 0
+
+    recent_orders = orders[:20]
+
+    sales_timeline = []
+    today = timezone.now().date()
+    for i in range(29, -1, -1):
+        day = today - timedelta(days=i)
+        day_qty = orders.filter(paid_at__date=day).aggregate(t=Sum('quantity'))['t'] or 0
+        sales_timeline.append({'date': day.strftime('%d/%m'), 'qty': day_qty})
+
+    return render(request, 'store/product_stats.html', {
+        'product':          product,
+        'gross_revenue':    gross_revenue,
+        'commission':       commission,
+        'net_revenue':      net_revenue,
+        'units_sold':       units_sold,
+        'orders_count':     orders.count(),
+        'format_stats':     format_stats,
+        'downloads_used':   downloads_used,
+        'downloads_total':  downloads_total,
+        'recent_orders':    recent_orders,
+        'sales_timeline':   sales_timeline,
+    })
+
+
+@seller_required
+def product_buyers(request, slug):
+    """Liste des acheteurs d'un produit."""
+    product = get_object_or_404(Product, slug=slug, seller=request.user)
+
+    orders = GuestProductOrder.objects.filter(
+        product=product, status=GuestProductOrder.Status.PAID
+    ).order_by('-paid_at')
+
+    search = request.GET.get('q', '').strip()
+    delivery_filter = request.GET.get('delivery', '').strip()
+
+    if search:
+        orders = orders.filter(
+            Q(first_name__icontains=search) | Q(last_name__icontains=search) |
+            Q(email__icontains=search) | Q(phone__icontains=search) |
+            Q(order_number__icontains=search)
+        )
+
+    if delivery_filter:
+        orders = orders.filter(delivery_method=delivery_filter)
+
+    return render(request, 'store/product_buyers.html', {
+        'product': product,
+        'orders': orders,
+        'search': search,
+        'delivery_filter': delivery_filter,
+        'total_count': orders.count(),
+    })
+
+
+@seller_required
+def export_product_buyers_csv(request, slug):
+    """Exporte la liste des acheteurs d'un produit en CSV."""
+    import csv
+
+    product = get_object_or_404(Product, slug=slug, seller=request.user)
+    orders = GuestProductOrder.objects.filter(
+        product=product, status=GuestProductOrder.Status.PAID
+    ).order_by('-paid_at')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="acheteurs_{product.slug}.csv"'
+    response.write('\ufeff')
+    writer = csv.writer(response)
+    writer.writerow(['Commande', 'Nom', 'Email', 'Téléphone', 'Format', 'Qté', 'Montant', 'Date'])
+    for order in orders:
+        writer.writerow([
+            order.order_number, order.buyer_name, order.email, order.phone,
+            order.get_delivery_method_display(), order.quantity,
+            int(order.total), order.paid_at.strftime('%d/%m/%Y %H:%M') if order.paid_at else '',
+        ])
+
+    log_action(
+        action=AuditLog.Action.EXPORT,
+        description=f"Export CSV des acheteurs — {product.name}",
+        user=request.user, model_name='GuestProductOrder',
+        metadata={'product': product.name, 'count': orders.count()},
+        ip_address=get_client_ip(request),
+    )
+    return response
+
+
+@seller_required
 def product_create(request):
     """Créer un nouveau produit."""
     form = ProductForm()
@@ -639,6 +383,28 @@ def product_create(request):
         if form.is_valid():
             product        = form.save(commit=False)
             product.seller = request.user
+
+            # ── Garde-fou KYC : publication d'un produit payant ──────
+            if (
+                product.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'action': 'Créer',
+                })
+
             product.save()
             messages.success(
                 request,
@@ -646,10 +412,18 @@ def product_create(request):
             )
             return redirect('store:my_products')
         else:
+            # Log côté serveur pour diagnostiquer les cas où le client
+            # ne voit pas l'erreur (bug d'affichage du template).
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[product_create] form invalide pour user={request.user.email} — "
+                f"erreurs={form.errors.as_json()}"
+            )
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'store/product_form.html', {
-        'form':   form,
+        'form': form,
         'action': 'Créer',
     })
 
@@ -667,10 +441,40 @@ def product_edit(request, slug):
             request.POST, request.FILES, instance=product
         )
         if form.is_valid():
-            form.save()
+            # ── Garde-fou KYC : passage à PUBLISHED ──────────────────
+            product_candidate = form.save(commit=False)
+
+            if (
+                product_candidate.status == Product.Status.PUBLISHED
+                and not request.user.is_organizer_verified
+            ):
+                messages.error(
+                    request,
+                    "✅ Rendez-vous dans votre espace compte, cliquez sur "
+                    "« Mon profil », cliquez sur « Organisation », "
+                    "« Complétez mon profil organisateur », puis dans "
+                    "« Vérifications KYC » téléchargez votre CNI et cliquez "
+                    "sur « Enregistrer » pour terminer.\n"
+                    "✅ Une fois confirmé, vous pourrez publier des produits "
+                    "payants.",
+                    extra_tags='danger kyc-persistent',
+                )
+                return render(request, 'store/product_form.html', {
+                    'form': form,
+                    'product': product,
+                    'action': 'Modifier',
+                })
+
+            product_candidate.save()
             messages.success(request, "Produit mis à jour.")
             return redirect('store:my_products')
         else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[product_edit] form invalide pour user={request.user.email} "
+                f"sur product={slug} — erreurs={form.errors.as_json()}"
+            )
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'store/product_form.html', {
@@ -707,62 +511,67 @@ def product_delete(request, slug):
 @ratelimit(key='ip', rate='30/m', block=True)
 def store_webhook(request):
     """Webhook PayDunya pour les commandes boutique."""
-    
+    from django.db import transaction
+
     if not request.body:
         logger.warning("Store webhook: body vide")
         return HttpResponse('OK', status=200)
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Store webhook rejeté : signature PayDunya invalide")
         return HttpResponse('FORBIDDEN', status=403)
-    
+
     try:
         raw_data = json.loads(request.body)
         logger.info(f"Store webhook raw data: {raw_data}")
-        
+
         if 'data' in raw_data:
             payload = raw_data['data']
         else:
             payload = raw_data
-        
+
         invoice = payload.get('invoice', {})
         custom_data = payload.get('custom_data', {})
-        
+
         status = invoice.get('status', '')
         token = invoice.get('invoiceToken', '') or payload.get('token', '')
         order_number = custom_data.get('store_order_number', '')
-        
+
         logger.info(f"Store webhook: order={order_number}, status={status}, token={token}")
 
-        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
                 logger.warning(f"Store webhook: paiement non confirmé par API - {token}")
                 return HttpResponse('OK', status=200)
-        
+
         if status == 'completed' and order_number:
             try:
-                order = ProductOrder.objects.get(
-                    order_number=order_number,
-                    status=ProductOrder.Status.PENDING
-                )
-                
-                order.status = ProductOrder.Status.PAID
-                order.payment_method = 'paydunya'
-                order.payment_reference = token
-                order.paid_at = timezone.now()
-                order.save()
-                
+                with transaction.atomic():
+                    order = ProductOrder.objects.select_for_update().get(
+                        order_number=order_number,
+                        status=ProductOrder.Status.PENDING
+                    )
+
+                    order.status = ProductOrder.Status.PAID
+                    order.payment_method = 'paydunya'
+                    order.payment_reference = token
+                    order.paid_at = timezone.now()
+                    order.save()
+
+                    if order.product.is_physical:
+                        order.product.stock -= order.quantity
+                        order.product.sold_count += order.quantity
+                        order.product.save(update_fields=['stock', 'sold_count'])
+
                 logger.info(f"Store webhook: commande {order_number} validée")
-                
+
                 try:
                     order._credit_seller_wallet()
                 except Exception as e:
                     logger.error(f"Store webhook: erreur wallet: {e}")
-                
+
                 if order.product.is_digital:
                     from .models import DownloadLink
                     if not DownloadLink.objects.filter(order=order).exists():
@@ -772,19 +581,14 @@ def store_webhook(request):
                             send_download_link_email_async.delay(str(order.uuid))
                         except Exception as e:
                             logger.error(f"Store webhook: erreur envoi email: {e}")
-                
-                if order.product.is_physical:
-                    order.product.stock -= order.quantity
-                    order.product.sold_count += order.quantity
-                    order.product.save(update_fields=['stock', 'sold_count'])
-                
+
             except ProductOrder.DoesNotExist:
                 logger.warning(f"Store webhook: commande {order_number} introuvable ou déjà payée")
             except Exception as e:
                 logger.error(f"Store webhook: erreur mise à jour: {e}")
-        
+
         return HttpResponse('OK', status=200)
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"Store webhook: JSON invalide - {e}, body: {request.body[:200]}")
         return HttpResponse('OK', status=200)
@@ -798,10 +602,7 @@ def store_webhook(request):
 # ============================================
 
 def guest_buy_product(request, slug):
-    """
-    Achat sans compte — formulaire dynamique selon le type de produit.
-    Le client peut acheter le même produit autant de fois qu'il veut.
-    """
+    """Achat sans compte — formulaire dynamique selon le type de produit."""
     product = get_object_or_404(Product, slug=slug, status=Product.Status.PUBLISHED)
 
     if not product.is_available:
@@ -824,8 +625,7 @@ def guest_buy_product(request, slug):
         if not last_name:  errors.append("Le nom est requis.")
         if not email:      errors.append("L'email est requis.")
 
-        # Adresse obligatoire si livraison physique
-        if delivery_method == 'delivery':
+        if delivery_method in ('delivery', 'both'):
             delivery_name    = request.POST.get('delivery_name', '').strip()
             delivery_phone   = request.POST.get('delivery_phone', '').strip()
             delivery_address = request.POST.get('delivery_address', '').strip()
@@ -835,7 +635,13 @@ def guest_buy_product(request, slug):
             if not delivery_address: errors.append("L'adresse est requise.")
             if not delivery_city:    errors.append("La ville est requise.")
 
-        if product.is_physical and quantity > product.stock:
+        # ── Fix bundle stock=0 : bloquer la livraison physique si épuisée ─
+        if delivery_method in ('delivery', 'both') and not product.is_available_physical:
+            errors.append(
+                "Version physique épuisée. Choisissez la version numérique "
+                "pour continuer."
+            )
+        elif delivery_method in ('delivery', 'both') and quantity > product.stock:
             errors.append("Quantité demandée supérieure au stock disponible.")
 
         if errors:
@@ -843,21 +649,30 @@ def guest_buy_product(request, slug):
                 messages.error(request, e)
             return render(request, 'store/guest_checkout.html', {'product': product})
 
-        # Calcul montants
-        unit_price = product.price
-        subtotal   = unit_price * quantity
-        total      = subtotal  # Commission prélevée sur le vendeur, pas sur l'acheteur
+        if product.product_type == Product.ProductType.BUNDLE:
+            if delivery_method == 'download':
+                unit_price = product.price_digital
+            elif delivery_method == 'delivery':
+                unit_price = product.price_physical
+            else:
+                unit_price = product.price
+            if not unit_price:
+                messages.error(request, "Ce format n'est pas disponible pour ce produit.")
+                return render(request, 'store/guest_checkout.html', {'product': product})
+        else:
+            unit_price = product.price
+        subtotal = unit_price * quantity
+        total    = subtotal
 
-        # 🔒 Verrouillage du stock pour éviter les race conditions
         from django.db import transaction
-        
+
         with transaction.atomic():
             product_locked = Product.objects.select_for_update().get(pk=product.pk)
-            
-            if product_locked.is_physical and product_locked.stock < quantity:
+
+            if delivery_method in ('delivery', 'both') and product_locked.stock < quantity:
                 messages.error(request, "Stock insuffisant. Réessayez.")
                 return render(request, 'store/guest_checkout.html', {'product': product})
-            
+
             order = GuestProductOrder.objects.create(
                 first_name = first_name,
                 last_name  = last_name,
@@ -872,7 +687,7 @@ def guest_buy_product(request, slug):
                 status = GuestProductOrder.Status.PENDING,
             )
 
-        if delivery_method == 'delivery':
+        if delivery_method in ('delivery', 'both'):
             order.delivery_name         = request.POST.get('delivery_name', '').strip()
             order.delivery_phone        = request.POST.get('delivery_phone', '').strip()
             order.delivery_address      = request.POST.get('delivery_address', '').strip()
@@ -881,6 +696,14 @@ def guest_buy_product(request, slug):
             order.delivery_country      = request.POST.get('delivery_country', "Côte d'Ivoire").strip()
             order.delivery_instructions = request.POST.get('delivery_instructions', '').strip()
             order.save()
+
+        log_action(
+            action=AuditLog.Action.ORDER_CREATED,
+            description=f"Commande boutique invité {order.order_number} créée ({email})",
+            model_name='GuestProductOrder', object_id=order.order_number,
+            metadata={'total': str(total), 'product': product.name, 'quantity': quantity},
+            ip_address=get_client_ip(request),
+        )
 
         return redirect('store:guest_payment', order_number=order.order_number)
 
@@ -951,11 +774,43 @@ def guest_store_payment_initiate(request, order_number):
             request.session[f'guest_store_token_{order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
+
+            from apps.payments.models import Payment
+            Payment.objects.get_or_create(
+                guest_product_order=order,
+                defaults={
+                    'amount': order.total, 'currency': 'XOF',
+                    'provider': Payment.Provider.PAYDUNYA,
+                    'paydunya_token': token, 'status': Payment.Status.PENDING,
+                },
+            )
+
+            log_action(
+                action=AuditLog.Action.PAYMENT_INITIATED,
+                description=f"Paiement initié pour la commande boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'amount': str(order.total), 'provider': 'paydunya'},
+                ip_address=get_client_ip(request),
+            )
             return redirect(data['response_text'])
         else:
+            log_action(
+                action=AuditLog.Action.PAYMENT_FAILED,
+                description=f"Échec d'initiation du paiement boutique invité {order_number}",
+                model_name='GuestProductOrder', object_id=order_number,
+                metadata={'reason': str(data.get('response_text', ''))[:200]},
+                ip_address=get_client_ip(request),
+            )
             messages.error(request, f"Erreur PayDunya : {data.get('response_text')}")
 
     except Exception as e:
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Erreur connexion PayDunya (boutique invité) {order_number}",
+            model_name='GuestProductOrder', object_id=order_number,
+            metadata={'reason': str(e)[:200]},
+            ip_address=get_client_ip(request),
+        )
         messages.error(request, f"Erreur connexion : {e}")
 
     return redirect('store:detail', slug=order.product.slug)
@@ -981,15 +836,25 @@ def guest_store_payment_return(request, order_number):
         status = result.get('status', '') or result.get('data', {}).get('invoice', {}).get('status', '')
 
         if result.get('success') and status == 'completed':
-            order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-
-            try:
-                from apps.notifications.service import NotificationService
-                NotificationService.guest_store_order_confirmed(order)
-            except Exception as e:
-                logger.error(f"Email guest store erreur: {e}")
-
-            messages.success(request, f"Commande {order.order_number} confirmée !")
+            newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
+                order, token, result, source='retour'
+            )
+            if newly_confirmed:
+                try:
+                    from apps.notifications.service import NotificationService
+                    NotificationService.guest_store_order_confirmed(order)
+                except Exception as e:
+                    logger.error(f"Email guest store erreur: {e}")
+                messages.success(request, f"Commande {order.order_number} confirmée !")
+            elif stock_conflict:
+                messages.warning(
+                    request,
+                    "Votre paiement a bien été reçu. Votre commande est en "
+                    "cours de traitement et notre équipe vous contactera "
+                    "sous peu concernant sa disponibilité."
+                )
+            else:
+                messages.success(request, f"Commande {order.order_number} confirmée !")
 
     return redirect('store:guest_confirmation', order_number=order_number)
 
@@ -1010,14 +875,19 @@ def guest_store_confirmation(request, order_number):
 @ratelimit(key='ip', rate='30/m', block=True)
 def guest_store_webhook(request):
     """Webhook PayDunya boutique invité."""
-    
+
     if not request.body:
         return HttpResponse('EMPTY', status=200)
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     from apps.payments.paydunya import PayDunyaService
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Guest store webhook rejeté : signature PayDunya invalide")
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description="Webhook boutique invité rejeté : signature PayDunya invalide",
+            model_name='GuestProductOrder', object_id='',
+            ip_address=get_client_ip(request),
+        )
         return HttpResponse('FORBIDDEN', status=403)
 
     try:
@@ -1028,7 +898,6 @@ def guest_store_webhook(request):
         token        = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_store_order_number', '')
 
-        # 🔒 Vérification serveur-à-serveur via l'API PayDunya
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
@@ -1041,11 +910,22 @@ def guest_store_webhook(request):
                     order_number=order_number,
                     status=GuestProductOrder.Status.PENDING
                 )
-                order.mark_as_paid(payment_method='paydunya', payment_reference=token)
-                from apps.notifications.service import NotificationService
-                NotificationService.guest_store_order_confirmed(order)
+                newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
+                    order, token, data, source='webhook'
+                )
+                if newly_confirmed:
+                    try:
+                        from apps.notifications.service import NotificationService
+                        NotificationService.guest_store_order_confirmed(order)
+                    except Exception as e:
+                        logger.error(f"Email guest store erreur (webhook) : {e}")
             except GuestProductOrder.DoesNotExist:
-                pass
+                log_action(
+                    action=AuditLog.Action.PAYMENT_FAILED,
+                    description=f"Webhook boutique invité : commande {order_number} introuvable ou déjà traitée",
+                    model_name='GuestProductOrder', object_id=order_number,
+                    ip_address=get_client_ip(request),
+                )
 
         return HttpResponse('OK', status=200)
     except Exception as e:
@@ -1054,27 +934,48 @@ def guest_store_webhook(request):
 
 
 def guest_download_file(request, token):
-    """Téléchargement sécurisé invité avec filigrane."""
+    """
+    Téléchargement sécurisé invité.
+
+    - Si `product.external_url` renseigné → incrémente `external_click_count`
+      puis redirige. Ne consomme PAS la limite de téléchargements (Q11).
+    - Sinon → sert le fichier `digital_file` avec filigrane.
+    """
     link = get_object_or_404(GuestDownloadLink, token=token)
 
     if link.is_expired:
-        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'expired'})
+        return render(
+            request, 'store/download_expired.html',
+            {'link': link, 'reason': 'expired'},
+        )
     if link.is_exhausted:
-        return render(request, 'store/download_expired.html', {'link': link, 'reason': 'exhausted'})
+        return render(
+            request, 'store/download_expired.html',
+            {'link': link, 'reason': 'exhausted'},
+        )
+
+    product = link.product
+
+    # ── Cas 1 : lien externe ─────────────────────────────────────────
+    if product.external_url:
+        GuestDownloadLink.objects.filter(pk=link.pk).update(
+            external_click_count=F('external_click_count') + 1
+        )
+        return redirect(product.external_url)
+
+    # ── Cas 2 : fichier interne → filigrane ──────────────────────────
+    if not product.digital_file:
+        raise Http404("Produit sans fichier téléchargeable")
 
     link.download_count += 1
     link.save(update_fields=['download_count'])
-
-    product = link.product
-    if not product.digital_file:
-        raise Http404
 
     buyer_name = link.order.buyer_name
     order_number = link.order.order_number
 
     from .watermark import add_watermark
     watermarked, filename = add_watermark(
-        product.digital_file.path, buyer_name, order_number
+        product.digital_file.path, buyer_name, order_number,
     )
 
     if watermarked:
@@ -1083,7 +984,7 @@ def guest_download_file(request, token):
         response = FileResponse(
             open(product.digital_file.path, 'rb'),
             as_attachment=True,
-            filename=os.path.basename(product.digital_file.path)
+            filename=os.path.basename(product.digital_file.path),
         )
 
     return response
@@ -1092,7 +993,23 @@ def guest_download_file(request, token):
 def guest_store_payment_cancel(request, order_number):
     """Annulation paiement boutique invité."""
     order = get_object_or_404(GuestProductOrder, order_number=order_number)
-    order.status = GuestProductOrder.Status.CANCELLED
-    order.save(update_fields=['status'])
-    messages.warning(request, "Commande annulée.")
-    return redirect('store:detail', slug=order.product.slug)
+    if order.status == GuestProductOrder.Status.PENDING:
+        from apps.payments.models import Payment
+
+        order.status = GuestProductOrder.Status.CANCELLED
+        order.save(update_fields=['status'])
+        Payment.objects.filter(
+            guest_product_order=order, status=Payment.Status.PENDING,
+        ).update(status=Payment.Status.CANCELLED)
+
+        log_action(
+            action=AuditLog.Action.PAYMENT_CANCELLED,
+            description=(
+                f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}. "
+                f"Les paiements PENDING associés ont été clôturés pour empêcher toute "
+                f"confirmation tardive par la réconciliation."
+            ),
+            model_name='Payment', object_id=order_number,
+            ip_address=get_client_ip(request),
+        )
+    return redirect('store:guest_confirmation', order_number=order.order_number)

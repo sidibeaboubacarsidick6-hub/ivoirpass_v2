@@ -1,0 +1,46 @@
+{% extends "notifications/email/base_email.html" %}
+{% block content %}
+<h2>Votre événement a été créé</h2>
+
+<p>Bonjour {{ organizer.get_short_name|default:organizer.first_name|default:organizer.email }},</p>
+
+<p>
+    Votre événement <strong>« {{ event.title }} »</strong> a bien été créé sur IvoirPass.
+</p>
+
+{% if kyc_required %}
+<div style="padding:16px;border-left:4px solid #198754;background:#f8f9fa;margin:20px 0;">
+    <h3>🔒 Vérification KYC requise</h3>
+    <p>
+        Pour publier un événement comportant des billets payants, votre compte
+        organisateur doit être vérifié.
+    </p>
+
+    <p><strong>Documents à fournir :</strong></p>
+    <ul>
+        <li>Pièce d'identité : carte d'identité, passeport ou carte consulaire</li>
+        <li>Justificatif de domicile : facture d'électricité, d'eau ou attestation de domicile</li>
+        <li>Document professionnel : RCCM, attestation fiscale ou déclaration d'activité</li>
+    </ul>
+
+    <p>
+        Vous pouvez transmettre vos documents depuis votre
+        <a href="{{ profile_url }}">profil organisateur</a>.
+    </p>
+
+    <p>
+        Après soumission, vos documents sont vérifiés par notre équipe.
+        La publication payante sera disponible une fois la vérification validée.
+    </p>
+</div>
+{% else %}
+<p>
+    Votre compte organisateur étant déjà vérifié, vous pouvez utiliser les
+    fonctionnalités de publication payante conformément aux règles d'IvoirPass.
+</p>
+{% endif %}
+
+<p>
+    Merci d'utiliser IvoirPass.
+</p>
+{% endblock %}

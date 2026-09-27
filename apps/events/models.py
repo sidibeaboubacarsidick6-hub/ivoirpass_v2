@@ -4,6 +4,7 @@ IvoirPass V2 — Modèles des événements
 import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.core.validators import MinValueValidator
 from django.utils.text import slugify
 from django.utils import timezone
 from django.conf import settings
@@ -90,11 +91,10 @@ class Event(models.Model):
         help_text="Accroche courte affichée sous le titre"
     )
     description = models.TextField(_('description complète'))
-    short_description = models.TextField(
-        _('description courte'),
-        max_length=500,
-        blank=True,
-        help_text="Résumé pour les cartes d'aperçu (max 500 car.)"
+    short_description = models.CharField(
+        _('InfoLine'),
+        max_length=150,
+        help_text="Numéro de contact de l'organisateur"
     )
 
     # ============================================
@@ -234,10 +234,6 @@ class Event(models.Model):
     # ============================================
     # BILLETTERIE
     # ============================================
-    is_free = models.BooleanField(
-        _('événement gratuit'),
-        default=False
-    )
     min_price = models.DecimalField(
         _('prix minimum'),
         max_digits=10,
@@ -357,7 +353,9 @@ class Event(models.Model):
         if self.status != self.Status.PUBLISHED:
             return False
         sale_start = self.sale_start or self.published_at or now
-        sale_end = self.sale_end or self.start_date
+        # Vente ouverte jusqu'à la FIN de l'événement (pas le début) :
+        # l'acheteur peut encore prendre un billet pendant l'événement.
+        sale_end = self.sale_end or self.end_date
         return sale_start <= now <= sale_end
 
     @property
@@ -405,7 +403,18 @@ class TicketType(models.Model):
         _('prix (FCFA)'),
         max_digits=10,
         decimal_places=0,
-        help_text="0 pour gratuit"
+        validators=[MinValueValidator(100)],
+        help_text="Minimum 100 FCFA"
+    )
+    valid_date = models.DateField(
+        _('jour de validité'),
+        null=True,
+        blank=True,
+        help_text=(
+            "Si l'événement dure plusieurs jours et que ce ticket ne "
+            "donne accès qu'à un jour précis (ex: samedi), indiquez-le ici. "
+            "Laisser vide si le ticket est valable sur toute la durée de l'événement."
+        )
     )
     quantity = models.PositiveIntegerField(
         _('quantité disponible'),
@@ -448,9 +457,6 @@ class TicketType(models.Model):
     def __str__(self):
         return f"{self.event.title} — {self.name} ({self.price} FCFA)"
 
-    @property
-    def is_free(self):
-        return self.price == 0
 
     @property
     def remaining(self):
@@ -475,3 +481,134 @@ class TicketType(models.Model):
         if self.sale_end and now > self.sale_end:
             return False
         return True
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+
+        if self.price is not None and self.price < 100:
+            raise ValidationError({
+                'price': "Le prix minimum est de 100 FCFA."
+            })
+
+        if self.valid_date and self.event_id:
+            event_start = self.event.start_date.date()
+            event_end = self.event.end_date.date()
+            if not (event_start <= self.valid_date <= event_end):
+                raise ValidationError({
+                    'valid_date': f"Cette date doit être comprise entre le "
+                                   f"{event_start.strftime('%d/%m/%Y')} et le "
+                                   f"{event_end.strftime('%d/%m/%Y')}."
+                })
+
+
+class EventFAQ(models.Model):
+    """
+    Question fréquente affichée sur la landing page d'un événement.
+    Ex: "Puis-je me faire rembourser ?", "Le lieu est-il accessible en PMR ?"
+    """
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='faqs',
+        verbose_name=_('événement')
+    )
+    question = models.CharField(_('question'), max_length=300)
+    answer = models.TextField(_('réponse'))
+    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
+
+    class Meta:
+        verbose_name = _('question fréquente')
+        verbose_name_plural = _('questions fréquentes')
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.question}"
+
+
+class EventGalleryItem(models.Model):
+    """
+    Élément de la galerie / programme d'un événement.
+
+    Un seul modèle sert les deux usages pour rester simple : une photo de
+    galerie (avec `image`, sans `time`) et une entrée de programme/lineup
+    (avec `time` et éventuellement `subtitle` pour l'intervenant, sans
+    `image` obligatoire) se distinguent seulement par les champs
+    renseignés, pas par des tables séparées.
+    """
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='gallery_items',
+        verbose_name=_('événement')
+    )
+    image = models.ImageField(
+        _('image'),
+        upload_to='events/gallery/%Y/%m/',
+        null=True, blank=True,
+        help_text="Laisser vide pour une entrée de programme sans visuel."
+    )
+    title = models.CharField(
+        _('titre'),
+        max_length=200,
+        blank=True,
+        help_text="Légende de la photo, ou titre du passage (ex: 'Concert live')."
+    )
+    subtitle = models.CharField(
+        _('sous-titre'),
+        max_length=200,
+        blank=True,
+        help_text="Ex: nom de l'artiste/intervenant pour une entrée de programme."
+    )
+    time = models.TimeField(
+        _('heure'),
+        null=True, blank=True,
+        help_text="Renseigné uniquement pour une entrée de programme (ex: 20h00)."
+    )
+    order = models.PositiveIntegerField(
+        _('ordre d\'affichage'),
+        default=0,
+        blank=True
+    )
+
+
+    class Meta:
+        verbose_name = _('élément galerie / programme')
+        verbose_name_plural = _('galerie / programme')
+        ordering = ['order', 'time', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.title or self.subtitle or '#' + str(self.pk)}"
+
+    @property
+    def is_program_entry(self):
+        """Distingue une entrée de programme (a une heure) d'une simple photo."""
+        return self.time is not None
+
+
+class EventPartner(models.Model):
+    """Partenaire / sponsor affiché sur la landing page d'un événement."""
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='partners',
+        verbose_name=_('événement')
+    )
+    name = models.CharField(_('nom'), max_length=150)
+    logo = models.ImageField(
+        _('logo'),
+        upload_to='events/partners/%Y/%m/',
+        null=True, blank=True,
+    )
+    website_url = models.URLField(_('site web'), blank=True)
+    order = models.PositiveIntegerField(_('ordre d\'affichage'), default=0)
+
+
+    class Meta:
+        verbose_name = _('partenaire')
+        verbose_name_plural = _('partenaires')
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.event.title} — {self.name}"

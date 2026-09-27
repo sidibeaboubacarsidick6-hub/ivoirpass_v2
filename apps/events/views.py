@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from .models import Event, Category, TicketType
-from .forms import EventForm, TicketTypeFormSet
+from .forms import EventForm, TicketTypeFormSet, EventFAQFormSet, EventGalleryItemFormSet, EventPartnerFormSet
 
 
 # ============================================
@@ -86,10 +86,18 @@ def event_detail(request, slug):
         category=event.category
     ).exclude(pk=event.pk).order_by('-start_date')[:3]
 
+    gallery_items = event.gallery_items.all()
+
     return render(request, 'events/detail.html', {
         'event':          event,
         'ticket_types':   ticket_types,
         'similar_events': similar_events,
+        # Le même modèle EventGalleryItem sert les photos (sans heure) et
+        # le programme (avec heure) — on sépare ici juste pour l'affichage.
+        'program_items':  gallery_items.filter(time__isnull=False),
+        'photo_items':    gallery_items.filter(time__isnull=True),
+        'faqs':           event.faqs.all(),
+        'partners':       event.partners.all(),
     })
 
 
@@ -129,14 +137,21 @@ def my_events(request):
 @organizer_required
 def event_create(request):
     """Créer un nouvel événement."""
-    form    = EventForm()
-    formset = TicketTypeFormSet()
+    form            = EventForm()
+    formset         = TicketTypeFormSet()
+    faq_formset     = EventFAQFormSet()
+    gallery_formset = EventGalleryItemFormSet()
+    partner_formset = EventPartnerFormSet()
 
     if request.method == 'POST':
-        form    = EventForm(request.POST, request.FILES)
-        formset = TicketTypeFormSet(request.POST)
+        form            = EventForm(request.POST, request.FILES)
+        formset         = TicketTypeFormSet(request.POST)
+        faq_formset     = EventFAQFormSet(request.POST)
+        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES)
+        partner_formset = EventPartnerFormSet(request.POST, request.FILES)
 
-        if form.is_valid() and formset.is_valid():
+        if (form.is_valid() and formset.is_valid() and faq_formset.is_valid()
+                and gallery_formset.is_valid() and partner_formset.is_valid()):
             # ============================================
             # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
             # ============================================
@@ -153,14 +168,21 @@ def event_create(request):
                 if has_paid_tickets and not request.user.is_organizer_verified:
                     messages.error(
                         request,
-                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
-                        "Veuillez soumettre vos documents KYC (pièce d'identité, "
-                        "justificatif de domicile, document professionnel) dans "
-                        "votre profil avant de publier un événement payant."
+                        "🔒 Pour publier un événement payant, vous devez d'abord "
+                        "compléter votre KYC. Rendez-vous dans votre espace compte, "
+                        "cliquez sur \"Mon profil\", cliquez sur \"Organisation\", "
+                        "\"Complétez mon profil organisateur\", puis dans "
+                        "\"Vérifications KYC\" téléchargez votre CNI et cliquez sur "
+                        "\"Enregistrer\" pour terminer. Une fois confirmé, vous pourrez "
+                        "publier des événements payants.",
+                        extra_tags='danger kyc-persistent'
                     )
                     return render(request, 'events/create.html', {
-                        'form':    form,
-                        'formset': formset,
+                        'form':            form,
+                        'formset':         formset,
+                        'faq_formset':     faq_formset,
+                        'gallery_formset': gallery_formset,
+                        'partner_formset': partner_formset,
                         'action':  'Créer',
                     })
 
@@ -171,10 +193,65 @@ def event_create(request):
             formset.instance = event
             formset.save()
 
+            faq_formset.instance = event
+            faq_formset.save()
+            gallery_formset.instance = event
+            gallery_formset.save()
+            partner_formset.instance = event
+            partner_formset.save()
+
             prices = event.ticket_types.values_list('price', flat=True)
             if prices:
                 event.min_price = min(prices)
                 event.save(update_fields=['min_price'])
+
+            # Notification email de création d'événement.
+            # L'envoi ne doit jamais empêcher la création de l'événement.
+            try:
+                from django.conf import settings
+                from django.core.mail import EmailMultiAlternatives
+                from django.template.loader import render_to_string
+                from django.urls import reverse
+                from django.utils import timezone
+
+                organizer = request.user
+                kyc_required = not organizer.is_organizer_verified
+                profile_url = request.build_absolute_uri(
+                    reverse('accounts:profile')
+                )
+
+                context = {
+                    'organizer': organizer,
+                    'event': event,
+                    'kyc_required': kyc_required,
+                    'profile_url': profile_url,
+                    'platform_url': settings.PAYDUNYA_BASE_URL,
+                    'support_email': getattr(
+                        settings, 'DEFAULT_FROM_EMAIL', ''
+                    ),
+                    'year': timezone.now().year,
+                }
+
+                subject = f"Votre événement « {event.title} » a été créé — IvoirPass"
+                text_body = render_to_string(
+                    'notifications/email/event_created.txt',
+                    context,
+                )
+                html_body = render_to_string(
+                    'notifications/email/event_created.html',
+                    context,
+                )
+
+                email = EmailMultiAlternatives(
+                    subject=subject,
+                    body=text_body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    to=[organizer.email],
+                )
+                email.attach_alternative(html_body, "text/html")
+                email.send(fail_silently=True)
+            except Exception:
+                pass
 
             messages.success(request, f"Événement « {event.title} » créé avec succès !")
             return redirect('events:my_events')
@@ -182,8 +259,11 @@ def event_create(request):
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'events/create.html', {
-        'form':    form,
-        'formset': formset,
+        'form':            form,
+        'formset':         formset,
+        'faq_formset':     faq_formset,
+        'gallery_formset': gallery_formset,
+        'partner_formset': partner_formset,
         'action':  'Créer',
     })
 
@@ -192,14 +272,21 @@ def event_create(request):
 def event_edit(request, slug):
     """Modifier un événement existant."""
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
-    form    = EventForm(instance=event)
-    formset = TicketTypeFormSet(instance=event)
+    form            = EventForm(instance=event)
+    formset         = TicketTypeFormSet(instance=event)
+    faq_formset     = EventFAQFormSet(instance=event)
+    gallery_formset = EventGalleryItemFormSet(instance=event)
+    partner_formset = EventPartnerFormSet(instance=event)
 
     if request.method == 'POST':
-        form    = EventForm(request.POST, request.FILES, instance=event)
-        formset = TicketTypeFormSet(request.POST, instance=event)
+        form            = EventForm(request.POST, request.FILES, instance=event)
+        formset         = TicketTypeFormSet(request.POST, instance=event)
+        faq_formset     = EventFAQFormSet(request.POST, instance=event)
+        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES, instance=event)
+        partner_formset = EventPartnerFormSet(request.POST, request.FILES, instance=event)
 
-        if form.is_valid() and formset.is_valid():
+        if (form.is_valid() and formset.is_valid() and faq_formset.is_valid()
+                and gallery_formset.is_valid() and partner_formset.is_valid()):
             # ============================================
             # 🔒 VÉRIFICATION KYC AVANT PUBLICATION PAYANTE
             # ============================================
@@ -215,19 +302,30 @@ def event_edit(request, slug):
                 if has_paid_tickets and not request.user.is_organizer_verified:
                     messages.error(
                         request,
-                        "🔒 Votre compte organisateur n'est pas encore vérifié. "
-                        "Veuillez soumettre vos documents KYC dans votre profil "
-                        "avant de publier un événement payant."
+                        "🔒 Pour publier un événement payant, vous devez d'abord "
+                        "compléter votre KYC. Rendez-vous dans votre espace compte, "
+                        "cliquez sur \"Mon profil\", cliquez sur \"Organisation\", "
+                        "\"Complétez mon profil organisateur\", puis dans "
+                        "\"Vérifications KYC\" téléchargez votre CNI et cliquez sur "
+                        "\"Enregistrer\" pour terminer. Une fois confirmé, vous pourrez "
+                        "publier des événements payants.",
+                        extra_tags='danger kyc-persistent'
                     )
                     return render(request, 'events/create.html', {
-                        'form':    form,
-                        'formset': formset,
+                        'form':            form,
+                        'formset':         formset,
+                        'faq_formset':     faq_formset,
+                        'gallery_formset': gallery_formset,
+                        'partner_formset': partner_formset,
                         'event':   event,
                         'action':  'Modifier',
                     })
 
             event = form.save()
             formset.save()
+            faq_formset.save()
+            gallery_formset.save()
+            partner_formset.save()
 
             prices = event.ticket_types.values_list('price', flat=True)
             if prices:
@@ -240,8 +338,11 @@ def event_edit(request, slug):
             messages.error(request, "Veuillez corriger les erreurs.")
 
     return render(request, 'events/create.html', {
-        'form':    form,
-        'formset': formset,
+        'form':            form,
+        'formset':         formset,
+        'faq_formset':     faq_formset,
+        'gallery_formset': gallery_formset,
+        'partner_formset': partner_formset,
         'event':   event,
         'action':  'Modifier',
     })
@@ -250,39 +351,35 @@ def event_edit(request, slug):
 @organizer_required
 def event_delete(request, slug):
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
+
     if request.method == 'POST':
         if event.tickets_sold > 0:
-            event.status = Event.Status.CANCELLED
-            event.save()
+            from .services import cancel_event_organizer_liable
 
-            from apps.tickets.models import Ticket
-            from apps.notifications.service import NotificationService
-
-            tickets = Ticket.objects.filter(
-                order_item__ticket_type__event=event,
-                order_item__order__status='paid',
-                status='valid',
-            ).select_related('order_item__order')
-
-            orders_refunded = set()
-            for ticket in tickets:
-                order = ticket.order_item.order
-                if order.id not in orders_refunded:
-                    order.refund(reason='Événement annulé par organisateur')
-                    orders_refunded.add(order.id)
-                NotificationService.event_cancelled(ticket)
-
-            messages.warning(
-                request,
-                f"Événement annulé. {len(orders_refunded)} commande(s) "
-                f"marquée(s) pour remboursement et clients notifiés."
+            reason = request.POST.get(
+                'cancel_reason',
+                "Événement annulé par l'organisateur",
             )
+            result = cancel_event_organizer_liable(event, reason=reason)
+
+            msg = (
+                f"Événement annulé. {result['orders_affected']} commande(s) "
+                f"impactée(s), {result['tickets_voided']} billet(s) invalidé(s)."
+            )
+            if result['wallet_frozen']:
+                msg += (
+                    " Votre wallet a été gelé : aucune demande de "
+                    "reversement ne sera acceptée tant qu'un administrateur "
+                    "n'a pas régularisé la situation. Les acheteurs ont "
+                    "été informés que vous procéderez au remboursement."
+                )
+            messages.warning(request, msg)
         else:
             title = event.title
             event.delete()
             messages.success(request, f"Événement « {title} » supprimé.")
-    return redirect('events:my_events')
 
+    return redirect('events:my_events')
 
 @organizer_required
 def assign_scanner_agents(request, slug):
@@ -290,15 +387,35 @@ def assign_scanner_agents(request, slug):
     Permet à l'organisateur d'assigner des agents scanner (comptes avec
     le rôle 'scanner') à cet événement précis — sans assignation, un
     agent scanner ne peut plus scanner l'événement (voir Event.scanner_agents).
+
+    Portée strictement limitée aux agents de CET organisateur (CustomUser.managed_by)
+    — avant ce correctif, la liste montrait TOUS les agents scanner de la
+    plateforme, tous organisateurs confondus (fuite d'email/nom entre
+    organisateurs sans lien entre eux, et possibilité d'assigner l'agent
+    d'un autre organisateur à son propre événement sans son accord).
+
+    Les agents déjà assignés à CET événement avant ce correctif (pool
+    global historique, managed_by non renseigné) restent visibles et
+    modifiables ici pour ne pas casser une assignation existante, mais
+    aucun autre agent "orphelin" n'apparaît.
     """
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
     from apps.accounts.models import CustomUser
+    from django.db.models import Q
 
-    all_agents = CustomUser.objects.filter(role='scanner', is_active=True).order_by('email')
+    already_on_this_event = event.scanner_agents.values_list('id', flat=True)
+    allowed_agents = CustomUser.objects.filter(
+        Q(managed_by=request.user) | Q(id__in=already_on_this_event),
+        role='scanner', is_active=True,
+    ).distinct().order_by('email')
 
     if request.method == 'POST':
         selected_ids = request.POST.getlist('agents')
-        event.scanner_agents.set(CustomUser.objects.filter(id__in=selected_ids, role='scanner'))
+        # On ne retient QUE les agents que l'organisateur a le droit
+        # d'assigner (mêmes règles que l'affichage ci-dessus) — sans ce
+        # filtre, un POST forgé avec l'ID d'un agent d'un autre
+        # organisateur aurait pu l'assigner malgré tout.
+        event.scanner_agents.set(allowed_agents.filter(id__in=selected_ids))
         messages.success(
             request,
             f"{event.scanner_agents.count()} agent(s) assigné(s) à « {event.title} »."
@@ -309,6 +426,61 @@ def assign_scanner_agents(request, slug):
 
     return render(request, 'events/assign_scanner_agents.html', {
         'event': event,
-        'all_agents': all_agents,
+        'all_agents': allowed_agents,
         'assigned_ids': assigned_ids,
     })
+
+
+@organizer_required
+def create_scanner_agent(request):
+    """
+    Permet à l'organisateur de créer lui-même un agent scanner, plutôt que
+    de dépendre d'un admin à chaque fois (voir audit — goulot d'étranglement
+    identifié). Le compte créé est automatiquement rattaché à cet
+    organisateur (managed_by) et son email est marqué vérifié d'emblée :
+    c'est l'organisateur qui crée sciemment ce compte de service pour son
+    propre personnel, la vérification d'email par lien n'a pas de sens ici
+    (voir audit — bug corrigé où un agent créé sans email vérifié ne
+    pouvait jamais se connecter).
+    """
+    from apps.accounts.models import CustomUser
+    from allauth.account.models import EmailAddress
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        password = request.POST.get('password', '')
+
+        errors = []
+        if not email:
+            errors.append("L'email est obligatoire.")
+        elif CustomUser.objects.filter(email=email).exists():
+            errors.append("Un compte existe déjà avec cet email.")
+        if not password:
+            errors.append("Le mot de passe est obligatoire.")
+        else:
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                errors.extend(e.messages)
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            agent = CustomUser.objects.create_user(
+                email=email, password=password,
+                first_name=first_name, last_name=last_name,
+                role=CustomUser.Role.SCANNER,
+                managed_by=request.user,
+            )
+            EmailAddress.objects.create(
+                user=agent, email=agent.email, primary=True, verified=True,
+            )
+            messages.success(request, f"Agent scanner {email} créé — vous pouvez maintenant l'assigner à vos événements.")
+            return redirect('events:my_events')
+
+    return render(request, 'events/create_scanner_agent.html')

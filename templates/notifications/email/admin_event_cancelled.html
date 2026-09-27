@@ -1,0 +1,75 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title" style="color:#F47920;">
+  ⚠️ Événement annulé — Action requise
+</h1>
+
+<p class="email-text">
+  Un événement vient d'être annulé sur la plateforme. Voici le récap :
+</p>
+
+<div class="info-box" style="background:#fff8f0; border-color:#F47920;">
+  <div class="info-row">
+    <span class="info-label">Événement</span>
+    <span class="info-value">{{ event.title }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Date prévue</span>
+    <span class="info-value">
+      {{ event.start_date|date:"d F Y à H\hi" }}
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Organisateur</span>
+    <span class="info-value">
+      {{ organizer.get_full_name|default:organizer.email }}
+      ({{ organizer.email }})
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Commandes impactées</span>
+    <span class="info-value">{{ orders_affected }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Tickets annulés</span>
+    <span class="info-value">{{ tickets_voided }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Wallet organisateur</span>
+    <span class="info-value">
+      {% if wallet_frozen %}
+        🔒 <strong>GELÉ</strong> (reversements bloqués)
+      {% else %}
+        Non gelé (aucune vente préalable)
+      {% endif %}
+    </span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Motif</span>
+    <span class="info-value">{{ reason }}</span>
+  </div>
+</div>
+
+<p class="email-text">
+  <strong>Rappel procédure :</strong> IvoirPass n'est pas responsable
+  du remboursement. C'est l'organisateur qui gère directement auprès
+  de ses acheteurs. Un email informatif a déjà été envoyé à tous les
+  acheteurs concernés.
+</p>
+
+{% if wallet_frozen %}
+<p class="email-text" style="color:#dc3545;">
+  ⚠️ Le wallet de l'organisateur a été <strong>gelé</strong> — il ne
+  peut plus demander de reversement tant qu'un admin ne l'a pas
+  dégelé manuellement (via l'admin Django).
+</p>
+{% endif %}
+
+<center>
+  <a href="{{ admin_event_url }}" class="btn-cta btn-green">
+    Voir l'événement dans l'admin
+  </a>
+</center>
+
+{% endblock %}

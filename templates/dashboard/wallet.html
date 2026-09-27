@@ -131,15 +131,15 @@
               {{ wr.reference }}
             </span>
             {% if wr.status == 'pending' %}
-              <span class="badge" style="background:#F47920; font-size:0.7rem;">
-                En attente
-              </span>
-            {% elif wr.status == 'processed' %}
-              <span class="badge bg-success" style="font-size:0.7rem;">Traité</span>
-            {% elif wr.status == 'rejected' %}
-              <span class="badge bg-danger" style="font-size:0.7rem;">Rejeté</span>
-            {% else %}
-              <span class="badge bg-info" style="font-size:0.7rem;">Approuvé</span>
+              <span class="badge" style="background:#F47920; font-size:0.7rem;">En attente OTP</span>
+            {% elif wr.status == 'processing' %}
+              <span class="badge bg-info" style="font-size:0.7rem;">Reversement en cours</span>
+            {% elif wr.status == 'completed' %}
+              <span class="badge bg-success" style="font-size:0.7rem;">Réussi</span>
+            {% elif wr.status == 'failed' %}
+              <span class="badge bg-danger" style="font-size:0.7rem;">Échec</span>
+            {% elif wr.status == 'cancelled' or wr.status == 'rejected' %}
+              <span class="badge bg-danger" style="font-size:0.7rem;">Annulé</span>
             {% endif %}
           </div>
           <div class="fw-bold">{{ wr.amount|floatformat:0 }} FCFA</div>

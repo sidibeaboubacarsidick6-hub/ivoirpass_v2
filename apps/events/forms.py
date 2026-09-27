@@ -3,7 +3,7 @@ IvoirPass V2 — Formulaires des événements
 """
 from django import forms
 from django.forms import inlineformset_factory
-from .models import Event, TicketType, Category
+from .models import Event, TicketType, Category, EventFAQ, EventGalleryItem, EventPartner
 
 
 class EventForm(forms.ModelForm):
@@ -16,11 +16,10 @@ class EventForm(forms.ModelForm):
             'description', 'short_description', 'tags',
             'event_type',
             'start_date', 'end_date', 'doors_open',
-            'sale_start', 'sale_end',
             'venue_name', 'venue_address', 'venue_city',
             'online_link',
             'cover_image', 'thumbnail', 'video_url',
-            'is_free', 'total_capacity',
+            'total_capacity',
             'status',
         ]
         widgets = {
@@ -38,16 +37,17 @@ class EventForm(forms.ModelForm):
                 'rows': 8,
                 'placeholder': 'Décrivez votre événement en détail...',
             }),
-            'short_description': forms.Textarea(attrs={
+            'short_description': forms.TextInput(attrs={
                 'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Résumé court pour les aperçus (max 500 caractères)',
+                'maxlength': 150,
+                'required': True,
+                'placeholder': "Numéro de contact de l'organisateur",
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'musique, concert, afro, abidjan...',
             }),
-            'event_type': forms.Select(attrs={'class': 'form-select'}),
+            'event_type': forms.Select(attrs={'x-model': 'type', 'class': 'form-select'}),
             'start_date': forms.DateTimeInput(
                 attrs={'class': 'form-control', 'type': 'datetime-local'},
                 format='%Y-%m-%dT%H:%M'
@@ -59,14 +59,7 @@ class EventForm(forms.ModelForm):
             'doors_open': forms.TimeInput(
                 attrs={'class': 'form-control', 'type': 'time'}
             ),
-            'sale_start': forms.DateTimeInput(
-                attrs={'class': 'form-control', 'type': 'datetime-local'},
-                format='%Y-%m-%dT%H:%M'
-            ),
-            'sale_end': forms.DateTimeInput(
-                attrs={'class': 'form-control', 'type': 'datetime-local'},
-                format='%Y-%m-%dT%H:%M'
-            ),
+
             'venue_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Palais de la Culture, Sofitel...',
@@ -108,14 +101,12 @@ class EventForm(forms.ModelForm):
             'subtitle':          'Sous-titre',
             'category':          'Catégorie *',
             'description':       'Description complète *',
-            'short_description': 'Description courte',
+            'short_description': 'InfoLine',
             'tags':              'Mots-clés',
             'event_type':        'Type d\'événement',
             'start_date':        'Date et heure de début *',
             'end_date':          'Date et heure de fin *',
             'doors_open':        'Ouverture des portes',
-            'sale_start':        'Début des ventes',
-            'sale_end':          'Fin des ventes',
             'venue_name':        'Nom du lieu',
             'venue_address':     'Adresse',
             'venue_city':        'Ville',
@@ -123,7 +114,6 @@ class EventForm(forms.ModelForm):
             'cover_image':       'Image de couverture (1200×600px)',
             'thumbnail':         'Miniature (400×400px)',
             'video_url':         'Vidéo de présentation',
-            'is_free':           'Événement gratuit',
             'total_capacity':    'Capacité totale (0 = illimité)',
             'status':            'Statut',
         }
@@ -132,7 +122,7 @@ class EventForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Formate les dates pour le widget datetime-local
         if self.instance.pk:
-            for field_name in ['start_date', 'end_date', 'sale_start', 'sale_end']:
+            for field_name in ['start_date', 'end_date']:
                 val = getattr(self.instance, field_name, None)
                 if val:
                     self.initial[field_name] = val.strftime('%Y-%m-%dT%H:%M')
@@ -140,11 +130,21 @@ class EventForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         start = cleaned.get('start_date')
-        end   = cleaned.get('end_date')
+        end = cleaned.get('end_date')
+        event_type = cleaned.get('event_type')
+        online_link = cleaned.get('online_link')
+
         if start and end and end <= start:
             raise forms.ValidationError(
                 "La date de fin doit être après la date de début."
             )
+
+        if event_type == Event.EventType.ONLINE and not online_link:
+            self.add_error(
+                'online_link',
+                "Le lien en ligne est obligatoire pour un événement en ligne."
+            )
+
         return cleaned
 
 
@@ -155,7 +155,6 @@ TicketTypeFormSet = inlineformset_factory(
     fields=[
         'name', 'description', 'price',
         'quantity', 'max_per_order',
-        'sale_start', 'sale_end',
         'is_visible', 'order'
     ],
     widgets={
@@ -169,8 +168,8 @@ TicketTypeFormSet = inlineformset_factory(
         }),
         'price': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
-            'placeholder': '0',
-            'min': '0',
+            'placeholder': '100',
+            'min': '100',
         }),
         'quantity': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
@@ -181,14 +180,91 @@ TicketTypeFormSet = inlineformset_factory(
             'class': 'form-control form-control-sm',
             'min': '1',
         }),
-        'sale_start': forms.DateTimeInput(
-            attrs={'class': 'form-control form-control-sm', 'type': 'datetime-local'},
-            format='%Y-%m-%dT%H:%M'
+        
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+
+# Formset FAQ (facultatif — l'organisateur peut n'en ajouter aucune)
+EventFAQFormSet = inlineformset_factory(
+    Event,
+    EventFAQ,
+    fields=['question', 'answer', 'order'],
+    widgets={
+        'question': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Ex: Puis-je me faire rembourser ?',
+        }),
+        'answer': forms.Textarea(attrs={
+            'class': 'form-control form-control-sm',
+            'rows': 2,
+            'placeholder': 'Réponse à la question',
+        }),
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+# Formset Galerie / Programme (facultatif — un seul modèle sert les deux usages :
+# renseigner "heure" pour une entrée de programme, la laisser vide pour une photo)
+EventGalleryItemFormSet = inlineformset_factory(
+    Event,
+    EventGalleryItem,
+    fields=['image', 'title', 'subtitle', 'time', 'order'],
+    widgets={
+        'image': forms.FileInput(attrs={
+            'class': 'form-control form-control-sm',
+            'accept': 'image/*',
+        }),
+        'title': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': "Légende photo ou titre du passage",
+        }),
+        'subtitle': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': "Nom de l'artiste/intervenant (programme uniquement)",
+        }),
+        'time': forms.TimeInput(
+            attrs={'class': 'form-control form-control-sm', 'type': 'time'},
+            format='%H:%M',
         ),
-        'sale_end': forms.DateTimeInput(
-            attrs={'class': 'form-control form-control-sm', 'type': 'datetime-local'},
-            format='%Y-%m-%dT%H:%M'
-        ),
+        'order': forms.NumberInput(attrs={
+            'class': 'form-control form-control-sm',
+            'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+# Formset Partenaires (facultatif)
+EventPartnerFormSet = inlineformset_factory(
+    Event,
+    EventPartner,
+    fields=['name', 'logo', 'website_url', 'order'],
+    widgets={
+        'name': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'Nom du partenaire',
+        }),
+        'logo': forms.FileInput(attrs={
+            'class': 'form-control form-control-sm',
+            'accept': 'image/*',
+        }),
+        'website_url': forms.URLInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': 'https://...',
+        }),
         'order': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
             'min': '0',

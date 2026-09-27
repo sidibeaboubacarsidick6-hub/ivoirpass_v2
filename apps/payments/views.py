@@ -12,6 +12,8 @@ from django.views.decorators.http import require_POST
 from django.http import HttpResponse
 from django.utils import timezone
 from apps.tickets.models import Order
+from apps.dashboard.models import AuditLog
+from apps.dashboard.services import log_action, get_client_ip
 from .models import Payment
 from .paydunya import PayDunyaService
 
@@ -51,9 +53,15 @@ def initiate_payment(request, order_number):
         # Sauvegarde le token en session pour la vérification au retour
         request.session[f'paydunya_token_{order_number}'] = result['token']
 
-        logger.info(
-            f"Redirection vers PayDunya — "
-            f"Commande: {order_number}, Token: {result['token']}"
+        logger.info(f"Redirection vers PayDunya — Commande: {order_number}")
+
+        log_action(
+            action=AuditLog.Action.PAYMENT_INITIATED,
+            description=f"Paiement initié pour la commande {order_number} via PayDunya",
+            user=request.user,
+            model_name='Payment', object_id=order_number,
+            metadata={'amount': str(payment.amount), 'provider': payment.provider},
+            ip_address=get_client_ip(request),
         )
 
         # Redirige vers PayDunya
@@ -63,6 +71,15 @@ def initiate_payment(request, order_number):
         # Échec de création de facture
         payment.status = Payment.Status.FAILED
         payment.save(update_fields=['status'])
+
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Échec d'initiation du paiement pour la commande {order_number}",
+            user=request.user,
+            model_name='Payment', object_id=order_number,
+            metadata={'reason': str(result.get('error', ''))[:200]},
+            ip_address=get_client_ip(request),
+        )
 
         messages.error(
             request,
@@ -155,6 +172,14 @@ def payment_cancel(request, order_number):
         status=Payment.Status.PENDING
     ).update(status=Payment.Status.CANCELLED)
 
+    log_action(
+        action=AuditLog.Action.PAYMENT_CANCELLED,
+        description=f"Paiement annulé par l'acheteur pour la commande {order_number}",
+        user=request.user,
+        model_name='Payment', object_id=order_number,
+        ip_address=get_client_ip(request),
+    )
+
     messages.warning(
         request,
         "Vous avez annulé le paiement. "
@@ -168,20 +193,25 @@ def payment_cancel(request, order_number):
 @require_POST
 @ratelimit(key='ip', rate='30/m', block=True)
 def payment_webhook(request):
-    # 🔥 DEBUG: Afficher TOUT ce que PayDunya envoie
     import logging
     logger = logging.getLogger(__name__)
-    
-    logger.info("=" * 50)
-    logger.info("WEBHOOK RECU")
-    logger.info(f"Content-Type: {request.content_type}")
-    logger.debug("Webhook recu - body: %s", request.body[:200])
-    logger.info(f"POST dict: {request.POST}")
-    logger.info("=" * 50)
+
+    logger.info("Webhook PayDunya reçu (Content-Type: %s)", request.content_type)
+    # Le corps complet peut contenir le hash de signature PayDunya et des
+    # données personnelles de l'acheteur (email) — journalisé en DEBUG
+    # uniquement, jamais en INFO en production (voir R-08 de l'audit).
+    logger.debug("Webhook body: %s", request.body[:500])
+    logger.debug("Webhook POST dict: %s", request.POST)
 
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not PayDunyaService.verify_webhook_signature(request):
         logger.error("Webhook rejeté : signature PayDunya invalide")
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description="Webhook PayDunya rejeté : signature invalide",
+            model_name='Payment', object_id='',
+            ip_address=get_client_ip(request),
+        )
         return HttpResponse('FORBIDDEN', status=403)
 
     """
@@ -191,17 +221,13 @@ def payment_webhook(request):
     import urllib.parse
     
     try:
-        logger.info(f"Webhook BODY: {request.body[:500]}")
-        logger.info(f"Webhook POST: {request.POST}")
-        logger.info(f"Webhook content_type: {request.content_type}")
-        
         # 🔥 Récupération des données quel que soit le format
         raw_data = {}
         token = None
         
         if request.content_type and 'application/json' in request.content_type:
             raw_data = json.loads(request.body)
-            logger.info(f"Webhook JSON: {raw_data}")
+            logger.debug("Webhook JSON: %s", raw_data)
             
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
@@ -210,7 +236,7 @@ def payment_webhook(request):
             
         else:
             raw_data = request.POST.dict()
-            logger.info(f"Webhook form-data: {raw_data}")
+            logger.debug("Webhook form-data: %s", raw_data)
             
             token = raw_data.get('invoiceToken', '') or raw_data.get('token', '')
             
@@ -260,12 +286,24 @@ def payment_webhook(request):
         
         if not order_number:
             logger.error("Webhook: order_number manquant")
+            log_action(
+                action=AuditLog.Action.PAYMENT_FAILED,
+                description="Webhook PayDunya : order_number manquant",
+                model_name='Payment', object_id='',
+                ip_address=get_client_ip(request),
+            )
             return HttpResponse('ORDER_NOT_FOUND', status=400)
         
         try:
             order = Order.objects.get(order_number=order_number)
         except Order.DoesNotExist:
             logger.error(f"Webhook: commande {order_number} introuvable")
+            log_action(
+                action=AuditLog.Action.PAYMENT_FAILED,
+                description=f"Webhook PayDunya : commande {order_number} introuvable",
+                model_name='Payment', object_id=order_number,
+                ip_address=get_client_ip(request),
+            )
             return HttpResponse('ORDER_NOT_FOUND', status=404)
         
         status = raw_data.get('status', '')
@@ -295,8 +333,23 @@ def payment_webhook(request):
 
 
 def _confirm_order(order, token, raw_data):
-    """Confirme une commande après paiement — applique la commission dynamique."""
-    if order.status == Order.Status.PAID:
+    """
+    Confirme une commande après paiement — applique la commission dynamique.
+
+    order.mark_as_paid() est verrouillé et idempotent (voir apps/tickets/models.py) :
+    si un appel concurrent (retour navigateur / webhook / polling) a déjà
+    confirmé la commande entre-temps, il renvoie False et on s'arrête ici
+    sans dupliquer le crédit wallet, les logs d'audit ni l'email des billets.
+    """
+    newly_confirmed = order.mark_as_paid(
+        payment_method    = 'paydunya',
+        payment_reference = token,
+    )
+    if not newly_confirmed:
+        logger.info(
+            f"Commande {order.order_number} déjà confirmée par un appel "
+            f"concurrent — traitement ignoré."
+        )
         return
 
     Payment.objects.filter(
@@ -308,9 +361,19 @@ def _confirm_order(order, token, raw_data):
         completed_at = timezone.now(),
     )
 
-    order.mark_as_paid(
-        payment_method    = 'paydunya',
-        payment_reference = token,
+    log_action(
+        action=AuditLog.Action.PAYMENT_SUCCESS,
+        description=f"Paiement confirmé pour la commande {order.order_number}",
+        user=order.buyer,
+        model_name='Payment', object_id=order.order_number,
+        metadata={'provider': 'paydunya', 'amount': str(order.total)},
+    )
+    log_action(
+        action=AuditLog.Action.TICKET_CREATED,
+        description=f"Billets générés pour la commande {order.order_number}",
+        user=order.buyer,
+        obj=order,
+        metadata={'items_count': order.items.count()},
     )
 
     # ✅ AJOUT UNIQUEMENT — Envoyer l'email avec les billets

@@ -28,11 +28,14 @@ urlpatterns = [
     # ============================================
     # ROUTES FIXES POUR UTILISATEURS AUTHENTIFIÉS
     # ============================================
-    # Commandes
+    # ✅ H-3 : 'my_orders' et 'download' sont conservées en simples
+    # redirections (voir apps/store/views.py) — encore référencées par
+    # templates/dashboard/base_dashboard.html, templates/store/detail.html
+    # et templates/pages/my_orders_history.html. Les autres routes du
+    # tunnel "avec compte" (achat, paiement, détail commande) ont été
+    # supprimées avec leurs vues et leurs templates.
     path('mes-commandes/',
          views.my_orders, name='my_orders'),
-    path('mes-commandes/<str:order_number>/',
-         views.order_detail, name='order_detail'),
 
     # Gestion des produits (vendeurs)
     path('mes-produits/',
@@ -41,28 +44,27 @@ urlpatterns = [
          views.product_create, name='product_create'),
     path('mes-produits/<slug:slug>/modifier/',
          views.product_edit, name='product_edit'),
+    path('mes-produits/<slug:slug>/stats/',
+         views.product_stats, name='product_stats'),
+    path('mes-produits/<slug:slug>/acheteurs/',
+         views.product_buyers, name='product_buyers'),
+    path('mes-produits/<slug:slug>/acheteurs/export/',
+         views.export_product_buyers_csv, name='export_product_buyers'),
     path('mes-produits/<slug:slug>/supprimer/',
          views.product_delete, name='product_delete'),
-
-    # ============================================
-    # ROUTES DE PAIEMENT (authentifié)
-    # ============================================
-    path('payer/<str:order_number>/',
-         views.store_payment_initiate, name='payment_initiate'),
-    path('retour/<str:order_number>/',
-         views.store_payment_return, name='payment_return'),
-    path('annulation/<str:order_number>/',
-         views.store_payment_cancel, name='payment_cancel'),
-    path('paiement/statut/<str:order_number>/',
-         views.store_payment_status, name='payment_status'),
-    path('webhook/',
-         views.store_webhook, name='webhook'),
 
     # ============================================
     # TÉLÉCHARGEMENT (authentifié)
     # ============================================
     path('telecharger/<uuid:token>/',
          views.download_file, name='download'),
+
+    # Webhook PayDunya pour les commandes "avec compte" — actif (signature
+    # PayDunya vérifiée), conservé même si le tunnel d'achat correspondant
+    # a été retiré : nécessaire pour tout paiement encore en cours côté
+    # PayDunya sur une ProductOrder existante.
+    path('webhook/',
+         views.store_webhook, name='webhook'),
 
     # ============================================
     # ROUTES DYNAMIQUES (EN DERNIER)
@@ -74,8 +76,4 @@ urlpatterns = [
     # Détail d'un produit (slug)
     path('<slug:slug>/',
          views.store_detail, name='detail'),
-    
-    # Achat d'un produit (authentifié)
-    path('<slug:slug>/acheter/',
-         views.buy_product, name='buy'),
 ]

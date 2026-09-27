@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /X9IGAXWm6pVzi-AS/
+Disallow: /paiements/
+Disallow: /dashboard/
+Disallow: /api/
+
+Sitemap: https://prepod.ivoirpass.com/sitemap.xml

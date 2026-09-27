@@ -7,7 +7,7 @@ from django.utils import timezone
 from datetime import timedelta
 from apps.accounts.models import CustomUser
 from apps.events.models import Event, Category, TicketType
-from apps.tickets.models import Order, OrderItem
+
 
 
 class HomeViewTest(TestCase):
@@ -111,42 +111,6 @@ class EventDetailViewTest(TestCase):
         self.assertEqual(len(response.context['ticket_types']), 1)
 
 
-class CartViewTest(TestCase):
-    def setUp(self):
-        self.organizer = CustomUser.objects.create_user(
-            email='org@test.com',
-            password='Pass123!',
-            role=CustomUser.Role.ORGANIZER
-        )
-        self.event = Event.objects.create(
-            title='Événement Panier',
-            description='Description',
-            organizer=self.organizer,
-            start_date=timezone.now() + timedelta(days=7),
-            end_date=timezone.now() + timedelta(days=8),
-            status=Event.Status.PUBLISHED
-        )
-        self.ticket_type = TicketType.objects.create(
-            event=self.event,
-            name='VIP',
-            price=15000,
-            quantity=30
-        )
-
-    def test_cart_page_empty(self):
-        response = self.client.get(reverse('tickets:cart'))
-        self.assertEqual(response.status_code, 200)
-
-    def test_add_to_cart(self):
-        response = self.client.post(
-            reverse('tickets:add_to_cart', kwargs={'ticket_type_id': self.ticket_type.pk}),
-            {'quantity': 2}
-        )
-        self.assertEqual(response.status_code, 302)
-        cart = self.client.session.get('cart', {})
-        self.assertIn(str(self.ticket_type.pk), cart)
-
-
 class AuthViewTest(TestCase):
     def test_signup_page_loads(self):
         response = self.client.get(reverse('account_signup'))
@@ -157,52 +121,4 @@ class AuthViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class MyTicketsViewTest(TestCase):
-    def setUp(self):
-        self.buyer = CustomUser.objects.create_user(
-            email='buyer@test.com',
-            password='BuyerPass123!'
-        )
-        self.organizer = CustomUser.objects.create_user(
-            email='org@test.com',
-            password='OrgPass123!',
-            role=CustomUser.Role.ORGANIZER
-        )
-        self.event = Event.objects.create(
-            title='Événement Billets',
-            description='Description',
-            organizer=self.organizer,
-            start_date=timezone.now() + timedelta(days=30),
-            end_date=timezone.now() + timedelta(days=31),
-            status=Event.Status.PUBLISHED
-        )
-        self.ticket_type = TicketType.objects.create(
-            event=self.event,
-            name='Standard',
-            price=5000,
-            quantity=100
-        )
-        self.order = Order.objects.create(
-            buyer=self.buyer,
-            subtotal=5000,
-            total=5000,
-            status=Order.Status.PAID
-        )
-        self.order_item = OrderItem.objects.create(
-            order=self.order,
-            ticket_type=self.ticket_type,
-            quantity=1,
-            unit_price=5000
-        )
-        self.order_item.generate_tickets()
 
-    def test_my_tickets_requires_login(self):
-        response = self.client.get(reverse('tickets:my_tickets'))
-        self.assertEqual(response.status_code, 302)
-
-    def test_my_tickets_shows_tickets(self):
-        self.client.login(email='buyer@test.com', password='BuyerPass123!')
-        response = self.client.get(reverse('tickets:my_tickets'))
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('upcoming', response.context)
-        self.assertEqual(len(response.context['upcoming']), 1)

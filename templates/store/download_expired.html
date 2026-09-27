@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Téléchargement indisponible{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <div class="ip-card p-5 text-center">
+        {% if reason == 'exhausted' %}
+          <div style="font-size:3.5rem; margin-bottom:1rem;">📥</div>
+          <h4 class="fw-bold mb-2">Téléchargements épuisés</h4>
+          <p class="text-muted mb-4">
+            Vous avez atteint la limite de
+            <strong>{{ link.max_downloads }}</strong> téléchargement{{ link.max_downloads|pluralize }}
+            pour <strong>{{ link.product.name }}</strong>.
+          </p>
+        {% else %}
+          <div style="font-size:3.5rem; margin-bottom:1rem;">⏰</div>
+          <h4 class="fw-bold mb-2">Lien expiré</h4>
+          <p class="text-muted mb-4">
+            Ce lien de téléchargement pour <strong>{{ link.product.name }}</strong>
+            n'est plus valable.
+          </p>
+        {% endif %}
+
+        <p class="text-muted small">
+          Vous pouvez racheter ce produit — chaque achat génère
+          ses propres liens de téléchargement indépendants.
+        </p>
+
+        <div class="mt-4">
+          <a href="{% url 'store:detail' link.product.slug %}" class="btn btn-green px-4 me-2">
+            <i class="bi bi-bag me-1"></i>Voir ce produit
+          </a>
+          <a href="{% url 'store:list' %}" class="btn btn-outline-secondary px-4">
+            <i class="bi bi-shop me-1"></i>Autres produits
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

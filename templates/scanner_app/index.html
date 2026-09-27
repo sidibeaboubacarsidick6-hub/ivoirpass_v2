@@ -1,13 +1,17 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0d0d0d">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="IvoirPass">
     <title>IvoirPass Scanner</title>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <link rel="manifest" href="/scanner/app/manifest.json">
+    <link rel="apple-touch-icon" href="{% static 'scanner-app/icon-192.svg' %}">
+    <script src="{% static 'scanner-app/html5-qrcode.min.js' %}"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -81,7 +85,7 @@
 <body>
 
     <!-- LOGIN -->
-    <div id="loginScreen" class="screen active">
+    <div id="loginScreen" class="screen{% if not already_logged_in %} active{% endif %}">
         <div class="logo-icon">🎫</div>
         <h1>Ivoir<span>Pass</span></h1>
         <p class="subtitle">Scanner agent</p>
@@ -94,14 +98,19 @@
     </div>
 
     <!-- EVENT ID -->
-    <div id="eventScreen" class="screen">
+    <div id="eventScreen" class="screen{% if already_logged_in %} active{% endif %}">
         <div class="logo-icon">🎯</div>
         <h1 style="margin-bottom:5px;">Événement</h1>
-        <p class="subtitle" style="margin-bottom:20px;">Connecté : <strong id="agentName" style="color:#F47920;"></strong></p>
+        <p class="subtitle" style="margin-bottom:20px;">Connecté : <strong id="agentName" style="color:#F47920;">{{ request.user.email }}</strong></p>
         <div class="card">
             <div class="field"><label>🎫 ID de l'événement</label><input type="number" id="eventIdInput" placeholder="Ex: 5" autofocus></div>
             <p class="error-msg" id="eventError">ID invalide</p>
+            <p class="error-msg" id="prepareError"></p>
+            <p id="prepareStatus" style="font-size:0.78rem;color:#1B7A3E;text-align:center;margin-bottom:10px;display:none;"></p>
             <button onclick="startScan()" class="btn-green">🚀 Démarrer le scan</button>
+            <button onclick="prepareOffline()" class="btn-green" style="background:#F47920;margin-top:8px;">
+                📥 Préparer hors ligne
+            </button>
             <button onclick="doLogout()" class="btn-gray">🚪 Déconnexion</button>
         </div>
     </div>
@@ -110,7 +119,16 @@
     <div id="scanScreen">
         <div class="scan-header">
             <div class="event-badge">🎫 Événement #<span id="eventIdDisplay"></span></div>
-            <button class="close-btn" onclick="stopScan()">✕</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="syncBtn" onclick="syncQueue()"
+                        style="background:rgba(255,255,255,0.08);border:none;color:white;
+                               padding:6px 12px;border-radius:20px;font-size:0.75rem;
+                               font-weight:600;cursor:pointer;width:auto;"
+                        title="Synchroniser les scans en attente">
+                    <span id="pendingBadge">🔄</span>
+                </button>
+                <button class="close-btn" onclick="stopScan()">✕</button>
+            </div>
         </div>
 
         <div class="scan-container">
@@ -146,15 +164,252 @@
         const LOGOUT_URL = '/accounts/logout/';
         const SCAN_URL = '/api/scanner/scan/';
         const CHECK_URL = '/api/scanner/check-event/';
+        const PREPARE_URL = '/api/scanner/prepare/';
+        const SYNC_URL = '/api/scanner/sync/';
         let html5QrCode, eventId, validCount=0, invalidCount=0, scanning=false, history=[];
 
         document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
         document.getElementById('eventIdInput').addEventListener('keydown', e => { if(e.key==='Enter') startScan(); });
 
+        // Jeton CSRF rendu côté serveur (fiable même quand
+        // CSRF_COOKIE_HTTPONLY=True empêche la lecture du cookie en JS,
+        // ce qui est le cas en production — voir config/settings/production.py).
+        const CSRF_TOKEN = "{{ csrf_token }}";
         function getCSRF() {
-            const match = document.cookie.match(/csrftoken=([\w]+)/);
-            return match ? match[1] : '';
+            return CSRF_TOKEN;
         }
+
+        // ============================================================
+        // CHANTIER B — IndexedDB wrapper (cache tickets + queue scans)
+        // ============================================================
+        // 2 stores :
+        //   - tickets     (keyPath uuid)  → billets cachés par événement
+        //   - scan_queue  (keyPath uuid)  → file de scans à synchroniser
+        //
+        // Convention : `event_id` est répété sur chaque entrée pour
+        // permettre le filtrage par événement sans index complexe.
+        // ============================================================
+
+        const DB_NAME = 'ivoirpass_scanner';
+        const DB_VERSION = 1;
+        const STORE_TICKETS = 'tickets';
+        const STORE_QUEUE = 'scan_queue';
+
+        let _dbPromise = null;
+
+        function openDB() {
+            if (_dbPromise) return _dbPromise;
+            _dbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+
+                    // Store tickets
+                    if (!db.objectStoreNames.contains(STORE_TICKETS)) {
+                        const store = db.createObjectStore(STORE_TICKETS, { keyPath: 'uuid' });
+                        store.createIndex('event_id', 'event_id', { unique: false });
+                        store.createIndex('ticket_number', 'ticket_number', { unique: false });
+                    }
+
+                    // Store scan_queue
+                    if (!db.objectStoreNames.contains(STORE_QUEUE)) {
+                        const store = db.createObjectStore(STORE_QUEUE, { keyPath: 'client_uuid' });
+                        store.createIndex('event_id', 'event_id', { unique: false });
+                        store.createIndex('synced', 'synced', { unique: false });
+                    }
+                };
+                req.onsuccess = (event) => resolve(event.target.result);
+                req.onerror = (event) => reject(event.target.error);
+            });
+            return _dbPromise;
+        }
+
+        function _tx(storeName, mode) {
+            return openDB().then((db) => db.transaction(storeName, mode).objectStore(storeName));
+        }
+
+        function _req(req) {
+            return new Promise((resolve, reject) => {
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // ── Billets cachés ─────────────────────────────────────────────
+        async function dbSaveTickets(eventId, tickets) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readwrite');
+                const store = tx.objectStore(STORE_TICKETS);
+                const idx = store.index('event_id');
+
+                // 1) Purge des billets de cet événement
+                const cursorReq = idx.openCursor(IDBKeyRange.only(eventId));
+                cursorReq.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        cursor.delete();
+                        cursor.continue();
+                    } else {
+                        // 2) Insertion des nouveaux
+                        tickets.forEach((t) => {
+                            store.put({
+                                uuid: t.uuid,
+                                event_id: eventId,
+                                ticket_number: t.ticket_number,
+                                ticket_type: t.ticket_type,
+                                buyer_name: t.buyer_name,
+                                qr_data: t.qr_data,
+                                status: t.status,
+                                cached_at: Date.now(),
+                            });
+                        });
+                    }
+                };
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbCountTickets(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readonly');
+                const idx = tx.objectStore(STORE_TICKETS).index('event_id');
+                const req = idx.count(IDBKeyRange.only(eventId));
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbGetTicketByNumber(eventId, ticketNumber) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readonly');
+                const store = tx.objectStore(STORE_TICKETS);
+                const req = store.index('ticket_number').get(ticketNumber);
+                req.onsuccess = () => {
+                    const t = req.result;
+                    if (!t || t.event_id !== eventId) return resolve(null);
+                    resolve(t);
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbUpdateTicketStatus(uuid, newStatus) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_TICKETS, 'readwrite');
+                const store = tx.objectStore(STORE_TICKETS);
+                const req = store.get(uuid);
+                req.onsuccess = () => {
+                    const t = req.result;
+                    if (!t) return;
+                    t.status = newStatus;
+                    store.put(t);
+                };
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        // ── Queue de scans ─────────────────────────────────────────────
+        async function dbAddToQueue(eventId, qrData) {
+            const client_uuid = (crypto.randomUUID ? crypto.randomUUID() : _uuidv4Fallback());
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readwrite');
+                const store = tx.objectStore(STORE_QUEUE);
+                const entry = {
+                    client_uuid: client_uuid,
+                    event_id: eventId,
+                    qr_data: qrData,
+                    scanned_at: new Date().toISOString(),
+                    synced: false,
+                };
+                store.put(entry);
+                tx.oncomplete = () => resolve(entry);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbGetPendingScans(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readonly');
+                const store = tx.objectStore(STORE_QUEUE);
+                const results = [];
+                const req = store.openCursor();
+                req.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const v = cursor.value;
+                        if (v.event_id === eventId && !v.synced) results.push(v);
+                        cursor.continue();
+                    } else {
+                        resolve(results);
+                    }
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbDeleteQueueEntry(clientUuid) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_QUEUE, 'readwrite');
+                tx.objectStore(STORE_QUEUE).delete(clientUuid);
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbClearEvent(eventId) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction([STORE_TICKETS, STORE_QUEUE], 'readwrite');
+
+                // Purge tickets de l'event
+                const idxT = tx.objectStore(STORE_TICKETS).index('event_id');
+                const reqT = idxT.openCursor(IDBKeyRange.only(eventId));
+                reqT.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) { cursor.delete(); cursor.continue(); }
+                };
+
+                // Purge queue de l'event
+                const idxQ = tx.objectStore(STORE_QUEUE).index('event_id');
+                const reqQ = idxQ.openCursor(IDBKeyRange.only(eventId));
+                reqQ.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) { cursor.delete(); cursor.continue(); }
+                };
+
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbWipeAll() {
+            // Appelé à la déconnexion (décision B-7 : purge totale).
+            return new Promise((resolve) => {
+                const req = indexedDB.deleteDatabase(DB_NAME);
+                req.onsuccess = () => { _dbPromise = null; resolve(true); };
+                req.onerror = () => resolve(false);
+                req.onblocked = () => resolve(false);
+            });
+        }
+
+        function _uuidv4Fallback() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // ── Fin wrapper IndexedDB ─────────────────────────────────────
 
         async function doLogin() {
             const email = document.getElementById('emailInput').value.trim();
@@ -166,31 +421,106 @@
             formData.append('csrfmiddlewaretoken', getCSRF());
             try {
                 const res = await fetch(LOGIN_URL, { method: 'POST', body: formData, redirect: 'follow' });
-                if (res.url && !res.url.includes('/login')) {
-                    document.getElementById('loginScreen').classList.remove('active');
-                    document.getElementById('eventScreen').classList.add('active');
-                    document.getElementById('agentName').textContent = email;
-                    document.getElementById('eventIdInput').focus();
-                    document.getElementById('loginError').style.display = 'none';
-                    document.getElementById('passwordInput').value = '';
-                } else { document.getElementById('loginError').style.display = 'block'; }
+                if (res.url && res.url.includes('/confirm-email')) {
+                    // Identifiants corrects mais email non vérifié : allauth
+                    // ne crée pas de session dans ce cas (voir
+                    // ACCOUNT_EMAIL_VERIFICATION='mandatory') — sans cette
+                    // détection explicite, l'écran de scan s'affichait à
+                    // tort alors qu'aucune session n'existait vraiment.
+                    document.getElementById('loginError').textContent =
+                        "Cet email n'est pas encore vérifié — demandez à un administrateur de le confirmer.";
+                    document.getElementById('loginError').style.display = 'block';
+                } else if (res.url && !res.url.includes('/login')) {
+                    // Rechargement complet plutôt qu'un simple changement
+                    // d'écran en JS : Django régénère le jeton CSRF après
+                    // une connexion réussie (mesure de sécurité standard),
+                    // donc l'ancien jeton embarqué dans cette page ne
+                    // fonctionne plus pour les appels suivants (vérifier
+                    // l'événement, scanner) — un rechargement récupère un
+                    // jeton à jour. La vue scanner_app affiche directement
+                    // l'écran événement pour un utilisateur déjà connecté.
+                    window.location.reload();
+                } else {
+                    document.getElementById('loginError').textContent = 'Email ou mot de passe incorrect';
+                    document.getElementById('loginError').style.display = 'block';
+                }
             } catch(e) { document.getElementById('loginError').style.display = 'block'; }
         }
 
         async function doLogout() {
+            // Purge IndexedDB avant déconnexion (décision B-7).
+            try { await dbWipeAll(); } catch(e) { console.warn('Purge DB échouée', e); }
             await fetch(LOGOUT_URL, { method: 'POST', headers: { 'X-CSRFToken': getCSRF() } });
-            document.getElementById('eventScreen').classList.remove('active');
-            document.getElementById('loginScreen').classList.add('active');
-            document.getElementById('emailInput').value = '';
-            document.getElementById('passwordInput').value = '';
-            document.getElementById('emailInput').focus();
+            // Même raison que doLogin() : rechargement pour repartir avec
+            // un jeton CSRF cohérent avec l'état déconnecté.
+            window.location.reload();
+        }
+
+                // ============================================================
+        // CHANTIER B — Préparer l'événement pour offline
+        // ============================================================
+        // Fetch tous les billets depuis l'API, les stocke dans
+        // IndexedDB. L'agent peut ensuite passer en mode avion et
+        // scanner sans réseau.
+        // ============================================================
+        async function prepareOffline() {
+            const id = parseInt(document.getElementById('eventIdInput').value);
+            const errEl = document.getElementById('prepareError');
+            const statusEl = document.getElementById('prepareStatus');
+
+            errEl.style.display = 'none';
+            statusEl.style.display = 'none';
+
+            if (!id || id < 1) {
+                errEl.textContent = 'ID invalide';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            statusEl.textContent = '⏳ Téléchargement des billets...';
+            statusEl.style.color = '#F47920';
+            statusEl.style.display = 'block';
+
+            try {
+                const res = await fetch(PREPARE_URL + id + '/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRF(),
+                    },
+                    body: JSON.stringify({ event_id: id }),
+                });
+
+                if (!res.ok) {
+                    let msg = 'Échec du téléchargement';
+                    try {
+                        const errData = await res.json();
+                        msg = errData.message || msg;
+                    } catch(e) {}
+                    throw new Error(msg);
+                }
+
+                const data = await res.json();
+                const tickets = data.tickets || [];
+
+                await dbSaveTickets(id, tickets);
+
+                const count = await dbCountTickets(id);
+                statusEl.textContent = `✅ ${count} billet(s) prêts hors ligne`;
+                statusEl.style.color = '#1B7A3E';
+            } catch(e) {
+                errEl.textContent = e.message || 'Erreur réseau';
+                errEl.style.display = 'block';
+                statusEl.style.display = 'none';
+                console.error('[prepare] erreur', e);
+            }
         }
 
         async function startScan() {
             eventId = parseInt(document.getElementById('eventIdInput').value);
             if(!eventId||eventId<1){document.getElementById('eventError').textContent='ID invalide';document.getElementById('eventError').style.display='block';return;}
             try {
-                const cr = await fetch(CHECK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({event_id:eventId}) });
+                const cr = await fetch(CHECK_URL, { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()}, body:JSON.stringify({event_id:eventId}) });
                 const cd = await cr.json();
                 if(!cd.exists){document.getElementById('eventError').textContent='Cet événement n\'existe pas';document.getElementById('eventError').style.display='block';return;}
             } catch(e) { document.getElementById('eventError').textContent='Erreur connexion';document.getElementById('eventError').style.display='block';return; }
@@ -204,6 +534,13 @@
             html5QrCode=new Html5Qrcode("reader",{formatsToSupport:[0]});
             html5QrCode.start({facingMode:"environment"},{fps:15,qrbox:{width:250,height:250},aspectRatio:1},onScan,()=>{})
             .then(()=>{scanning=true}).catch(e=>{alert('Caméra: '+e.message);stopScan();});
+
+            // B-6 : au démarrage du scan, afficher le badge + tenter une
+            // sync initiale (rattraper les scans accumulés hors ligne).
+            updatePendingBadge();
+            if (navigator.onLine) {
+                setTimeout(() => syncQueue(), 500);
+            }
         }
 
         function stopScan() {
@@ -217,25 +554,187 @@
             updateCounters();updateHistory();
         }
 
-        function onScan(decodedText) {
+        // ============================================================
+        // CHANTIER B — B-5 : scan offline (cache-first)
+        // ============================================================
+        // Stratégie :
+        //   1. Chercher le billet dans IndexedDB (rapide, offline OK)
+        //   2. Si trouvé → décision locale + queue pour sync
+        //   3. Si PAS trouvé :
+        //      - En ligne → fallback API (comportement historique)
+        //      - Hors ligne → refus "non reconnu (mode hors ligne)"
+        //
+        // ⚠️ Pas de vérif HMAC côté client (Q-B5-3) : la validation
+        // locale se fait sur uuid+ticket_number. Le serveur revérifie
+        // la signature HMAC au moment du sync (voir _process_scan).
+        // ============================================================
+
+        async function onScan(decodedText) {
             if(!scanning)return;scanning=false;
-            fetch(SCAN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qr_data:decodedText,event_id:eventId})})
-            .then(r=>r.json()).then(data=>{
-                if(data.result==='unauthorized'){alert('Session expirée.');stopScan();return;}
-                showResult(data);
-                data.result==='valid'?validCount++:invalidCount++;
-                updateCounters();
-                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:data.result,msg:data.message.substring(0,30)});
-                if(history.length>30)history.pop();
-                updateHistory();
-                setTimeout(()=>{hideResult();scanning=true;},1500);
-            }).catch(()=>{
-                showResult({result:'error',message:'Erreur réseau',color:'red'});
-                invalidCount++;updateCounters();
-                history.unshift({time:new Date().toLocaleTimeString().slice(0,5),result:'error',msg:'Erreur réseau'});
-                updateHistory();
-                setTimeout(()=>{hideResult();scanning=true;},1500);
+
+            const data = await processScan(decodedText);
+
+            if(data.result === 'unauthorized') {
+                alert('Session expirée.');
+                stopScan();
+                return;
+            }
+
+            showResult(data);
+            data.result === 'valid' ? validCount++ : invalidCount++;
+            updateCounters();
+            history.unshift({
+                time: new Date().toLocaleTimeString().slice(0,5),
+                result: data.result,
+                msg: data.message.substring(0,30) + (data.offline ? ' (hors ligne)' : ''),
             });
+            if(history.length>30)history.pop();
+            updateHistory();
+
+            // B-6 : mettre à jour le badge et tenter une sync rapide
+            // si on est en ligne (le scan n'est pas bloqué, la sync
+            // tourne en arrière-plan).
+            updatePendingBadge();
+            if (navigator.onLine) {
+                setTimeout(() => syncQueue(), 800);
+            }
+
+            setTimeout(()=>{hideResult();scanning=true;},1500);
+        }
+        // ── Décision de scan : cache-first + fallback API ──────────
+        async function processScan(decodedText) {
+            const parts = decodedText.split(':');
+            if (parts.length < 4) {
+                return {result:'invalid_qr', message:'QR Code invalide', color:'red'};
+            }
+            const ticketNumber = parts[1];
+
+            // 1) Cache local
+            let cached = null;
+            try {
+                cached = await dbGetTicketByNumber(eventId, ticketNumber);
+            } catch(e) {
+                console.warn('[scan] cache lookup échoué', e);
+            }
+
+            if (cached) {
+                return await decideLocally(cached, decodedText);
+            }
+
+            // 2) Fallback API si en ligne
+            if (navigator.onLine) {
+                return await callScanApi(decodedText);
+            }
+
+            // 3) Hors ligne + non caché
+            return {
+                result: 'not_found',
+                message: 'Billet non reconnu (mode hors ligne)',
+                color: 'red',
+                offline: true,
+            };
+        }
+
+        // ── Décision locale (même ordre que _process_scan serveur) ──
+        async function decideLocally(cached, decodedText) {
+            // 1) Mauvais événement
+            if (cached.event_id !== eventId) {
+                return {
+                    result: 'wrong_event',
+                    message: 'Ce billet est pour un autre événement',
+                    color: 'orange',
+                    offline: true,
+                };
+            }
+
+            // 2) Déjà utilisé
+            if (cached.status === 'used') {
+                return {
+                    result: 'already_used',
+                    message: 'Déjà utilisé',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 3) Annulé (void)
+            if (cached.status === 'void') {
+                return {
+                    result: 'ticket_void',
+                    message: 'Billet annulé',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 4) Expiré
+            if (cached.status === 'expired') {
+                return {
+                    result: 'invalid_qr',
+                    message: 'Billet expiré',
+                    color: 'red',
+                    offline: true,
+                };
+            }
+
+            // 5) Valide → valider localement
+            if (cached.status === 'valid') {
+                try {
+                    // Empêche le double-scan sur cet appareil
+                    await dbUpdateTicketStatus(cached.uuid, 'used');
+                    // Queue pour sync serveur (avec client_uuid pour idempotence)
+                    await dbAddToQueue(eventId, decodedText);
+                } catch(e) {
+                    console.error('[scan] échec écriture cache/queue', e);
+                }
+
+                return {
+                    result: 'valid',
+                    message: 'Accès autorisé ✅',
+                    color: 'green',
+                    offline: !navigator.onLine,
+                    ticket_info: {
+                        ticket_number: cached.ticket_number,
+                        ticket_type: cached.ticket_type,
+                        buyer_name: cached.buyer_name,
+                    },
+                };
+            }
+
+            // Statut inconnu → fallback API si possible
+            if (navigator.onLine) {
+                return await callScanApi(decodedText);
+            }
+
+            return {
+                result: 'invalid_qr',
+                message: 'Billet dans un état inconnu',
+                color: 'red',
+                offline: true,
+            };
+        }
+
+        // ── Appel API online (comportement historique conservé) ────
+        async function callScanApi(decodedText) {
+            try {
+                const r = await fetch(SCAN_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRF(),
+                    },
+                    body: JSON.stringify({qr_data: decodedText, event_id: eventId}),
+                });
+                const data = await r.json();
+                return data;
+            } catch(e) {
+                console.error('[scan] API échouée', e);
+                return {
+                    result: 'error',
+                    message: 'Erreur réseau',
+                    color: 'red',
+                };
+            }
         }
 
         function showResult(d){
@@ -250,6 +749,164 @@
         function updateCounters(){document.getElementById('validCount').textContent=validCount;document.getElementById('invalidCount').textContent=invalidCount;}
         function updateHistory(){document.getElementById('historyDrawer').innerHTML=history.map(h=>`<div class="item ${h.result==='valid'?'valid':'invalid'}">${h.result==='valid'?'✅':'❌'} ${h.time} — ${h.msg}</div>`).join('');}
         function toggleHistory(){document.getElementById('historyDrawer').classList.toggle('show');}
+
+
+        // ── Chantier B : enregistrement du Service Worker ──────────────
+        // Permet à l'app de fonctionner hors ligne (mode avion).
+        // Le SW est servi par une vue Django à /scanner/app/sw.js
+        // (voir apps/scanner/views.py:serve_service_worker).
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker
+                    .register('/scanner/app/sw.js', { scope: '/scanner/app/' })
+                    .then((reg) => console.log('[SW] enregistré', reg.scope))
+                    .catch((err) => console.warn('[SW] échec enregistrement', err));
+            });
+        }
+
+        // Badge "hors ligne" : affiche un bandeau rouge quand pas de réseau.
+        function updateOnlineStatus() {
+            const offline = !navigator.onLine;
+            let banner = document.getElementById('offlineBanner');
+            if (offline && !banner) {
+                banner = document.createElement('div');
+                banner.id = 'offlineBanner';
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;' +
+                    'background:#dc3545;color:white;padding:8px;text-align:center;' +
+                    'font-weight:700;z-index:9999;font-size:0.85rem;';
+                banner.textContent = '🔴 Hors ligne — les scans sont enregistrés localement';
+                document.body.prepend(banner);
+            } else if (!offline && banner) {
+                banner.remove();
+            }
+        }
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+
+                // Affiche discrètement combien de billets sont déjà cachés pour
+        // l'eventId saisi (mise à jour à chaque frappe dans l'input).
+        async function refreshCachedCount() {
+            const id = parseInt(document.getElementById('eventIdInput').value);
+            const statusEl = document.getElementById('prepareStatus');
+            if (!id || id < 1) {
+                statusEl.style.display = 'none';
+                return;
+            }
+            try {
+                const count = await dbCountTickets(id);
+                if (count > 0) {
+                    statusEl.textContent = `📥 ${count} billet(s) déjà en cache`;
+                    statusEl.style.color = '#1B7A3E';
+                    statusEl.style.display = 'block';
+                } else {
+                    statusEl.style.display = 'none';
+                }
+            } catch(e) {
+                statusEl.style.display = 'none';
+            }
+        }
+        document.getElementById('eventIdInput').addEventListener('input', refreshCachedCount);
+
+                // ============================================================
+        // CHANTIER B — B-6 : sync auto de la queue offline
+        // ============================================================
+        // Stratégie (décisions Q-B6) :
+        //   - Push par batches de 100
+        //   - Le serveur fait foi : on retire les scans traités de la queue
+        //     quel que soit le résultat (valid, already_used, etc.)
+        //   - Pas de retry auto — l'event 'online' + bouton manuel couvrent
+        //   - Déclenchée après "Démarrer le scan" et après chaque scan online
+        //   - Le scan n'est PAS bloqué pendant la sync
+        // ============================================================
+
+        const SYNC_BATCH_SIZE = 100;
+        let _syncInProgress = false;
+
+        async function updatePendingBadge() {
+            try {
+                if (!eventId) return;
+                const pending = await dbGetPendingScans(eventId);
+                const badge = document.getElementById('pendingBadge');
+                if (!badge) return;
+                if (pending.length > 0) {
+                    badge.textContent = `🔄 ${pending.length} en attente`;
+                } else {
+                    badge.textContent = '🔄';
+                }
+            } catch(e) {
+                console.warn('[sync] badge update échoué', e);
+            }
+        }
+
+        async function syncQueue() {
+            if (_syncInProgress) return;
+            if (!navigator.onLine) return;
+            if (!eventId) return;
+
+            _syncInProgress = true;
+            try {
+                let allPending = await dbGetPendingScans(eventId);
+                if (allPending.length === 0) {
+                    console.log('[sync] rien à synchroniser');
+                    return;
+                }
+
+                console.log(`[sync] ${allPending.length} scan(s) à synchroniser`);
+
+                // Découper en batches de 100
+                for (let i = 0; i < allPending.length; i += SYNC_BATCH_SIZE) {
+                    const batch = allPending.slice(i, i + SYNC_BATCH_SIZE);
+                    const payload = {
+                        event_id: eventId,
+                        scans: batch.map(s => ({
+                            client_uuid: s.client_uuid,
+                            qr_data: s.qr_data,
+                        })),
+                    };
+
+                    try {
+                        const res = await fetch(SYNC_URL, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCSRF(),
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        if (!res.ok) {
+                            console.warn('[sync] réponse serveur non-OK', res.status);
+                            break;
+                        }
+
+                        const data = await res.json();
+
+                        // Retirer de la queue les scans traités par le serveur
+                        for (const r of (data.results || [])) {
+                            if (r.client_uuid) {
+                                await dbDeleteQueueEntry(r.client_uuid);
+                            }
+                        }
+                        console.log(`[sync] batch ${Math.floor(i/SYNC_BATCH_SIZE) + 1} OK`, 
+                                    (data.results || []).length);
+                    } catch(e) {
+                        console.error('[sync] échec batch', e);
+                        break;
+                    }
+                }
+            } finally {
+                _syncInProgress = false;
+                await updatePendingBadge();
+            }
+        }
+
+        // Déclencheur : retour en ligne
+        window.addEventListener('online', () => {
+            console.log('[sync] retour en ligne — sync auto');
+            updatePendingBadge().then(() => syncQueue());
+        });
+
 
         async function checkSession() {
             try {

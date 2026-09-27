@@ -75,9 +75,6 @@ class NotificationService:
             logger.error(f"Erreur envoi email tickets : {e}")
             return False
 
-        # SMS de confirmation, en plus de l'email — silencieux si le
-        # numéro est absent ou si l'envoi échoue (l'email reste le canal
-        # principal, le SMS ne doit jamais bloquer la confirmation).
         if getattr(order.buyer, 'phone_number', None):
             try:
                 from apps.notifications.sms import send_sms
@@ -100,37 +97,81 @@ class NotificationService:
         from apps.tickets.models import GuestTicket
         from apps.tickets.utils import generate_guest_ticket_pdf
 
-        tickets = GuestTicket.objects.filter(order_item__order=order).select_related('order_item__ticket_type__event')
+        tickets = (
+            GuestTicket.objects
+            .filter(order_item__order=order)
+            .select_related('order_item__ticket_type__event')
+        )
         if not tickets.exists():
             return False
 
         base_url = settings.PAYDUNYA_BASE_URL
-        attachments = []
-        for ticket in tickets:
-            try:
-                pdf_bytes = generate_guest_ticket_pdf(ticket)
-                attachments.append((f"billet-{ticket.ticket_number}.pdf", pdf_bytes, 'application/pdf'))
-            except Exception as e:
-                logger.error(f"Erreur PDF invité {ticket.ticket_number}: {e}")
+        first_ticket = tickets[0]
+        event = first_ticket.event
 
-        tickets_with_links = [{'ticket': t, 'download_url': f"{base_url}/billets/guest/billet/{t.ticket_number}/pdf/"} for t in tickets]
+        is_online_only = (event.event_type == 'online')
 
-        subject = f"Vos billets — {order.order_number}"
-        context = {
-            'order': order, 'tickets': tickets, 'tickets_with_links': tickets_with_links,
-            'buyer_name': order.buyer_name, 'platform_name': 'IvoirPass',
-            'platform_url': base_url, 'support_email': settings.IVOIRPASS.get('CONTACT_EMAIL', 'infos@mks-soft-technologies.com'),
-            'year': timezone.now().year,
-        }
+        if is_online_only:
+            access_url = f"{base_url}/billets/live/{first_ticket.online_access_token}/"
+            subject = f"Votre accès à {event.title}"
+            context = {
+                'order': order,
+                'event': event,
+                'buyer_name': order.buyer_name,
+                'access_url': access_url,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'support_email': settings.IVOIRPASS.get(
+                    'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+                ),
+                'year': timezone.now().year,
+            }
+            template_base = 'notifications/email/guest_online_access'
+            attachments = []
+        else:
+            attachments = []
+            for ticket in tickets:
+                try:
+                    pdf_bytes = generate_guest_ticket_pdf(ticket)
+                    attachments.append(
+                        (f"billet-{ticket.ticket_number}.pdf", pdf_bytes, 'application/pdf')
+                    )
+                except Exception as e:
+                    logger.error(f"Erreur PDF invité {ticket.ticket_number}: {e}")
+
+            tickets_with_links = [
+                {'ticket': t,
+                 'download_url': f"{base_url}/billets/guest/billet/{t.ticket_number}/pdf/"}
+                for t in tickets
+            ]
+            subject = f"Vos billets — {order.order_number}"
+            context = {
+                'order': order,
+                'tickets': tickets,
+                'tickets_with_links': tickets_with_links,
+                'buyer_name': order.buyer_name,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'support_email': settings.IVOIRPASS.get(
+                    'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+                ),
+                'year': timezone.now().year,
+            }
+            template_base = 'notifications/email/guest_ticket_confirmed'
 
         try:
-            html_message  = render_to_string('notifications/email/guest_ticket_confirmed.html', context)
-            plain_message = render_to_string('notifications/email/guest_ticket_confirmed.txt', context)
+            html_message = render_to_string(f'{template_base}.html', context)
+            plain_message = render_to_string(f'{template_base}.txt', context)
         except Exception as e:
-            logger.error(f"Template guest_ticket_confirmed introuvable: {e}")
+            logger.error(f"Template {template_base} introuvable: {e}")
             return False
 
-        email = EmailMultiAlternatives(subject=subject, body=plain_message, from_email=settings.DEFAULT_FROM_EMAIL, to=[order.email])
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.email],
+        )
         email.attach_alternative(html_message, "text/html")
         for filename, content, mimetype in attachments:
             email.attach(filename, content, mimetype)
@@ -147,10 +188,14 @@ class NotificationService:
                 send_sms(
                     order.phone,
                     f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
-                    f"Commande {order.order_number}. Billets envoyés par email."
+                    f"Commande {order.order_number}. "
+                    + ("Votre lien de connexion vous a été envoyé par email."
+                       if is_online_only else "Billets envoyés par email.")
                 )
             except Exception as e:
-                logger.error(f"Erreur envoi SMS confirmation billet invité {order.order_number}: {e}")
+                logger.error(
+                    f"Erreur envoi SMS confirmation billet invité {order.order_number}: {e}"
+                )
 
         return True
 
@@ -287,17 +332,150 @@ class NotificationService:
             return False
 
     @classmethod
-    def event_cancelled(cls, ticket):
-        user = ticket.buyer
-        event = ticket.event
-        context = {'user': user, 'ticket': ticket, 'event': event, 'platform_name': 'IvoirPass', 'platform_url': settings.PAYDUNYA_BASE_URL, 'year': timezone.now().year}
+    def event_cancelled_buyer(cls, buyer_email, buyer_name, event):
+        """
+        Chantier A (2026-09-27) — Email informatif envoyé à un acheteur
+        après annulation d'un événement.
+
+        IvoirPass n'est PAS responsable du remboursement — c'est
+        l'organisateur qui gère directement.
+        """
+        if not buyer_email:
+            return False
+
+        base_url = settings.PAYDUNYA_BASE_URL
+        context = {
+            'buyer_name': buyer_name or 'client',
+            'event': event,
+            'platform_name': 'IvoirPass',
+            'platform_url': base_url,
+            'support_email': settings.IVOIRPASS.get(
+                'CONTACT_EMAIL', 'infos@mks-soft-technologies.com'
+            ),
+            'year': timezone.now().year,
+        }
+
         try:
-            html_message  = render_to_string('notifications/email/event_cancelled.html', context)
-            plain_message = render_to_string('notifications/email/event_cancelled.txt', context)
+            html_message = render_to_string(
+                'notifications/email/event_cancelled_buyer.html', context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/event_cancelled_buyer.txt', context,
+            )
         except Exception:
             return False
-        email = EmailMultiAlternatives(subject=f"Événement annulé — {event.title}", body=plain_message, from_email=settings.DEFAULT_FROM_EMAIL, to=[user.email])
+
+        email = EmailMultiAlternatives(
+            subject=f"Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[buyer_email],
+        )
         email.attach_alternative(html_message, "text/html")
+
+        try:
+            email.send()
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def event_cancelled_admin_alert(
+        cls, event, orders_affected, tickets_voided, wallet_frozen, reason,
+    ):
+        """
+        Chantier A (2026-09-27) — Alerte envoyée à tous les admins après
+        annulation d'un événement.
+        """
+        from apps.accounts.models import CustomUser
+
+        admins = CustomUser.objects.filter(
+            role=CustomUser.Role.ADMIN,
+            is_active=True,
+            notify_email=True,
+        )
+        recipient_list = list(admins.values_list('email', flat=True))
+        if not recipient_list:
+            return False
+
+        base_url = settings.PAYDUNYA_BASE_URL
+        context = {
+            'event': event,
+            'organizer': event.organizer,
+            'orders_affected': orders_affected,
+            'tickets_voided': tickets_voided,
+            'wallet_frozen': wallet_frozen,
+            'reason': reason,
+            'admin_event_url': f"{base_url}/admin/events/event/{event.id}/change/",
+            'platform_name': 'IvoirPass',
+            'platform_url': base_url,
+            'year': timezone.now().year,
+        }
+
+        try:
+            html_message = render_to_string(
+                'notifications/email/admin_event_cancelled.html', context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/admin_event_cancelled.txt', context,
+            )
+        except Exception:
+            return False
+
+        email = EmailMultiAlternatives(
+            subject=f"[Admin] Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=recipient_list,
+        )
+        email.attach_alternative(html_message, "text/html")
+
+        try:
+            email.send()
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def event_cancelled(cls, ticket):
+        """
+        Notifie le participant invité lorsqu'un événement est annulé.
+        Ancienne méthode conservée pour compatibilité — utilisée uniquement
+        par l'ancien service cancel_event_and_refund() qui sera retiré en A-11.
+        """
+        order = ticket.order_item.order
+        event = ticket.order_item.ticket_type.event
+
+        context = {
+            'user': None,
+            'guest_order': order,
+            'ticket': ticket,
+            'event': event,
+            'platform_name': 'IvoirPass',
+            'platform_url': settings.PAYDUNYA_BASE_URL,
+            'year': timezone.now().year,
+        }
+
+        try:
+            html_message = render_to_string(
+                'notifications/email/event_cancelled.html',
+                context,
+            )
+            plain_message = render_to_string(
+                'notifications/email/event_cancelled.txt',
+                context,
+            )
+        except Exception:
+            return False
+
+        email = EmailMultiAlternatives(
+            subject=f"Événement annulé — {event.title}",
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.buyer_email],
+        )
+        email.attach_alternative(html_message, "text/html")
+
         try:
             email.send()
             return True

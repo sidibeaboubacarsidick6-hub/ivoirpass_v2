@@ -124,13 +124,27 @@
                    class="btn btn-outline-secondary btn-sm" title="Agents scanner">
                   <i class="bi bi-qr-code-scan"></i>
                 </a>
+                {# Bouton adaptatif : Annuler si ventes, Supprimer sinon #}
+                {# Le backend (event_delete) fait déjà ce switch, on aligne l'UI. #}
+                {% if event.tickets_sold > 0 %}
+                <form method="POST" action="{% url 'events:delete' event.slug %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-warning btn-sm"
+                          title="Annuler l'événement"
+                          data-confirm="Annuler « {{ event.title }} » ?&#10;&#10;⚠️ Les {{ event.tickets_sold }} acheteur(s) seront informés par email et votre wallet sera GELÉ (aucun reversement possible tant qu'un admin n'a pas régularisé).&#10;&#10;Confirmer l'annulation ?">
+                    <i class="bi bi-x-octagon"></i>
+                  </button>
+                </form>
+                {% else %}
                 <form method="POST" action="{% url 'events:delete' event.slug %}" class="d-inline">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-outline-danger btn-sm"
-                          data-confirm="Supprimer « {{ event.title }} » ?">
+                          title="Supprimer"
+                          data-confirm="Supprimer « {{ event.title }} » ?&#10;&#10;Aucune vente — suppression définitive.">
                     <i class="bi bi-trash"></i>
                   </button>
                 </form>
+                {% endif %}
               </div>
             </td>
           </tr>

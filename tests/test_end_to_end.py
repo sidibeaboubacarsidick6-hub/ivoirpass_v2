@@ -124,7 +124,17 @@ class WalletWithdrawalFlowTest(TestCase):
         self.wallet, _ = OrganizerWallet.objects.get_or_create(organizer=self.organizer)
 
     def test_wallet_credit_and_withdrawal(self):
-        """Crédit → demande reversement → vérification"""
+        """
+        Crédit → demande reversement → réservation → confirmation provider.
+
+        ✅ (audit) : à l'origine ce test appelait wr.approve() puis
+        wr.mark_processed(), un flux avec validation manuelle admin qui
+        n'existe plus — ces méthodes lèvent désormais volontairement une
+        RuntimeError ("Les reversements sont automatiques : aucune
+        approbation admin n'est requise."). Le vrai flux automatique est
+        reserve() puis complete_reserved(), comme dans
+        tests/test_withdrawals_audit.py::WithdrawalRequestLifecycleTests.
+        """
         # Créditer
         self.wallet.credit(50000, description='Ventes', reference='IP-2026-TEST')
         self.assertEqual(self.wallet.balance_available, 50000)
@@ -137,14 +147,22 @@ class WalletWithdrawalFlowTest(TestCase):
         self.assertEqual(wr.status, 'pending')
         self.assertTrue(wr.reference.startswith('REV-'))
 
-        # Approuver
-        wr.approve(admin_user=self.organizer, note='OK')
-        self.assertEqual(wr.status, 'approved')
-
-        # Traiter
-        wr.mark_processed(admin_user=self.organizer, note='Virement fait')
-        self.assertEqual(wr.status, 'processed')
+        # Réservation immédiate des fonds (dès la création de la demande
+        # dans le flux réel — reproduite ici explicitement pour le test)
+        self.wallet.reserve(wr.amount, description=f"Réservation {wr.reference}", reference=wr.reference)
+        self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance_available, 20000)
+        self.assertEqual(self.wallet.balance_pending, 30000)
+
+        # Confirmation automatique par le provider (PayDunya) une fois le
+        # payout réussi — finalise le reversement, aucune approbation admin
+        wr.status = WithdrawalRequest.Status.COMPLETED
+        wr.save(update_fields=['status'])
+        self.wallet.complete_reserved(wr.amount, description=f"Reversement {wr.reference}", reference=wr.reference)
+        self.wallet.refresh_from_db()
+
+        self.assertEqual(self.wallet.balance_available, 20000)
+        self.assertEqual(self.wallet.balance_pending, 0)
         self.assertEqual(self.wallet.balance_withdrawn, 30000)
 
 

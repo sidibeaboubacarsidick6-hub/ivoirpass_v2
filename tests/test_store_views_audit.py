@@ -3,6 +3,13 @@ Test d'audit — Flux boutique complet (apps/store/views.py, 11% de
 couverture avant cet audit). Couvre l'achat, la protection IDOR sur la
 gestion produit, et le téléchargement sécurisé des fichiers numériques.
 
+✅ H-3 (audit) : BuyProductStockTests et SecureDownloadTests ciblaient à
+l'origine le tunnel d'achat "avec compte" (store:buy, store:download),
+retiré/réduit à une redirection car mort (le vrai tunnel actif est le
+parcours invité — guest_buy_product / guest_download_file). Réécrits
+ci-dessous pour exercer le tunnel réellement actif ; ProductManagementIDORTests
+et StoreListAndDetailTests n'étaient pas concernées, inchangées.
+
 Lancer :
     DJANGO_SETTINGS_MODULE=config.settings.testlocal python manage.py test tests.test_store_views_audit -v 2
 """
@@ -14,7 +21,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.accounts.models import CustomUser
-from apps.store.models import Product, ProductCategory, ProductOrder, DownloadLink
+from apps.store.models import Product, ProductCategory, GuestProductOrder, GuestDownloadLink
 
 
 def _make_seller_and_product(seller_email='seller-store@test.com', stock=10, product_type='physical', price=5000):
@@ -57,44 +64,39 @@ class StoreListAndDetailTests(TestCase):
 
 
 class BuyProductStockTests(TestCase):
-    """Vérifie le verrouillage de stock déjà en place (select_for_update)."""
+    """Vérifie le contrôle de stock du tunnel d'achat invité (guest_buy_product)."""
 
     def setUp(self):
         self.seller, self.product = _make_seller_and_product(stock=1)
-        self.buyer = CustomUser.objects.create_user(email='buyer-store@test.com', password='Pass123!')
+
+    def _post(self, quantity, **extra):
+        data = {
+            'first_name': 'Test', 'last_name': 'Acheteur',
+            'email': 'buyer-store@test.com', 'phone': '+2250700000000',
+            'quantity': quantity, 'delivery_method': 'delivery',
+        }
+        data.update(extra)
+        return Client().post(reverse('store:guest_buy', kwargs={'slug': self.product.slug}), data)
 
     def test_achat_avec_stock_suffisant_cree_une_commande(self):
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.post(
-            reverse('store:buy', kwargs={'slug': self.product.slug}),
-            {'quantity': 1, 'delivery_method': 'delivery',
-             'delivery_name': 'Test', 'delivery_phone': '+2250700000000',
-             'delivery_address': 'Cocody', 'delivery_city': 'Abidjan'},
+        response = self._post(
+            1, delivery_name='Test', delivery_phone='+2250700000000',
+            delivery_address='Cocody', delivery_city='Abidjan',
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(ProductOrder.objects.filter(buyer=self.buyer, product=self.product).exists())
+        self.assertTrue(GuestProductOrder.objects.filter(email='buyer-store@test.com', product=self.product).exists())
 
     def test_achat_avec_stock_insuffisant_refuse(self):
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.post(
-            reverse('store:buy', kwargs={'slug': self.product.slug}),
-            {'quantity': 5, 'delivery_method': 'delivery',
-             'delivery_name': 'Test', 'delivery_phone': '+2250700000000',
-             'delivery_address': 'Cocody', 'delivery_city': 'Abidjan'},
+        response = self._post(
+            5, delivery_name='Test', delivery_phone='+2250700000000',
+            delivery_address='Cocody', delivery_city='Abidjan',
         )
-        self.assertFalse(ProductOrder.objects.filter(buyer=self.buyer, product=self.product).exists())
+        self.assertFalse(GuestProductOrder.objects.filter(email='buyer-store@test.com', product=self.product).exists())
 
     def test_produit_physique_sans_adresse_refuse(self):
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.post(
-            reverse('store:buy', kwargs={'slug': self.product.slug}),
-            {'quantity': 1, 'delivery_method': 'delivery'},
-        )
+        response = self._post(1)  # delivery_method='delivery' sans adresse
         self.assertEqual(response.status_code, 200)  # re-render du formulaire, pas de redirection
-        self.assertFalse(ProductOrder.objects.filter(buyer=self.buyer, product=self.product).exists())
+        self.assertFalse(GuestProductOrder.objects.filter(email='buyer-store@test.com', product=self.product).exists())
 
 
 class ProductManagementIDORTests(TestCase):
@@ -125,57 +127,49 @@ class ProductManagementIDORTests(TestCase):
 
 
 class SecureDownloadTests(TestCase):
-    """Le téléchargement d'un fichier numérique doit être strictement réservé à l'acheteur."""
+    """
+    Le téléchargement d'un fichier numérique invité repose sur un token
+    non-devinable (UUID), pas sur une session utilisateur — il n'y a donc
+    pas de notion de « autre utilisateur » comme dans le tunnel avec compte.
+    La sécurité tient à l'expiration et à la limite de téléchargements.
+    """
 
     def setUp(self):
         self.seller, self.product = _make_seller_and_product(product_type='digital')
         self.product.digital_file = SimpleUploadedFile("fichier.txt", b"contenu du produit numerique")
         self.product.save()
 
-        self.buyer = CustomUser.objects.create_user(email='buyer-dl@test.com', password='Pass123!')
-        self.other_user = CustomUser.objects.create_user(email='autre-dl@test.com', password='Pass123!')
-
-        order = ProductOrder.objects.create(
-            buyer=self.buyer, product=self.product, quantity=1,
+        order = GuestProductOrder.objects.create(
+            first_name='Test', last_name='Acheteur', email='buyer-dl@test.com',
+            product=self.product, quantity=1,
             unit_price=self.product.price, subtotal=self.product.price, total=self.product.price,
-            delivery_method='download', status=ProductOrder.Status.PAID,
+            delivery_method='download', status=GuestProductOrder.Status.PAID,
         )
-        self.link = DownloadLink.objects.create(
+        self.link = GuestDownloadLink.objects.create(
             order=order, product=self.product,
             expires_at=timezone.now() + timedelta(days=7),
         )
 
     def test_acheteur_peut_telecharger(self):
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.get(reverse('store:download', kwargs={'token': self.link.token}))
+        response = Client().get(reverse('store:guest_download', kwargs={'token': self.link.token}))
         self.assertEqual(response.status_code, 200)
 
-    def test_autre_utilisateur_ne_peut_pas_telecharger(self):
-        client = Client()
-        client.force_login(self.other_user)
-        response = client.get(reverse('store:download', kwargs={'token': self.link.token}))
+    def test_token_inconnu_refuse(self):
+        import uuid
+        response = Client().get(reverse('store:guest_download', kwargs={'token': uuid.uuid4()}))
         self.assertEqual(response.status_code, 404)
-
-    def test_visiteur_non_connecte_redirige_vers_login(self):
-        client = Client()
-        response = client.get(reverse('store:download', kwargs={'token': self.link.token}))
-        self.assertEqual(response.status_code, 302)
 
     def test_lien_expire_refuse(self):
         self.link.expires_at = timezone.now() - timedelta(days=1)
         self.link.save()
-
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.get(reverse('store:download', kwargs={'token': self.link.token}))
-        self.assertEqual(response.status_code, 302)  # redirigé vers order_detail avec message d'erreur
+        response = Client().get(reverse('store:guest_download', kwargs={'token': self.link.token}))
+        self.assertEqual(response.status_code, 200)  # page "lien expiré", pas le fichier
+        self.assertTemplateUsed(response, 'store/download_expired.html')
 
     def test_limite_de_telechargements_atteinte_refuse(self):
         self.link.download_count = self.link.max_downloads
         self.link.save()
+        response = Client().get(reverse('store:guest_download', kwargs={'token': self.link.token}))
+        self.assertEqual(response.status_code, 200)  # page "limite atteinte", pas le fichier
+        self.assertTemplateUsed(response, 'store/download_expired.html')
 
-        client = Client()
-        client.force_login(self.buyer)
-        response = client.get(reverse('store:download', kwargs={'token': self.link.token}))
-        self.assertEqual(response.status_code, 302)

@@ -333,13 +333,13 @@
                         {% if product.stock > 0 %}
                             {{ product.stock }} exemplaire{{ product.stock|pluralize }}
                         {% else %}
-                            <span class="text-danger">Rupture de stock</span>
+                            <span class="text-danger">Indisponible</span>
                         {% endif %}
                     </div>
                     {% endif %}
 
                     <!-- Formulaire d'achat pour utilisateur authentifié -->
-                    {% if user.is_authenticated %}
+                    {% if False %}{# Achat compte désactivé — tunnel invité uniquement, voir {% else %} ci-dessous #}
                         <form method="POST" action="{% url 'store:buy' product.slug %}">
                             {% csrf_token %}
                             
@@ -378,17 +378,10 @@
                         <div class="mt-3 text-center">
                             <small class="text-muted">
                                 <i class="bi bi-shield-check me-1 text-green"></i>
-                                Paiement sécurisé PayDunya
+                                Paiement sécurisé
                             </small>
                         </div>
 
-                        <!-- Commission info -->
-                        <div class="commission-info text-center">
-                            <small>
-                                <i class="bi bi-info-circle me-1"></i>
-                                Commission plateforme : {{ product.commission_rate }}%
-                            </small>
-                        </div>
 
                     {% else %}
                         <!-- Utilisateur non authentifié - ACHAT SANS COMPTE -->
@@ -401,14 +394,6 @@
                             Aucun compte requis — Paiement sécurisé
                         </p>
                         
-                        <!-- Lien de connexion -->
-                        <div class="text-center mt-2">
-                            <a href="{% url 'account_login' %}?next={{ request.path }}"
-                               class="text-decoration-none small">
-                                <i class="bi bi-box-arrow-in-right me-1"></i>
-                                Vous avez déjà un compte ? Connectez-vous
-                            </a>
-                        </div>
 
                         <!-- Infos téléchargement -->
                         {% if product.is_digital %}
@@ -419,13 +404,6 @@
                         </div>
                         {% endif %}
 
-                        <!-- Commission info -->
-                        <div class="commission-info text-center">
-                            <small>
-                                <i class="bi bi-info-circle me-1"></i>
-                                Commission plateforme : {{ product.commission_rate }}%
-                            </small>
-                        </div>
                     {% endif %}
 
                 {% else %}
@@ -437,7 +415,7 @@
                         {% elif product.status == 'archived' %}
                             Produit archivé
                         {% elif product.status == 'out_stock' %}
-                            Rupture de stock
+                            Indisponible
                         {% else %}
                             Indisponible
                         {% endif %}

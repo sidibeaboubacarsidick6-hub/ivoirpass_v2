@@ -26,4 +26,11 @@ urlpatterns = [
     # Application de scan installable (PWA) — remplace scanner_app en local
     path('app/',
          views.scanner_app, name='app'),
+
+    # ── Chantier B — ressources PWA ────────────────────────────────
+    # Le SW DOIT être à ce chemin (scope /scanner/app/). Voir views.py.
+    path('app/sw.js',
+         views.serve_service_worker, name='sw'),
+    path('app/manifest.json',
+         views.serve_manifest, name='manifest'),
 ]

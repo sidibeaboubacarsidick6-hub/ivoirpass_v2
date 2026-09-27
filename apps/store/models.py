@@ -7,11 +7,22 @@ import os
 import random
 import string
 import logging
-from django.db import models
+from django.db import models, transaction, IntegrityError
+from django.db.models import F
 from django.conf import settings
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify
 from django.utils import timezone
+
+from .validators import (
+    EXTENSIONS,
+    MAX_MB,
+    ALLOWED_DIGITAL_EXTENSIONS,
+    validate_file_size,
+    validate_digital_file_type,
+    django_file_extensions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +93,10 @@ class Product(models.Model):
     )
     description = models.TextField(_('description'))
     short_description = models.TextField(
-        _('description courte'),
+        _('InfoLine'),
         max_length=500,
-        blank=True
+        blank=True,
+        help_text="Numéro de contact du propriétaire"
     )
 
     # Classification
@@ -120,21 +132,47 @@ class Product(models.Model):
         _('image de couverture'),
         upload_to='store/covers/%Y/%m/',
         null=True,
-        blank=True
+        blank=True,
+        validators=[
+            FileExtensionValidator(django_file_extensions('cover')),
+            validate_file_size(MAX_MB['cover']),
+        ]
     )
     preview_file = models.FileField(
         _('fichier aperçu'),
         upload_to='store/previews/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Extrait gratuit (PDF, MP3...)"
+        help_text="Extrait gratuit (PDF, MP3...)",
+        validators=[
+            FileExtensionValidator(django_file_extensions('preview')),
+            validate_file_size(MAX_MB['preview']),
+        ]
     )
     digital_file = models.FileField(
         _('fichier numérique'),
         upload_to='store/digital/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Fichier complet — non accessible publiquement"
+        help_text="Fichier complet — non accessible publiquement",
+        validators=[
+            FileExtensionValidator(
+                django_file_extensions('audio', 'video', 'book', 'image', 'archive')
+            ),
+            validate_digital_file_type,
+        ]
+    )
+
+    external_url = models.URLField(
+        _('lien externe (album/streaming)'),
+        max_length=500,
+        blank=True,
+        help_text=(
+            "Spotify, Apple Music, Deezer, Bandcamp... "
+            "Remplis ce champ OU uploade un fichier numérique. "
+            "Si les deux sont renseignés, l'URL externe est servie "
+            "en priorité (pour compter les clics)."
+        ),
     )
 
     # Métadonnées produit
@@ -165,7 +203,8 @@ class Product(models.Model):
     price = models.DecimalField(
         _('prix (FCFA)'),
         max_digits=10,
-        decimal_places=0
+        decimal_places=0,
+        validators=[MinValueValidator(500)]
     )
     price_physical = models.DecimalField(
         _('prix version physique'),
@@ -173,7 +212,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie physique"
+        help_text="Pour les bundles : prix partie physique",
+        validators=[MinValueValidator(500)]
     )
     price_digital = models.DecimalField(
         _('prix version numérique'),
@@ -181,7 +221,8 @@ class Product(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text="Pour les bundles : prix partie numérique"
+        help_text="Pour les bundles : prix partie numérique",
+        validators=[MinValueValidator(500)]
     )
     stock = models.PositiveIntegerField(
         _('stock physique'),
@@ -285,11 +326,28 @@ class Product(models.Model):
 
     @property
     def is_available(self):
+        """
+        Disponible si publié ET :
+        - PHYSICAL pur : stock > 0
+        - DIGITAL pur  : toujours (le form garantit fichier OU URL externe)
+        - BUNDLE       : toujours (au moins la version numérique est vendable)
+        """
         if self.status != self.Status.PUBLISHED:
             return False
-        if self.is_physical and self.stock == 0:
+        # Un bundle avec stock=0 reste achetable en version numérique seule
+        if self.product_type == self.ProductType.PHYSICAL and self.stock == 0:
             return False
         return True
+
+    @property
+    def is_available_physical(self):
+        """Disponible en physique uniquement si stock > 0."""
+        return self.stock > 0
+
+    @property
+    def is_available_digital(self):
+        """Disponible en numérique si un contenu est fourni (fichier ou URL)."""
+        return bool(self.digital_file or self.external_url)
 
     @property
     def file_extension(self):
@@ -311,6 +369,30 @@ class Product(models.Model):
         return 0
 
 
+# ============================================================
+# LEGACY — Tunnel "achat avec compte" désactivé (audit H-3)
+#
+# ProductOrder + DownloadLink ne reçoivent plus AUCUNE nouvelle
+# ligne depuis le passage à l'achat invité (GuestProductOrder).
+# MAIS ils restent LUS activement par :
+#
+#   - Le back-office financier (apps/dashboard/views.py)
+#   - Les exports admin CSV/Excel (apps/dashboard/admin.py)
+#   - Le rapport BCEAO mensuel (apps/dashboard/tasks.py)
+#   - Les factures PDF (apps/accounts/views.py)
+#   - La FK Payment.store_order (apps/payments/models.py)
+#   - Les signaux dashboard (apps/dashboard/signals.py)
+#
+# ⚠️ NE PAS SUPPRIMER sans un chantier dédié qui couvre :
+#     1. La réécriture des consommateurs ci-dessus
+#     2. La FK Payment.store_order
+#     3. Les signaux dashboard
+#     4. La validation d'absence de données en preprod/prod
+#
+# Vérifié en preprod le 2026-09-27 : 0 ProductOrder, 0 DownloadLink.
+# Décision chantier boutique : suppression reportée.
+# Voir PROJECT_STATE.md — section "Chantier Boutique Culturelle".
+# ============================================================
 class ProductOrder(models.Model):
     """
     Commande d'un produit culturel.
@@ -513,7 +595,7 @@ class ProductOrder(models.Model):
         if self.product.is_physical:
             from django.db import transaction
             from django.db.models import F
-            
+
             with transaction.atomic():
                 # Verrouille et décrémente de manière atomique
                 updated = Product.objects.select_for_update().filter(
@@ -523,7 +605,7 @@ class ProductOrder(models.Model):
                     stock=F('stock') - self.quantity,
                     sold_count=F('sold_count') + self.quantity
                 )
-                
+
                 if not updated:
                     logger.error(f"Stock insuffisant pour {self.order_number}")
                     raise ValueError("Stock insuffisant")
@@ -542,30 +624,45 @@ class ProductOrder(models.Model):
                 )
 
     def _credit_seller_wallet(self):
-        """Crédite le wallet avec la commission dynamique du produit — anti-doublon."""
-        from apps.dashboard.models import OrganizerWallet, WalletTransaction
+        """
+        Crédite le wallet avec la commission dynamique du produit.
 
-        # ✅ Anti-doublon : ne crédite jamais deux fois la même commande
-        already_credited = WalletTransaction.objects.filter(
-            reference=self.order_number
-        ).exists()
-        if already_credited:
-            logger.info(
-                f"Transaction déjà créditée pour la commande {self.order_number}, ignorée"
-            )
-            return
+        Verrouillé (select_for_update) et protégé par la contrainte unique
+        en base sur (wallet, reference, type=credit) : évite un double
+        crédit si cette méthode est appelée deux fois pour la même commande
+        (ex. deux requêtes concurrentes marquant la commande comme payée).
+        """
+        from apps.dashboard.models import OrganizerWallet, WalletTransaction
 
         commission_rate = float(self.product.commission_rate) / 100
         net_amount = int(round(float(self.subtotal) * (1 - commission_rate)))
 
-        wallet, _ = OrganizerWallet.objects.get_or_create(
-            organizer=self.product.seller
-        )
-        wallet.credit(
-            amount=net_amount,
-            description=f"Vente boutique — {self.product.name}",
-            reference=self.order_number,
-        )
+        try:
+            with transaction.atomic():
+                wallet, _ = OrganizerWallet.objects.get_or_create(
+                    organizer=self.product.seller
+                )
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+
+                if WalletTransaction.objects.filter(
+                    wallet=wallet, reference=self.order_number, type=WalletTransaction.Type.CREDIT
+                ).exists():
+                    logger.info(
+                        f"Transaction déjà créditée pour la commande {self.order_number}, ignorée"
+                    )
+                    return
+
+                wallet.credit(
+                    amount=net_amount,
+                    description=f"Vente boutique — {self.product.name}",
+                    reference=self.order_number,
+                )
+        except IntegrityError:
+            logger.warning(
+                f"Double crédit wallet évité par la contrainte unique pour "
+                f"la commande {self.order_number}"
+            )
+            return
         logger.info(
             f"Wallet crédité pour la commande {self.order_number}: "
             f"{net_amount} FCFA"
@@ -592,7 +689,7 @@ class ProductOrder(models.Model):
         if self.status in [self.Status.PENDING, self.Status.PAID]:
             self.status = self.Status.CANCELLED
             self.save()
-            
+
             # Restaurer le stock si commande était payée
             if self.product.is_physical and self.status == self.Status.PAID:
                 self.product.stock += self.quantity
@@ -606,7 +703,7 @@ class ProductOrder(models.Model):
         if self.status == self.Status.PAID:
             self.status = self.Status.REFUNDED
             self.save()
-            
+
             # Restaurer le stock si produit physique
             if self.product.is_physical:
                 self.product.stock += self.quantity
@@ -616,6 +713,9 @@ class ProductOrder(models.Model):
                 )
 
 
+# LEGACY — voir commentaire ci-dessus (ProductOrder).
+# Consommé uniquement par l'admin ProductOrderAdmin (retiré du site).
+# Ne pas supprimer : dépendance historique du tunnel "avec compte".
 class DownloadLink(models.Model):
     """
     Lien de téléchargement sécurisé et temporaire.
@@ -697,6 +797,7 @@ class GuestProductOrder(models.Model):
     class DeliveryMethod(models.TextChoices):
         DOWNLOAD = 'download', _('Téléchargement')
         DELIVERY = 'delivery', _('Livraison')
+        BOTH     = 'both',     _('Bundle (physique + numérique)')
 
     # Numéro unique
     order_number = models.CharField(
@@ -882,26 +983,46 @@ class GuestProductOrder(models.Model):
         Confirme le paiement. Génère TOUJOURS de nouveaux liens de téléchargement,
         indépendamment des achats précédents du même produit par le même client.
         Notifie le vendeur pour les produits physiques.
+
+        Verrouillé et idempotent (même patron que Order/GuestOrder.mark_as_paid,
+        apps/tickets/models.py — correctif R-01) : le retour navigateur, le
+        webhook PayDunya et la tâche de réconciliation peuvent tous les trois
+        appeler cette méthode pour la même commande. Sans ce verrou, un appel
+        concurrent aurait pu décrémenter le stock et créditer le wallet vendeur
+        deux fois.
+
+        Returns:
+            bool: True si cet appel a confirmé la commande, False si elle
+                  était déjà payée par un appel concurrent.
         """
-        self.status = self.Status.PAID
-        self.payment_method = payment_method
-        self.payment_reference = payment_reference
-        self.paid_at = timezone.now()
-        self.save()
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            # Une commande boutique annulée est terminale : un retour navigateur,
+            # un webhook tardif ou la réconciliation ne doit jamais pouvoir la
+            # faire repasser à PAID.
+            if locked.status != self.Status.PENDING:
+                return False
 
-        # Crédite le wallet du vendeur
-        self._credit_seller_wallet()
+            self.status = self.Status.PAID
+            self.payment_method = payment_method
+            self.payment_reference = payment_reference
+            self.paid_at = timezone.now()
+            self.save()
 
-        # Génère les liens de téléchargement si produit numérique
-        if self.product.is_digital:
-            self._generate_download_links()
+            # Crédite le wallet du vendeur
+            self._credit_seller_wallet()
 
-        # Met à jour le stock si produit physique
-        if self.product.is_physical:
-            from django.db import transaction
-            from django.db.models import F
-            
-            with transaction.atomic():
+            # Génère les liens de téléchargement UNIQUEMENT si le client a
+            # reellement choisi le numerique (seul ou bundle) — avant, ceci
+            # se basait sur product.is_digital, qui est TOUJOURS vrai pour
+            # un bundle, meme si le client n'avait choisi que le physique.
+            if self.delivery_method in (self.DeliveryMethod.DOWNLOAD, self.DeliveryMethod.BOTH):
+                self._generate_download_links()
+
+            # Met a jour le stock UNIQUEMENT si le client a reellement
+            # choisi la livraison physique (seule ou bundle) — meme
+            # correction que ci-dessus.
+            if self.delivery_method in (self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH):
                 updated = Product.objects.select_for_update().filter(
                     pk=self.product.pk,
                     stock__gte=self.quantity
@@ -909,49 +1030,64 @@ class GuestProductOrder(models.Model):
                     stock=F('stock') - self.quantity,
                     sold_count=F('sold_count') + self.quantity
                 )
-                
+
                 if not updated:
                     logger.error(f"Stock insuffisant pour guest {self.order_number}")
                     raise ValueError("Stock insuffisant")
 
-            # ✅ Notifie le vendeur qu'il doit préparer une livraison
-            try:
-                from apps.notifications.service import NotificationService
-                NotificationService.notify_seller_new_order(self, is_guest=True)
-                logger.info(
-                    f"Vendeur notifié pour la commande guest {self.order_number} "
-                    f"(produit physique)"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
-                )
+                # ✅ Notifie le vendeur qu'il doit préparer une livraison
+                try:
+                    from apps.notifications.service import NotificationService
+                    NotificationService.notify_seller_new_order(self, is_guest=True)
+                    logger.info(
+                        f"Vendeur notifié pour la commande guest {self.order_number} "
+                        f"(produit physique)"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
+                    )
+        return True
 
     def _credit_seller_wallet(self):
-        """Crédite le wallet avec la commission dynamique du produit — anti-doublon."""
-        from apps.dashboard.models import OrganizerWallet, WalletTransaction
+        """
+        Crédite le wallet avec la commission dynamique du produit.
 
-        # ✅ Anti-doublon : ne crédite jamais deux fois la même commande
-        already_credited = WalletTransaction.objects.filter(
-            reference=self.order_number
-        ).exists()
-        if already_credited:
-            logger.info(
-                f"Transaction déjà créditée pour la commande guest {self.order_number}, ignorée"
-            )
-            return
+        Verrouillé (select_for_update) et protégé par la contrainte unique
+        en base sur (wallet, reference, type=credit) : évite un double
+        crédit si cette méthode est appelée deux fois pour la même commande.
+        """
+        from apps.dashboard.models import OrganizerWallet, WalletTransaction
 
         commission_rate = float(self.product.commission_rate) / 100
         net_amount = int(round(float(self.subtotal) * (1 - commission_rate)))
 
-        wallet, _ = OrganizerWallet.objects.get_or_create(
-            organizer=self.product.seller
-        )
-        wallet.credit(
-            amount=net_amount,
-            description=f"Vente boutique — {self.product.name}",
-            reference=self.order_number,
-        )
+        try:
+            with transaction.atomic():
+                wallet, _ = OrganizerWallet.objects.get_or_create(
+                    organizer=self.product.seller
+                )
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+
+                if WalletTransaction.objects.filter(
+                    wallet=wallet, reference=self.order_number, type=WalletTransaction.Type.CREDIT
+                ).exists():
+                    logger.info(
+                        f"Transaction déjà créditée pour la commande guest {self.order_number}, ignorée"
+                    )
+                    return
+
+                wallet.credit(
+                    amount=net_amount,
+                    description=f"Vente boutique — {self.product.name}",
+                    reference=self.order_number,
+                )
+        except IntegrityError:
+            logger.warning(
+                f"Double crédit wallet évité par la contrainte unique pour "
+                f"la commande guest {self.order_number}"
+            )
+            return
         logger.info(
             f"Wallet crédité pour la commande guest {self.order_number}: "
             f"{net_amount} FCFA"
@@ -979,34 +1115,60 @@ class GuestProductOrder(models.Model):
     def cancel(self):
         """
         Annule la commande et restaure le stock si nécessaire.
+
+        ⚠️ Fix 2026-09 : l'ancienne version testait `self.status == PAID`
+        APRÈS avoir muté `self.status` en CANCELLED → condition toujours
+        fausse → le stock n'était JAMAIS restauré. Corrigé en mémorisant
+        `was_paid` AVANT la mutation.
         """
-        if self.status in [self.Status.PENDING, self.Status.PAID]:
-            self.status = self.Status.CANCELLED
-            self.save()
-            
-            # Restaurer le stock si commande était payée et produit physique
-            if self.product.is_physical and self.status == self.Status.PAID:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest annulée {self.order_number}"
-                )
+        if self.status not in (self.Status.PENDING, self.Status.PAID):
+            return
+
+        was_paid = (self.status == self.Status.PAID)
+        # On ne restaure que si la livraison physique avait réellement
+        # été engagée lors de mark_as_paid (delivery ou both).
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.CANCELLED
+        self.save(update_fields=['status'])
+
+        if was_paid and delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest annulée {self.order_number}"
+            )
 
     def refund(self):
         """
-        Rembourse la commande.
+        Rembourse la commande et restaure le stock si la livraison
+        physique avait réellement été engagée (delivery/both).
+
+        ⚠️ Fix 2026-09 : l'ancienne version restaurait le stock même pour
+        un achat 100% numérique (delivery_method='download') → stock
+        gonflé artificiellement. On aligne désormais sur mark_as_paid qui
+        ne décrémente QUE si delivery_method ∈ (delivery, both).
         """
-        if self.status == self.Status.PAID:
-            self.status = self.Status.REFUNDED
-            self.save()
-            
-            # Restaurer le stock si produit physique
-            if self.product.is_physical:
-                self.product.stock += self.quantity
-                self.product.save(update_fields=['stock'])
-                logger.info(
-                    f"Stock restauré pour la commande guest remboursée {self.order_number}"
-                )
+        if self.status != self.Status.PAID:
+            return
+
+        delivery_had_physical = self.delivery_method in (
+            self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH,
+        )
+
+        self.status = self.Status.REFUNDED
+        self.save(update_fields=['status'])
+
+        if delivery_had_physical:
+            Product.objects.filter(pk=self.product_id).update(
+                stock=F('stock') + self.quantity
+            )
+            logger.info(
+                f"Stock restauré pour la commande guest remboursée {self.order_number}"
+            )
 
     def has_previously_purchased(self):
         """
@@ -1043,6 +1205,14 @@ class GuestDownloadLink(models.Model):
     download_count = models.PositiveIntegerField(
         _('téléchargements effectués'),
         default=0
+    )
+    external_click_count = models.PositiveIntegerField(
+        _('clics vers lien externe'),
+        default=0,
+        help_text=(
+            "Compteur informatif des clics vers product.external_url. "
+            "Ne consomme PAS la limite de téléchargements."
+        ),
     )
     max_downloads = models.PositiveIntegerField(
         _('limite de téléchargements'),

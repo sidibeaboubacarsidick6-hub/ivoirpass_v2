@@ -6,6 +6,7 @@ from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+from django.core.exceptions import PermissionDenied
 
 
 class OrganizerWallet(models.Model):
@@ -67,6 +68,30 @@ class OrganizerWallet(models.Model):
         help_text="Nom enregistré sur le compte Mobile Money"
     )
 
+    # ── Gel du wallet (annulation événement) ────────────────────────
+    # Un wallet est gelé par le service `cancel_event_organizer_liable`
+    # quand un événement avec tickets vendus est annulé. Tant qu'il est
+    # gelé, aucune demande de reversement n'est acceptée (voir
+    # apps/dashboard/views.py:withdraw_request). Le déblocage est
+    # manuel par un admin (aucune UI dédiée pour l'instant).
+    is_frozen = models.BooleanField(
+        _('gelé'),
+        default=False,
+        help_text=(
+            "Wallet gelé — aucune demande de reversement acceptée. "
+            "Se déclenche automatiquement lors d'une annulation "
+            "d'événement avec tickets vendus."
+        )
+    )
+    frozen_reason = models.TextField(
+        _('raison du gel'),
+        blank=True,
+        help_text=(
+            "Détail textuel affiché aux admins (titre événement, "
+            "date, nombre de commandes impactées)."
+        )
+    )
+
     # Dates
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -98,23 +123,85 @@ class OrganizerWallet(models.Model):
             reference   = reference,
         )
 
-    def debit(self, amount, description='', reference=''):
-        """Débite le wallet lors d'un reversement."""
+    def reserve(self, amount, description='', reference=''):
+        """Réserve un montant disponible pour un reversement en cours."""
         if amount > self.balance_available:
             raise ValueError("Solde insuffisant pour ce reversement.")
         self.balance_available -= amount
-        self.balance_withdrawn += amount
-        self.balance_pending = max(0, self.balance_pending - amount)
-        self.save(update_fields=[
-            'balance_available', 'balance_withdrawn', 'balance_pending', 'updated_at'   
-        ])
+        self.balance_pending += amount
+        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
         WalletTransaction.objects.create(
-            wallet        = self,
-            type          = WalletTransaction.Type.DEBIT,
-            amount        = amount,
-            balance_after = self.balance_available,
-            description   = description,
-            reference     = reference,
+            wallet=self,
+            type=WalletTransaction.Type.ADJUSTMENT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Montant réservé pour reversement',
+            reference=reference,
+        )
+
+    def complete_reserved(self, amount, description='', reference=''):
+        """Finalise un reversement déjà réservé après confirmation provider."""
+        if amount > self.balance_pending:
+            raise ValueError("Montant réservé insuffisant pour finaliser ce reversement.")
+        self.balance_pending -= amount
+        self.balance_withdrawn += amount
+        self.save(update_fields=['balance_withdrawn', 'balance_pending', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.DEBIT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Reversement confirmé',
+            reference=reference,
+        )
+
+    def release_reserved(self, amount, description='', reference=''):
+        """Libère un montant réservé après échec/annulation définitive."""
+        if amount > self.balance_pending:
+            raise ValueError("Montant réservé insuffisant pour libération.")
+        self.balance_pending -= amount
+        self.balance_available += amount
+        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.ADJUSTMENT,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or 'Montant libéré après échec du reversement',
+            reference=reference,
+        )
+
+    def debit(self, amount, description='', reference=''):
+        # Compatibilité legacy : finalise un montant déjà réservé.
+        return self.complete_reserved(amount, description=description, reference=reference)
+
+    def refund_charge(self, amount, description='', reference=''):
+        # Le coût intégral du remboursement client est supporté par l'organisateur.
+        from decimal import Decimal
+
+        amount = Decimal(str(amount))
+        if amount <= 0:
+            raise ValueError("Le montant du remboursement doit être positif.")
+
+        self.balance_available -= amount
+        self.save(update_fields=["balance_available", "updated_at"])
+
+        WalletTransaction.objects.create(
+            wallet=self,
+            type=WalletTransaction.Type.REFUND,
+            amount=amount,
+            balance_after=self.balance_available,
+            description=description or "Remboursement client — coût supporté par organisateur",
+            reference=reference,
+        )
+
+        return True
+
+    def __str__(self):
+        return (
+            f"{self.get_type_display()} — "
+            f"{self.amount} FCFA — "
+            f"{self.created_at.strftime('%d/%m/%Y')}"
         )
 
 
@@ -167,6 +254,21 @@ class WalletTransaction(models.Model):
         verbose_name = _('transaction wallet')
         verbose_name_plural = _('transactions wallet')
         ordering = ['-created_at']
+        constraints = [
+            # Empêche un double crédit de la même commande sur le même
+            # wallet (ex. appel concurrent du signal post_save déclenché par
+            # deux confirmations quasi-simultanées d'une même commande).
+            # Filtre volontairement sur type=CREDIT et reference non vide :
+            # les mouvements de reversement (ADJUSTMENT/DEBIT/REFUND)
+            # peuvent légitimement réutiliser la même référence à plusieurs
+            # étapes (réservation puis finalisation) et ne sont pas
+            # concernés par cette contrainte.
+            models.UniqueConstraint(
+                fields=['wallet', 'reference'],
+                condition=models.Q(type='credit') & ~models.Q(reference=''),
+                name='wallettransaction_unique_credit_per_wallet_reference',
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -176,16 +278,19 @@ class WalletTransaction(models.Model):
         )
 
 
+
 class WithdrawalRequest(models.Model):
     """
     Demande de reversement d'un organisateur.
     Validée manuellement par l'admin IvoirPass.
     """
     class Status(models.TextChoices):
-        PENDING   = 'pending',   _('En attente')
-        APPROVED  = 'approved',  _('Approuvée')
-        PROCESSED = 'processed', _('Traitée')
-        REJECTED  = 'rejected',  _('Rejetée')
+        PENDING    = 'pending',    _('En attente de validation OTP')
+        PROCESSING = 'processing', _('Reversement en cours')
+        COMPLETED  = 'completed',  _('Reversement réussi')
+        FAILED     = 'failed',     _('Reversement échoué')
+        CANCELLED  = 'cancelled',  _('Reversement annulé')
+        REJECTED   = 'rejected',   _('Rejetée')
 
     # Numéro unique
     reference = models.CharField(
@@ -267,6 +372,16 @@ class WithdrawalRequest(models.Model):
     created_at   = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
+    # Références et état du payout provider
+    provider = models.CharField(_('provider'), max_length=30, default='paydunya')
+    provider_token = models.CharField(_('token provider'), max_length=200, blank=True)
+    provider_transaction_id = models.CharField(_('transaction provider'), max_length=200, blank=True)
+    provider_reference = models.CharField(_('référence provider'), max_length=200, blank=True)
+    provider_status = models.CharField(_('statut provider'), max_length=30, blank=True)
+    retry_count = models.PositiveIntegerField(_('nombre de retries'), default=0)
+    last_error = models.TextField(_('dernière erreur'), blank=True)
+    completed_at = models.DateTimeField(_('date de confirmation'), null=True, blank=True)
+
     class Meta:
         verbose_name = _('demande de reversement')
         verbose_name_plural = _('demandes de reversement')
@@ -294,97 +409,15 @@ class WithdrawalRequest(models.Model):
         suffix = ''.join(random.choices(string.digits, k=8))
         return f"REV-{suffix}"
 
-    def approve(self, admin_user, note=''):
-        """Approuve la demande et notifie l'organisateur."""
-        self.status      = self.Status.APPROVED
-        self.admin_note  = note
-        self.processed_by = admin_user
-        self.save()
+    def approve(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont automatiques : aucune approbation admin n\'est requise.')
 
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement approuvé',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre demande de reversement de {self.amount} FCFA a été approuvée.\n"
-            f"Référence : {self.reference}\n\n"
-            f"Le virement sera effectué sous 24-48h.\n\n"
-            f"L'équipe IvoirPass",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
+    def mark_processed(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont finalisés automatiquement par la confirmation du provider.')
 
-    def mark_processed(self, admin_user, note=''):
-        """
-        Marque comme traitée après virement effectué.
-        Le débit du wallet est effectué AVANT de figer le statut PROCESSED :
-        si le débit échoue (solde insuffisant), la demande reste dans son
-        statut précédent (ex: APPROVED) au lieu d'être marquée comme traitée
-        à tort — évite toute incohérence comptable.
-        """
-        from django.db import transaction
+    def reject(self, *args, **kwargs):
+        raise RuntimeError('Les reversements sont automatiques : utilisez l\'expiration/échec du payout.')
 
-        with transaction.atomic():
-            # Débiter le wallet en premier — si ça échoue, tout est annulé
-            # (y compris balance_pending, géré directement dans debit()) et
-            # le statut n'est jamais touché.
-            self.wallet.debit(
-                amount=self.amount,
-                description=f"Reversement {self.reference}",
-                reference=self.reference,
-            )
-
-            self.status       = self.Status.PROCESSED
-            self.admin_note   = note
-            self.processed_by = admin_user
-            self.processed_at = timezone.now()
-            self.save()
-
-        # Notification admin — seulement une fois le débit confirmé
-        from apps.notifications.models import AdminNotification
-        AdminNotification.objects.create(
-            type='fraud_alert',
-            title='Reversement traite',
-            message=(
-                f"Reversement {self.reference} de {self.amount} FCFA "
-                f"traite pour {self.wallet.organizer.get_full_name()}."
-            ),
-            reference=self.reference,
-        )
-
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement effectue',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre reversement de {self.amount} FCFA a ete traite.\n"
-            f"Reference : {self.reference}\n\n"
-            f"L'equipe IvoirPass",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
-    def reject(self, admin_user, note=''):
-        self.status       = self.Status.REJECTED
-        self.admin_note   = note
-        self.processed_by = admin_user
-        self.processed_at = timezone.now()
-        self.save()
-
-        # Email à l'organisateur
-        from django.core.mail import send_mail
-        send_mail(
-            '[IvoirPass] Reversement rejeté',
-            f"Bonjour {self.wallet.organizer.get_full_name()},\n\n"
-            f"Votre demande de reversement {self.reference} "
-            f"de {self.amount} FCFA a été rejetée.\n"
-            f"Motif : {note}\n\n"
-            f"Contactez l'équipe IvoirPass pour plus d'informations.",
-            None,
-            [self.wallet.organizer.email],
-            fail_silently=False,
-        )
 class ReversalOTP(models.Model):
     """
     Code OTP pour valider une demande de reversement.
@@ -426,6 +459,18 @@ class ReversalOTP(models.Model):
             expires_at=expires_at
         )
 
+class AuditLogQuerySet(models.QuerySet):
+    def delete(self, *args, **kwargs):
+        raise PermissionDenied(
+            "Le journal d'audit est immuable : suppression en masse interdite. "
+            "Une opération financière ne doit jamais disparaître de l'historique."
+        )
+
+
+class AuditLogManager(models.Manager.from_queryset(AuditLogQuerySet)):
+    pass
+
+
 class AuditLog(models.Model):
     class Action(models.TextChoices):
         CREATE = 'create', _('Création')
@@ -436,15 +481,56 @@ class AuditLog(models.Model):
         LOGIN = 'login', _('Connexion')
         LOGOUT = 'logout', _('Déconnexion')
         PAYOUT = 'payout', _('Reversement')
+        PAYOUT_REQUESTED = 'payout_requested', _('Demande de reversement créée')
+        PAYOUT_OTP_VALIDATED = 'payout_otp_validated', _('OTP reversement validé')
+        PAYOUT_INITIATED = 'payout_initiated', _('Reversement initié')
+        PAYOUT_PROVIDER_PENDING = 'payout_provider_pending', _('Reversement provider en attente')
+        PAYOUT_SUCCESS = 'payout_success', _('Reversement réussi')
+        PAYOUT_FAILED = 'payout_failed', _('Reversement échoué')
+        PAYOUT_RETRY = 'payout_retry', _('Retry reversement')
+        PAYOUT_CANCELLED = 'payout_cancelled', _('Reversement annulé')
         EXPORT = 'export', _('Export données')
         SCAN = 'scan', _('Scan QR')
+        ONLINE_ACCESS = 'online_access', _('Accès événement en ligne')
+
+        # --- Commandes ---
+        ORDER_CREATED = 'order_created', _('Commande créée')
+        ORDER_CANCELLED = 'order_cancelled', _('Commande annulée')
+        # ✅ Audit H-1 : libération automatique du stock d'une commande
+        # billetterie restée PENDING trop longtemps sans paiement initié.
+        ORDER_STOCK_RELEASED = 'order_stock_released', _('Stock libéré (commande expirée)')
+        ORDER_REFUNDED = 'order_refunded', _('Commande remboursée')
+        # --- Paiements ---
+        PAYMENT_INITIATED = 'payment_initiated', _('Paiement initié')
+        PAYMENT_SUCCESS = 'payment_success', _('Paiement réussi')
+        PAYMENT_FAILED = 'payment_failed', _('Paiement échoué')
+        PAYMENT_CANCELLED = 'payment_cancelled', _('Paiement annulé')
+        # ✅ Audit H-2 : paiement confirmé par PayDunya (argent réellement
+        # encaissé) mais commande non confirmable côté IvoirPass (stock
+        # produit insuffisant au moment de la confirmation) — nécessite une
+        # intervention humaine (remboursement ou réapprovisionnement).
+        PAYMENT_PAID_STOCK_UNAVAILABLE = 'payment_paid_stock_unavailable', _('Payé mais stock indisponible')
+        # --- Billets ---
+        TICKET_CREATED = 'ticket_created', _('Billet(s) généré(s)')
+        TICKET_SCANNED = 'ticket_scanned', _('Billet scanné')
+        # --- Emails ---
+        EMAIL_SENT = 'email_sent', _('Email envoyé')
+        EMAIL_FAILED = 'email_failed', _('Email échoué')
+        # --- Réconciliation PayDunya ↔ IvoirPass ---
+        RECONCILIATION_RECOVERED = 'reconciliation_recovered', _('Paiement récupéré par réconciliation')
+        RECONCILIATION_ANOMALY = 'reconciliation_anomaly', _('Anomalie détectée en réconciliation')
         OTHER = 'other', _('Autre')
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='audit_logs', verbose_name=_('utilisateur'))
-    action = models.CharField(_('action'), max_length=20, choices=Action.choices)
+    action = models.CharField(_('action'), max_length=30, choices=Action.choices)
     model_name = models.CharField(_('modèle'), max_length=100, blank=True)
     object_id = models.CharField(_('ID objet'), max_length=100, blank=True)
     description = models.TextField(_('description'))
+    # Contexte structuré supplémentaire (montant, devise, moyen de paiement,
+    # raison d'échec...) — JAMAIS de secrets/tokens/mots de passe ici, voir
+    # apps.dashboard.services.log_action qui filtre les clés sensibles avant
+    # écriture.
+    metadata = models.JSONField(_('métadonnées'), null=True, blank=True)
     ip_address = models.GenericIPAddressField(_('adresse IP'), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -456,10 +542,36 @@ class AuditLog(models.Model):
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['action']),
             models.Index(fields=['-created_at']),
+            # Permet de reconstruire rapidement l'historique complet d'un
+            # objet précis (une commande, un paiement...) quel que soit son
+            # modèle d'origine (Order ou GuestOrder par exemple).
+            models.Index(fields=['model_name', 'object_id', '-created_at'], name='dashboard_auditlog_obj_idx'),
         ]
 
     def __str__(self):
         return f'[{self.created_at:%d/%m/%Y %H:%M}] {self.user} — {self.get_action_display()}'
+
+    objects = AuditLogManager()
+
+    def save(self, *args, **kwargs):
+        """
+        Immutabilité (audit section 8 : "une opération financière ne doit
+        jamais disparaître de l'historique") : une fois créée, une entrée
+        d'audit ne peut plus être modifiée. Seule sa création est permise.
+        """
+        if self.pk and AuditLog.objects.filter(pk=self.pk).exists():
+            raise PermissionDenied(
+                "Une entrée du journal d'audit ne peut jamais être modifiée "
+                "après sa création — seule la création de nouvelles entrées "
+                "est autorisée."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionDenied(
+            "Le journal d'audit est immuable : une entrée ne peut jamais "
+            "être supprimée, même par un administrateur."
+        )
 
 
 

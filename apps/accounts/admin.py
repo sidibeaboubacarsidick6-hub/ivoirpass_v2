@@ -25,6 +25,11 @@ class UserAddressInline(admin.TabularInline):
 class CustomUserAdmin(UserAdmin):
     """Administration personnalisée des utilisateurs IvoirPass."""
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'managed_by':
+            kwargs['queryset'] = CustomUser.objects.filter(role=CustomUser.Role.ORGANIZER)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):
         was_verified = False
         if change and obj.pk:
@@ -39,6 +44,7 @@ class CustomUserAdmin(UserAdmin):
         # Si vient d'être certifié
         if obj.is_organizer_verified and not was_verified:
             from django.core.mail import send_mail
+            login_url = f"{settings.PAYDUNYA_BASE_URL}/accounts/login/"
             send_mail(
                 '[IvoirPass] Votre compte organisateur est certifie',
                 f"Bonjour {obj.get_full_name()},\n\n"
@@ -47,11 +53,11 @@ class CustomUserAdmin(UserAdmin):
                 f"- Publier des evenements payants\n"
                 f"- Vendre des produits dans la boutique\n"
                 f"- Recevoir des reversements\n\n"
-                f"Connectez-vous : http://127.0.0.1:8000/accounts/login/\n\n"
+                f"Connectez-vous : {login_url}\n\n"
                 f"L'equipe IvoirPass",
                 None,
                 [obj.email],
-                fail_silently=False,
+                fail_silently=True,
             )
 
             # SMS si activé
@@ -76,7 +82,7 @@ class CustomUserAdmin(UserAdmin):
                 f"L'équipe IvoirPass",
                 None,
                 [obj.email],
-                fail_silently=False,
+                fail_silently=True,
             )
 
     # Colonnes affichées dans la liste
@@ -117,7 +123,7 @@ class CustomUserAdmin(UserAdmin):
         }),
         (_('Rôle & Permissions'), {
             'fields': (
-                'role', 'is_active', 'is_staff', 'is_superuser',
+                'role', 'managed_by', 'is_active', 'is_staff', 'is_superuser',
                 'groups', 'user_permissions'
             )
         }),
@@ -177,7 +183,7 @@ class CustomUserAdmin(UserAdmin):
     get_full_name.short_description = "Nom complet"
 
     # Actions personnalisées
-    actions = ['verify_organizers', 'deactivate_users', 'activate_users']
+    actions = ['verify_organizers', 'deactivate_users', 'activate_users', 'verify_email_addresses']
 
     @admin.action(description="✅ Certifier les organisateurs sélectionnés")
     def verify_organizers(self, request, queryset):
@@ -198,6 +204,31 @@ class CustomUserAdmin(UserAdmin):
     def activate_users(self, request, queryset):
         updated = queryset.update(is_active=True)
         self.message_user(request, f"{updated} compte(s) activé(s).")
+
+    @admin.action(description="📧 Marquer l'email comme vérifié (permet la connexion)")
+    def verify_email_addresses(self, request, queryset):
+        """
+        Un compte créé directement depuis l'admin (agent scanner, organisateur
+        ajouté manuellement...) n'a pas d'adresse email confirmée tant que
+        personne n'a cliqué sur un lien de confirmation — or
+        ACCOUNT_EMAIL_VERIFICATION='mandatory' empêche alors toute connexion
+        (aucune session n'est créée, même avec le bon mot de passe). Cette
+        action évite d'avoir à passer par la page Admin séparée "Adresses
+        e-mail" à chaque nouveau compte créé manuellement.
+        """
+        from allauth.account.models import EmailAddress
+        count = 0
+        for user in queryset:
+            obj, _ = EmailAddress.objects.get_or_create(
+                user=user, email=user.email,
+                defaults={'primary': True, 'verified': True},
+            )
+            if not obj.verified:
+                obj.verified = True
+                obj.primary = True
+                obj.save(update_fields=['verified', 'primary'])
+            count += 1
+        self.message_user(request, f"Email vérifié pour {count} compte(s) — la connexion est maintenant possible.")
 
 
 @admin.register(UserAddress)

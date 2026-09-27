@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#1B7A3E"/>
+  <circle cx="96" cy="96" r="56" fill="#0d0d0d" opacity="0.15"/>
+  <text x="96" y="118" font-size="64" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-weight="900">IP</text>
+  <rect x="60" y="140" width="72" height="4" rx="2" fill="#F47920"/>
+</svg>

@@ -97,6 +97,26 @@ class ScanLog(models.Model):
         auto_now_add=True
     )
 
+    # ── Chantier B : idempotence offline ───────────────────────────
+    # UUID généré côté navigateur pour un scan (offline). Permet de
+    # détecter les doublons lors des syncs : si un client_uuid est
+    # déjà traité, on renvoie le résultat original au lieu de créer
+    # une nouvelle ligne de log.
+    # NULL = scan online direct (pas de queue).
+    client_uuid = models.UUIDField(
+        _('identifiant client'),
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Identifiant généré côté client (navigateur) pour un scan. "
+            "Permet la détection d'idempotence lors des syncs offline : "
+            "si un client_uuid est déjà traité pour la même session, on "
+            "renvoie le résultat original au lieu de recréer un scan. "
+            "NULL = scan online direct (pas de queue)."
+        )
+    )
+
     class Meta:
         verbose_name = _('log de scan')
         verbose_name_plural = _('logs de scan')

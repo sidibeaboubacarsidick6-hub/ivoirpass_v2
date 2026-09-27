@@ -10,6 +10,9 @@ from django.conf.urls.static import static
 from apps.accounts import views as accounts_views
 from apps.dashboard.admin import bceao_report_view, export_admin_csv, export_admin_excel
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from decouple import config
+from django.contrib.sitemaps.views import sitemap
+from apps.core.sitemaps import EventSitemap, StaticViewSitemap
 
 
 admin.site.site_header = "IvoirPass V2 — Administration"
@@ -20,7 +23,7 @@ urlpatterns = [
     path('admin/export/csv/', export_admin_csv, name='admin_export_csv'),
     path('admin/export/excel/', export_admin_excel, name='admin_export_excel'),
     path('admin/bceao-report/', bceao_report_view, name='bceao-report'),
-    path('admin/', admin.site.urls),
+    path(config('ADMIN_URL', default='admin/'), admin.site.urls),
     path('accounts/', include('allauth.urls')),
     path('redirect/', accounts_views.post_login_redirect, name='post_login'),
 
@@ -43,7 +46,7 @@ urlpatterns = [
     path('', include('apps.core.urls')),
     path('api/accounts/', include('apps.accounts.api.urls')),
     path('api/scanner/', include('apps.scanner.api.urls')),
-
+    path('sitemap.xml', sitemap, {'sitemaps': {'events': EventSitemap, 'static': StaticViewSitemap}}, name='django.contrib.sitemaps.views.sitemap'),
 ]
 
 if settings.DEBUG:

@@ -15,9 +15,9 @@ class ProductForm(forms.ModelForm):
             'description', 'short_description', 'tags',
             'author', 'publisher', 'year', 'language',
             'pages', 'duration', 'isbn',
-            'cover_image', 'preview_file', 'digital_file',
+            'cover_image', 'preview_file', 'digital_file', 'external_url',
             'price', 'price_physical', 'price_digital',
-            'stock', 'download_limit', 'download_expiry_hours',
+            'stock',
             'status',
         ]
         widgets = {
@@ -39,7 +39,7 @@ class ProductForm(forms.ModelForm):
             'short_description': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
-                'placeholder': 'Résumé court (max 500 caractères)',
+                'placeholder': 'Ex : +225 07 XX XX XX XX',
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -75,41 +75,45 @@ class ProductForm(forms.ModelForm):
             }),
             'cover_image': forms.FileInput(attrs={
                 'class': 'form-control',
-                'accept': 'image/*',
+                'accept': '.jpg,.jpeg,.png,.webp',
             }),
             'preview_file': forms.FileInput(attrs={
                 'class': 'form-control',
+                'accept': '.pdf,.mp3,.jpg,.jpeg,.png',
             }),
             'digital_file': forms.FileInput(attrs={
                 'class': 'form-control',
+                'accept': (
+                    '.mp3,.wav,.flac,.m4a,.aac,.ogg,'
+                    '.mp4,.mov,.webm,'
+                    '.pdf,.epub,'
+                    '.jpg,.jpeg,.png,.webp,'
+                    '.zip'
+                ),
+            }),
+            'external_url': forms.URLInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'https://open.spotify.com/album/...',
             }),
             'price': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '5000',
-                'min': '0',
+                'min': '500',
             }),
             'price_physical': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '3000',
-                'min': '0',
+                'min': '500',
             }),
             'price_digital': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '2000',
-                'min': '0',
+                'min': '500',
             }),
             'stock': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '0',
                 'min': '0',
-            }),
-            'download_limit': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '1',
-            }),
-            'download_expiry_hours': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '1',
             }),
             'status': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -119,7 +123,7 @@ class ProductForm(forms.ModelForm):
             'category':               'Catégorie *',
             'product_type':           'Type de produit *',
             'description':            'Description complète *',
-            'short_description':      'Description courte',
+            'short_description':      'InfoLine',
             'tags':                   'Mots-clés',
             'author':                 'Auteur / Artiste',
             'publisher':              'Éditeur / Label',
@@ -131,11 +135,36 @@ class ProductForm(forms.ModelForm):
             'cover_image':            'Image de couverture',
             'preview_file':           'Fichier aperçu (extrait gratuit)',
             'digital_file':           'Fichier numérique complet',
+            'external_url':           'Lien externe (album/streaming)',
             'price':                  'Prix (FCFA) *',
             'price_physical':         'Prix version physique',
             'price_digital':          'Prix version numérique',
             'stock':                  'Stock physique (0 = illimité pour numérique)',
-            'download_limit':         'Téléchargements max par achat',
-            'download_expiry_hours':  'Expiration du lien (heures)',
             'status':                 'Statut',
         }
+
+    def clean(self):
+        """
+        Validation croisée :
+        - Un produit DIGITAL ou BUNDLE doit avoir AU MOINS un mode
+          de livraison numérique : soit un fichier uploadé (digital_file),
+          soit un lien externe (external_url).
+        - Les deux peuvent coexister (external_url est alors prioritaire
+          côté téléchargement, pour tracer les clics — voir vue
+          guest_download_file).
+        """
+        cleaned = super().clean()
+
+        product_type = cleaned.get('product_type')
+        digital_file = cleaned.get('digital_file') or getattr(self.instance, 'digital_file', None)
+        external_url = cleaned.get('external_url') or getattr(self.instance, 'external_url', '')
+
+        if product_type in (Product.ProductType.DIGITAL, Product.ProductType.BUNDLE):
+            if not digital_file and not external_url:
+                raise forms.ValidationError(
+                    "Un produit numérique (ou bundle) doit avoir soit un "
+                    "fichier à télécharger, soit un lien externe "
+                    "(Spotify, Deezer, Bandcamp...)."
+                )
+
+        return cleaned

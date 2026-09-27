@@ -9,9 +9,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from io import BytesIO
 
-from django.shortcuts import render, redirect, get_object_or_404  # ✅ Correction : enlever la virgule finale
+from django.shortcuts import render, redirect, get_object_or_404
+from django.views import decorators  # ✅ Correction : enlever la virgule finale
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import (
     Sum, Count, F, Q,
     ExpressionWrapper, DecimalField, IntegerField
@@ -20,7 +22,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.events.models import Event
-from apps.tickets.models import Order, OrderItem, Ticket
+from apps.tickets.models import Order, OrderItem, Ticket, GuestTicket, GuestOrder
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP, AuditLog, Dispute
 
 
@@ -30,6 +32,40 @@ def organizer_required(view_func):
     def wrapper(request, *args, **kwargs):
         if not (request.user.is_organizer or request.user.is_platform_admin):
             messages.error(request, "Section réservée aux organisateurs.")
+            return redirect('accounts:profile')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def platform_admin_required(view_func):
+    """Réservé aux comptes avec le rôle ADMIN (super-admins IvoirPass) —
+    distinct de `organizer_required`, qui laisse aussi passer les
+    organisateurs pour leurs propres pages.
+
+    À utiliser pour toute vue qui AGIT sur les données de la plateforme
+    (validation, modification, remboursement...). Pour une vue qui ne fait
+    que consulter/exporter, voir `platform_staff_required` ci-dessous, qui
+    inclut aussi Finance/Support/Auditeur."""
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_platform_admin:
+            messages.error(request, "Section réservée aux administrateurs IvoirPass.")
+            return redirect('accounts:profile')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def platform_staff_required(view_func):
+    """
+    Accès en LECTURE au back-office plateforme : Admin, Finance, Support,
+    Auditeur (voir CustomUser.is_platform_staff). N'accorde aucun droit de
+    modification — les vues qui agissent sur les données (remboursement,
+    changement de statut...) doivent rester derrière `platform_admin_required`.
+    """
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_platform_staff:
+            messages.error(request, "Section réservée au personnel IvoirPass.")
             return redirect('accounts:profile')
         return view_func(request, *args, **kwargs)
     return wrapper
@@ -48,15 +84,22 @@ def dashboard_index(request):
 
     wallet, _ = OrganizerWallet.objects.get_or_create(organizer=user)
 
-    # Revenus billetterie — brut et net
+    # Revenus billetterie - brut et net (comptes connectes + invites)
+    from apps.tickets.models import GuestOrder, GuestOrderItem
     ticket_items = OrderItem.objects.filter(
         ticket_type__event__organizer=user,
         order__status=Order.Status.PAID,
     )
-    tickets_gross = ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0
-
+    guest_ticket_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=user,
+        order__status=GuestOrder.Status.PAID,
+    )
+    tickets_gross = (ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0) + (guest_ticket_items.aggregate(t=Sum('subtotal'))['t'] or 0)
     tickets_net = 0
     for item in ticket_items.select_related('ticket_type__event'):
+        rate = float(item.ticket_type.event.commission_rate) / 100
+        tickets_net += float(item.subtotal) * (1 - rate)
+    for item in guest_ticket_items.select_related('ticket_type__event'):
         rate = float(item.ticket_type.event.commission_rate) / 100
         tickets_net += float(item.subtotal) * (1 - rate)
 
@@ -84,9 +127,11 @@ def dashboard_index(request):
     sales_by_day = []
     for i in range(29, -1, -1):
         day = now - timedelta(days=i)
-        day_sales = ticket_items.filter(
+        day_sales = (ticket_items.filter(
             order__paid_at__date=day.date()
-        ).aggregate(t=Sum('subtotal'))['t'] or 0
+        ).aggregate(t=Sum('subtotal'))['t'] or 0) + (guest_ticket_items.filter(
+            order__paid_at__date=day.date()
+        ).aggregate(t=Sum('subtotal'))['t'] or 0)
         sales_by_day.append({
             'date':   day.strftime('%d/%m'),
             'amount': int(day_sales),
@@ -167,25 +212,39 @@ def event_stats(request, slug):
         delta = (end - start).days + 1
         for i in range(min(delta, 30)):
             day     = start + timedelta(days=i)
-            day_qty = OrderItem.objects.filter(
+            from apps.tickets.models import GuestOrderItem, GuestOrder
+            day_qty = (OrderItem.objects.filter(
                 ticket_type__event=event,
                 order__status=Order.Status.PAID,
                 order__paid_at__date=day
-            ).aggregate(t=Sum('quantity'))['t'] or 0
+            ).aggregate(t=Sum('quantity'))['t'] or 0) + (GuestOrderItem.objects.filter(
+                ticket_type__event=event,
+                order__status=GuestOrder.Status.PAID,
+                order__paid_at__date=day
+            ).aggregate(t=Sum('quantity'))['t'] or 0)
             sales_timeline.append({
                 'date': day.strftime('%d/%m'),
                 'qty':  day_qty,
             })
 
     # Stats participants
+    from apps.tickets.models import GuestTicket, GuestOrder
+
     total_participants = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
+    ).count() + GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
     ).count()
 
     scanned_count = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
+        status='used'
+    ).count() + GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
         status='used'
     ).count()
 
@@ -208,37 +267,91 @@ def event_stats(request, slug):
 def participants(request, slug):
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
 
+    # Billets issus des commandes avec compte
     tickets = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
     ).select_related(
         'order_item__ticket_type',
         'order_item__order__buyer',
-    ).order_by('-created_at')
+    )
+
+    # Billets issus des commandes invitées
+    guest_tickets = GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
+    ).select_related(
+        'order_item__ticket_type',
+        'order_item__order',
+    )
 
     status_filter = request.GET.get('status', '')
-    if status_filter:
-        tickets = tickets.filter(status=status_filter)
+    search = request.GET.get('q', '').strip()
 
-    search = request.GET.get('q', '')
+    participants_list = []
+
+    for ticket in tickets:
+        buyer = ticket.order_item.order.buyer
+        participants_list.append({
+            'ticket': ticket,
+            'buyer_name': buyer.get_full_name(),
+            'buyer_email': buyer.email,
+            'buyer_phone': buyer.phone_number or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.status,
+            'status_display': ticket.get_status_display(),
+            'scanned_at': ticket.scanned_at,
+            'created_at': ticket.created_at,
+        })
+
+    for ticket in guest_tickets:
+        order = ticket.order_item.order
+        participants_list.append({
+            'ticket': ticket,
+            'buyer_name': order.buyer_name,
+            'buyer_email': order.email,
+            'buyer_phone': order.phone or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.status,
+            'status_display': ticket.get_status_display(),
+            'scanned_at': ticket.scanned_at,
+            'created_at': ticket.created_at,
+        })
+
+    if status_filter:
+        participants_list = [
+            p for p in participants_list
+            if p['status'] == status_filter
+        ]
+
     if search:
-        tickets = tickets.filter(
-            Q(order_item__order__buyer__email__icontains=search) |
-            Q(order_item__order__buyer__first_name__icontains=search) |
-            Q(ticket_number__icontains=search)
-        )
+        search_lower = search.lower()
+        participants_list = [
+            p for p in participants_list
+            if search_lower in p['buyer_name'].lower()
+            or search_lower in p['buyer_email'].lower()
+            or search_lower in p['ticket_number'].lower()
+            or search_lower in p['buyer_phone'].lower()
+        ]
+
+    participants_list.sort(
+        key=lambda p: p['created_at'],
+        reverse=True
+    )
 
     stats = {
-        'total': tickets.count(),
-        'valid': tickets.filter(status='valid').count(),
-        'used':  tickets.filter(status='used').count(),
+        'total': len(participants_list),
+        'valid': sum(1 for p in participants_list if p['status'] == 'valid'),
+        'used': sum(1 for p in participants_list if p['status'] == 'used'),
     }
 
     return render(request, 'dashboard/participants.html', {
-        'event':         event,
-        'tickets':       tickets,
-        'stats':         stats,
-        'search':        search,
+        'event': event,
+        'tickets': participants_list,
+        'stats': stats,
+        'search': search,
         'status_filter': status_filter,
     })
 
@@ -260,6 +373,21 @@ def wallet_view(request):
 def withdraw_request(request):
     wallet, _ = OrganizerWallet.objects.get_or_create(organizer=request.user)
     MIN_AMOUNT = 5000
+
+    # ── Chantier A (2026-09-27) : wallet gelé après annulation ──────
+    # Un wallet peut être gelé par cancel_event_organizer_liable() si
+    # l'organisateur a annulé un événement avec tickets vendus. Tant
+    # qu'un admin n'a pas dégelé manuellement, aucune demande de
+    # reversement n'est acceptée.
+    if wallet.is_frozen:
+        messages.error(
+            request,
+            "Votre wallet est actuellement gelé. Aucune demande de "
+            "reversement ne peut être effectuée. Contactez le support "
+            "IvoirPass pour plus d'informations.",
+            extra_tags='danger',
+        )
+        return redirect('dashboard:wallet')
 
     if request.method == 'POST':
         amount = int(request.POST.get('amount', 0))
@@ -283,10 +411,7 @@ def withdraw_request(request):
             errors.append("Méthode de paiement requise.")
 
         pending = wallet.withdrawal_requests.filter(
-            
-                status=WithdrawalRequest.Status.PENDING
-                
-            
+            status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.PROCESSING]
         ).exists()
         if pending:
             errors.append("Une demande est déjà en cours.")
@@ -295,16 +420,19 @@ def withdraw_request(request):
             for e in errors:
                 messages.error(request, e)
         else:
-            wr = WithdrawalRequest.objects.create(
-                wallet        = wallet,
-                amount        = amount,
-                payout_method = method,
-                payout_phone  = phone,
-                payout_name   = name,
-            )
-                        # Mettre à jour le solde en attente
-            wallet.balance_pending += wr.amount
-            wallet.save(update_fields=['balance_pending'])
+            with transaction.atomic():
+                wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
+                if amount > wallet.balance_available:
+                    messages.error(request, f"Solde insuffisant. Disponible : {wallet.balance_available:,} FCFA.")
+                    return redirect('dashboard:withdraw')
+                if wallet.withdrawal_requests.filter(status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.PROCESSING]).exists():
+                    messages.error(request, "Une demande est déjà en cours.")
+                    return redirect('dashboard:wallet')
+                wr = WithdrawalRequest.objects.create(
+                    wallet=wallet, amount=amount, fee=0, amount_net=amount,
+                    payout_method=method, payout_phone=phone, payout_name=name,
+                )
+                wallet.reserve(wr.amount, description=f"Réservation reversement {wr.reference}", reference=wr.reference)
 
             # Notifier l'admin
             from apps.notifications.models import AdminNotification
@@ -317,13 +445,14 @@ def withdraw_request(request):
 
             # Audit log — création de la demande de reversement
             from .models import AuditLog
-            AuditLog.objects.create(
-                user=request.user,
-                action=AuditLog.Action.PAYOUT,
-                model_name='WithdrawalRequest',
-                object_id=wr.reference,
+            from .services import log_action, get_client_ip
+            log_action(
+                action=AuditLog.Action.PAYOUT_REQUESTED,
                 description=f"Demande reversement {wr.amount} FCFA via {wr.get_payout_method_display()}",
-                ip_address=request.META.get('REMOTE_ADDR', ''),
+                user=request.user,
+                obj=wr,
+                metadata={'amount': str(wr.amount), 'payout_method': wr.payout_method},
+                ip_address=get_client_ip(request),
             )
 
             # Générer l'OTP
@@ -370,7 +499,7 @@ from django.http import HttpResponse
 
 @organizer_required
 def export_participants_csv(request, slug):
-    """Exporte la liste des participants en CSV."""
+    """Exporte la liste complète des participants en CSV."""
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
 
     tickets = Ticket.objects.filter(
@@ -379,30 +508,73 @@ def export_participants_csv(request, slug):
     ).select_related(
         'order_item__ticket_type',
         'order_item__order__buyer',
-    ).order_by('-created_at')
+    )
+
+    guest_tickets = GuestTicket.objects.filter(
+        order_item__ticket_type__event=event,
+        order_item__order__status=GuestOrder.Status.PAID,
+    ).select_related(
+        'order_item__ticket_type',
+        'order_item__order',
+    )
+
+    participants_list = []
+
+    for ticket in tickets:
+        buyer = ticket.order_item.order.buyer
+        participants_list.append({
+            'buyer_name': buyer.get_full_name(),
+            'buyer_email': buyer.email,
+            'buyer_phone': buyer.phone_number or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.get_status_display(),
+            'created_at': ticket.created_at,
+        })
+
+    for ticket in guest_tickets:
+        order = ticket.order_item.order
+        participants_list.append({
+            'buyer_name': order.buyer_name,
+            'buyer_email': order.email,
+            'buyer_phone': order.phone or '',
+            'ticket_type': ticket.order_item.ticket_type.name,
+            'ticket_number': ticket.ticket_number,
+            'status': ticket.get_status_display(),
+            'created_at': ticket.created_at,
+        })
+
+    participants_list.sort(
+        key=lambda participant: participant['created_at'],
+        reverse=True
+    )
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = (
         f'attachment; filename="participants_{event.slug}.csv"'
     )
-    response.write('\ufeff')  # BOM pour Excel UTF-8
+    response.write('\ufeff')
 
     writer = csv.writer(response)
     writer.writerow([
-        'Nom complet', 'Email', 'Téléphone', 'Type de billet',
-        'Numéro ticket', 'Statut', 'Date achat'
+        'Nom complet',
+        'Email',
+        'Téléphone',
+        'Type de billet',
+        'Numéro ticket',
+        'Statut',
+        'Date achat',
     ])
 
-    for ticket in tickets:
-        buyer = ticket.order_item.order.buyer
+    for participant in participants_list:
         writer.writerow([
-            buyer.get_full_name(),
-            buyer.email,
-            buyer.phone_number or '',
-            ticket.order_item.ticket_type.name,
-            ticket.ticket_number,
-            ticket.get_status_display(),
-            ticket.created_at.strftime('%d/%m/%Y %H:%M'),
+            participant['buyer_name'],
+            participant['buyer_email'],
+            participant['buyer_phone'],
+            participant['ticket_type'],
+            participant['ticket_number'],
+            participant['status'],
+            participant['created_at'].strftime('%d/%m/%Y %H:%M'),
         ])
 
     return response
@@ -522,7 +694,18 @@ def verify_otp(request, reference):
             if hmac.compare_digest(code, otp.code):
                 otp.is_used = True
                 otp.save(update_fields=['is_used'])
-                messages.success(request, f"✅ Demande {withdrawal.reference} validée !")
+                from .services import log_action
+                log_action(
+                    action=AuditLog.Action.PAYOUT_OTP_VALIDATED,
+                    description=f"OTP validé pour le reversement {withdrawal.reference}",
+                    user=request.user, obj=withdrawal,
+                    metadata={'amount': str(withdrawal.amount), 'payout_method': withdrawal.payout_method},
+                )
+                withdrawal.status = WithdrawalRequest.Status.PROCESSING
+                withdrawal.save(update_fields=['status'])
+                from .tasks import process_payout
+                process_payout.delay(withdrawal.pk)
+                messages.success(request, f"✅ Demande {withdrawal.reference} validée. Reversement en cours automatiquement.")
                 return redirect('dashboard:wallet')
 
             otp.attempts += 1
@@ -534,6 +717,11 @@ def verify_otp(request, reference):
                 withdrawal.status = WithdrawalRequest.Status.REJECTED
                 withdrawal.admin_note = "OTP incorrect 3 fois — demande rejetée automatiquement"
                 withdrawal.save(update_fields=['status', 'admin_note'])
+                withdrawal.wallet.release_reserved(
+                    withdrawal.amount,
+                    description=f"Libération après rejet OTP {withdrawal.reference}",
+                    reference=withdrawal.reference,
+                )
 
                 messages.error(request, "❌ 3 tentatives échouées. Demande rejetée. Soumettez une nouvelle demande.")
                 return redirect('dashboard:wallet')
@@ -543,6 +731,25 @@ def verify_otp(request, reference):
             messages.error(request, f"Code incorrect. {remaining} tentative(s) restante(s).")
 
     return render(request, 'dashboard/verify_otp.html', {'withdrawal': withdrawal})
+
+@decorators.csrf.csrf_exempt
+def paydunya_payout_webhook(request):
+    """Callback PayDunya pour confirmer un décaissement."""
+    from django.http import JsonResponse
+    from apps.payments.paydunya import PayDunyaService
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    payload = PayDunyaService.parse_disbursement_callback(request)
+    if not payload or not PayDunyaService.verify_disbursement_callback(payload):
+        return JsonResponse({'success': False, 'error': 'Invalid callback'}, status=400)
+    reference = payload.get('disburse_id')
+    withdrawal = WithdrawalRequest.objects.filter(reference=reference).first()
+    if not withdrawal:
+        return JsonResponse({'success': False, 'error': 'Unknown disbursement'}, status=404)
+    from .tasks import finalize_payout_from_provider
+    finalize_payout_from_provider.delay(withdrawal.pk, payload)
+    return JsonResponse({'success': True})
+
 
 @organizer_required
 def audit_log(request):
@@ -561,6 +768,64 @@ def audit_log(request):
         'page_obj': page_obj,
     })
 
+
+@platform_staff_required
+def audit_log_admin(request):
+    """
+    Journal d'activité global — réservé aux super-admins IvoirPass.
+    Contrairement à `audit_log` (organisateur), montre TOUTES les actions
+    de la plateforme (paiements, commandes, billets, scans, emails,
+    connexions, reversements...), avec recherche et filtres.
+    """
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+
+    logs = AuditLog.objects.select_related('user').all()
+
+    action = request.GET.get('action', '').strip()
+    if action:
+        logs = logs.filter(action=action)
+
+    model_name = request.GET.get('model', '').strip()
+    if model_name:
+        logs = logs.filter(model_name=model_name)
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        logs = logs.filter(
+            Q(description__icontains=q) |
+            Q(object_id__icontains=q) |
+            Q(user__email__icontains=q)
+        )
+
+    date_from = request.GET.get('date_from', '').strip()
+    if date_from:
+        logs = logs.filter(created_at__date__gte=date_from)
+
+    date_to = request.GET.get('date_to', '').strip()
+    if date_to:
+        logs = logs.filter(created_at__date__lte=date_to)
+
+    logs = logs.order_by('-created_at')
+
+    paginator = Paginator(logs, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'dashboard/audit_log_admin.html', {
+        'page_obj': page_obj,
+        'actions': AuditLog.Action.choices,
+        'model_names': (
+            AuditLog.objects.exclude(model_name='')
+            .order_by('model_name').values_list('model_name', flat=True).distinct()
+        ),
+        'filters': {
+            'action': action, 'model': model_name, 'q': q,
+            'date_from': date_from, 'date_to': date_to,
+        },
+    })
+
+
 @organizer_required
 def export_sales_csv(request):
     """Export CSV des ventes de l'organisateur."""
@@ -575,12 +840,18 @@ def export_sales_csv(request):
     writer.writerow(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut', 'Commission', 'Net'])
 
     # Ventes billetterie
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user,
         order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user,
+        order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         rate = float(item.ticket_type.event.commission_rate) / 100
         net = int(float(item.subtotal) * (1 - rate))
         writer.writerow([
@@ -619,11 +890,16 @@ def export_sales_excel(request):
     ws.title = "Ventes"
     ws.append(['Type', 'Référence', 'Date', 'Produit/Événement', 'Quantité', 'Brut (FCFA)', 'Commission', 'Net (FCFA)'])
 
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user, order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         rate = float(item.ticket_type.event.commission_rate) / 100
         ws.append([
             'Billet', item.order.order_number,
@@ -690,11 +966,16 @@ def export_sales_pdf(request):
     p.setFont("Helvetica", 8)
     total_net = 0
 
+    from apps.tickets.models import GuestOrderItem
+
     items = OrderItem.objects.filter(
         ticket_type__event__organizer=request.user, order__status='paid'
     ).select_related('ticket_type__event', 'order')
+    guest_items = GuestOrderItem.objects.filter(
+        ticket_type__event__organizer=request.user, order__status='paid'
+    ).select_related('ticket_type__event', 'order')
 
-    for item in items:
+    for item in list(items) + list(guest_items):
         if y < 30*mm:
             p.showPage()
             y = height - 20*mm
@@ -782,3 +1063,411 @@ def submit_dispute(request):
         return redirect('home')
 
     return render(request, 'pages/report_problem.html')
+
+# ============================================================
+# BACK-OFFICE FINANCIER — Recherche/fiche/export des transactions
+# (voir audit technique, Phase 2 de la roadmap)
+#
+# Contrairement à `export_sales_*` plus haut (ventes d'UN organisateur,
+# self-service), ce qui suit est une vue PLATEFORME de toutes les
+# transactions (Payment), réservée au personnel IvoirPass
+# (Admin/Finance/Support/Auditeur — accès LECTURE SEULE, aucune action de
+# modification n'est proposée depuis ces vues).
+# ============================================================
+
+def _filtered_payments(request):
+    """
+    Construit le queryset de paiements filtré selon les paramètres GET —
+    partagé entre la vue de liste et les trois exports pour ne jamais avoir
+    deux logiques de filtrage qui divergent silencieusement.
+
+    Couvre à la fois la billetterie (order/guest_order) et la boutique
+    (product_order/guest_product_order) — cette dernière ne dispose de
+    lignes Payment que pour les commandes initiées après l'extension du
+    modèle Payment (voir audit) ; les commandes boutique antérieures ne
+    remonteront pas ici.
+    """
+    from apps.payments.models import Payment
+
+    payments = Payment.objects.select_related(
+        'order__buyer', 'guest_order',
+        'product_order__buyer', 'product_order__product',
+        'guest_product_order__product',
+    ).prefetch_related(
+        'order__items__ticket_type__event__organizer',
+        'guest_order__guest_items__ticket_type__event__organizer',
+    ).order_by('-created_at')
+
+    filters = {
+        'q':         request.GET.get('q', '').strip(),
+        'status':    request.GET.get('status', '').strip(),
+        'provider':  request.GET.get('provider', '').strip(),
+        'date_from': request.GET.get('date_from', '').strip(),
+        'date_to':   request.GET.get('date_to', '').strip(),
+    }
+
+    q = filters['q']
+    if q:
+        payments = payments.filter(
+            Q(order__order_number__icontains=q) |
+            Q(guest_order__order_number__icontains=q) |
+            Q(product_order__order_number__icontains=q) |
+            Q(guest_product_order__order_number__icontains=q) |
+            Q(paydunya_token__icontains=q) |
+            Q(paydunya_invoice_token__icontains=q) |
+            Q(order__buyer__email__icontains=q) |
+            Q(order__buyer__phone_number__icontains=q) |
+            Q(guest_order__email__icontains=q) |
+            Q(guest_order__phone__icontains=q) |
+            Q(product_order__buyer__email__icontains=q) |
+            Q(guest_product_order__email__icontains=q) |
+            Q(guest_product_order__phone__icontains=q)
+        )
+
+    if filters['status']:
+        payments = payments.filter(status=filters['status'])
+
+    if filters['provider']:
+        payments = payments.filter(provider=filters['provider'])
+
+    if filters['date_from']:
+        payments = payments.filter(created_at__date__gte=filters['date_from'])
+
+    if filters['date_to']:
+        payments = payments.filter(created_at__date__lte=filters['date_to'])
+
+    return payments, filters
+
+
+def _payment_row(payment):
+    """
+    Aplati un Payment + la commande qu'il concerne (billetterie ou boutique,
+    compte ou invité) en un dict simple à afficher ou exporter — évite de
+    dupliquer cette logique dans le template, le CSV, l'Excel et le PDF.
+    Retourne None si le paiement n'a (anormalement) aucune commande liée —
+    ne devrait jamais arriver vu la contrainte en base sur Payment, mais on
+    reste défensif plutôt que de faire planter tout l'export pour une ligne.
+    """
+    order = payment.order or payment.guest_order or payment.product_order or payment.guest_product_order
+    if order is None:
+        return None
+
+    is_store = bool(payment.product_order_id or payment.guest_product_order_id)
+
+    if is_store:
+        kind = 'Boutique'
+        if payment.product_order_id:
+            client_name = order.buyer.get_full_name()
+            client_email = order.buyer.email
+        else:
+            client_name = f"{order.first_name} {order.last_name}"
+            client_email = order.email
+        product = order.product
+        event_label = product.name if product else '—'
+        organizer_label = product.seller.get_full_name() if product and product.seller else '—'
+        ticket_types = f"{order.quantity}x {product.name}" if product else '—'
+        quantity = order.quantity
+    else:
+        kind = 'Billet'
+        if payment.order_id:
+            client_name = order.buyer.get_full_name()
+            client_email = order.buyer.email
+            items = list(order.items.all())
+        else:
+            client_name = order.buyer_name
+            client_email = order.email
+            items = list(order.guest_items.all())
+
+        event_label = ', '.join(sorted({
+            it.ticket_type.event.title for it in items if it.ticket_type and it.ticket_type.event
+        })) or '—'
+        organizer_label = ', '.join(sorted({
+            it.ticket_type.event.organizer.get_full_name()
+            for it in items if it.ticket_type and it.ticket_type.event and it.ticket_type.event.organizer
+        })) or '—'
+        quantity = sum(it.quantity for it in items)
+        ticket_types = ', '.join(f"{it.quantity}x {it.ticket_type.name}" for it in items) if items else '—'
+
+    gross = order.subtotal
+    # GuestOrder / commandes boutique ne stockent pas toujours une commission
+    # séparée — on la déduit de total - subtotal plutôt que de supposer un
+    # champ absent.
+    fees = getattr(order, 'commission', None)
+    if fees is None:
+        fees = order.total - order.subtotal
+    net = order.total - fees
+
+    return {
+        'payment': payment,
+        'order': order,
+        'kind': kind,
+        'order_number': order.order_number,
+        'client_name': client_name or '—',
+        'client_email': client_email or '—',
+        'event': event_label,
+        'organizer': organizer_label,
+        'ticket_types': ticket_types,
+        'quantity': quantity,
+        'gross': gross,
+        'fees': fees,
+        'net': net,
+        'currency': payment.currency,
+        'payment_method': order.payment_method or payment.get_provider_display(),
+        'status': payment.status,
+        'status_display': payment.get_status_display(),
+        'paydunya_token': payment.paydunya_token,
+        'confirmed_at': payment.completed_at,
+        'created_at': payment.created_at,
+    }
+
+
+def _redact_raw_response(raw_response):
+    """
+    Masque le hash de signature PayDunya avant tout affichage/export —
+    même en back-office, ce hash statique ne doit jamais transiter
+    inutilement (voir audit R-08 : s'il fuit, il reste valide indéfiniment
+    tant que le Master Key n'est pas régénéré).
+    """
+    if not isinstance(raw_response, dict):
+        return raw_response
+    redacted = dict(raw_response)
+    if 'hash' in redacted:
+        redacted['hash'] = '••• (masqué)'
+    data = redacted.get('data')
+    if isinstance(data, dict) and 'hash' in data:
+        data = dict(data)
+        data['hash'] = '••• (masqué)'
+        redacted['data'] = data
+    return redacted
+
+
+@platform_staff_required
+def transactions_list(request):
+    """
+    Liste plateforme de toutes les transactions, recherchable et filtrable
+    (audit section 11). Lecture seule — aucune action de modification n'est
+    proposée ici, quel que soit le rôle (voir platform_staff_required).
+    """
+    from django.core.paginator import Paginator
+    from apps.payments.models import Payment
+
+    payments, filters = _filtered_payments(request)
+
+    paginator = Paginator(payments, 50)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+    rows = [r for r in (_payment_row(p) for p in page_obj) if r]
+
+    return render(request, 'dashboard/transactions_list.html', {
+        'page_obj': page_obj,
+        'rows': rows,
+        'filters': filters,
+        'statuses': Payment.Status.choices,
+        'providers': Payment.Provider.choices,
+    })
+
+
+@platform_staff_required
+def transaction_detail(request, order_number):
+    """
+    Fiche détaillée d'une transaction (audit section 10) : résumé, détail
+    de la commande, informations PayDunya, chronologie reconstituée à
+    partir du Payment/de la commande/du journal d'audit, et actions
+    administratives liées.
+    """
+    import json as _json
+    from apps.payments.models import Payment
+
+    payment = Payment.objects.filter(
+        Q(order__order_number=order_number) | Q(guest_order__order_number=order_number) |
+        Q(product_order__order_number=order_number) | Q(guest_product_order__order_number=order_number)
+    ).select_related(
+        'order__buyer', 'guest_order', 'product_order__buyer', 'guest_product_order'
+    ).first()
+
+    if payment is None:
+        messages.error(request, f"Transaction {order_number} introuvable.")
+        return redirect('dashboard:transactions')
+
+    row = _payment_row(payment)
+    order = row['order']
+    is_store = bool(payment.product_order_id or payment.guest_product_order_id)
+    if is_store:
+        # Une commande boutique porte un seul produit/quantité — pas de
+        # lignes multiples comme pour la billetterie, mais le template
+        # attend un itérable "items" : on lui fabrique une ligne unique.
+        items = [order] if order.product_id else []
+    else:
+        items = list(order.items.all()) if payment.order_id else list(order.guest_items.all())
+
+    audit_entries = AuditLog.objects.filter(object_id=order_number).order_by('created_at')
+
+    timeline = [{'label': 'Commande créée', 'at': order.created_at}]
+    timeline.append({'label': 'Paiement initié', 'at': payment.created_at})
+    for entry in audit_entries:
+        if entry.action in (
+            AuditLog.Action.PAYMENT_SUCCESS, AuditLog.Action.PAYMENT_FAILED,
+            AuditLog.Action.TICKET_CREATED, AuditLog.Action.EMAIL_SENT,
+            AuditLog.Action.RECONCILIATION_RECOVERED, AuditLog.Action.RECONCILIATION_ANOMALY,
+            AuditLog.Action.ORDER_REFUNDED, AuditLog.Action.ORDER_CANCELLED,
+        ):
+            timeline.append({'label': entry.get_action_display(), 'at': entry.created_at, 'description': entry.description})
+    if payment.completed_at:
+        timeline.append({'label': 'Paiement confirmé (PayDunya)', 'at': payment.completed_at})
+    timeline.sort(key=lambda t: t['at'])
+
+    raw_response = _redact_raw_response(payment.raw_response)
+
+    return render(request, 'dashboard/transaction_detail.html', {
+        'row': row,
+        'payment': payment,
+        'order': order,
+        'items': items,
+        'timeline': timeline,
+        'audit_entries': audit_entries,
+        'raw_response_json': _json.dumps(raw_response, indent=2, ensure_ascii=False, default=str) if raw_response else None,
+    })
+
+
+def _export_metadata_lines(request, filters, count, total_gross, total_fees, total_net, currency):
+    """
+    Métadonnées obligatoires sur tout export financier (audit section 12) :
+    période, date de génération, utilisateur, filtres utilisés, totaux.
+    """
+    period = f"Du {filters['date_from']} au {filters['date_to']}" if (filters['date_from'] or filters['date_to']) else "Toute la période"
+    active_filters = ', '.join(f"{k}={v}" for k, v in filters.items() if v) or 'Aucun'
+    return [
+        ['Période', period],
+        ['Généré le', timezone.now().strftime('%d/%m/%Y à %H:%M')],
+        ['Généré par', request.user.email],
+        ['Filtres appliqués', active_filters],
+        ['Nombre de transactions', str(count)],
+        ['Total brut', f"{int(total_gross):,} {currency}".replace(',', ' ')],
+        ['Total frais', f"{int(total_fees):,} {currency}".replace(',', ' ')],
+        ['Total net', f"{int(total_net):,} {currency}".replace(',', ' ')],
+    ]
+
+
+@platform_staff_required
+def export_transactions_csv(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.csv"'
+    response.write('\ufeff')
+    writer = csv.writer(response)
+
+    writer.writerow(['Date', 'Type', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement/Produit', 'Organisateur/Vendeur',
+                      'Détail', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+                      'Statut', 'Date confirmation'])
+    total_gross = total_fees = total_net = 0
+    for r in rows:
+        writer.writerow([
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['kind'], r['order_number'], r['paydunya_token'],
+            r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
+            r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
+            r['payment_method'], r['status_display'],
+            r['confirmed_at'].strftime('%d/%m/%Y %H:%M') if r['confirmed_at'] else '',
+        ])
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    writer.writerow([])
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        writer.writerow([label, value])
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export CSV des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response
+
+
+@platform_staff_required
+def export_transactions_excel(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Transactions"
+    ws.append(['Date', 'Type', 'Référence', 'Réf. PayDunya', 'Client', 'Email', 'Événement/Produit', 'Organisateur/Vendeur',
+                'Détail', 'Qté', 'Brut', 'Frais', 'Net', 'Devise', 'Moyen de paiement',
+                'Statut', 'Date confirmation'])
+    total_gross = total_fees = total_net = 0
+    for r in rows:
+        ws.append([
+            r['created_at'].strftime('%d/%m/%Y %H:%M'), r['kind'], r['order_number'], r['paydunya_token'],
+            r['client_name'], r['client_email'], r['event'], r['organizer'], r['ticket_types'],
+            r['quantity'], int(r['gross']), int(r['fees']), int(r['net']), r['currency'],
+            r['payment_method'], r['status_display'],
+            r['confirmed_at'].strftime('%d/%m/%Y %H:%M') if r['confirmed_at'] else '',
+        ])
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    ws.append([])
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        ws.append([label, value])
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.xlsx"'
+    wb.save(response)
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export Excel des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response
+
+
+@platform_staff_required
+def export_transactions_pdf(request):
+    from .services import log_action, get_client_ip
+    payments, filters = _filtered_payments(request)
+    rows = [r for r in (_payment_row(p) for p in payments) if r]
+
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(15*mm, height - 15*mm, "Rapport des transactions — IvoirPass (back-office)")
+    p.setFont("Helvetica", 8)
+    p.drawString(15*mm, height - 21*mm, f"Généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')} par {request.user.email}")
+
+    total_gross = total_fees = total_net = 0
+    y = height - 30*mm
+    p.setFont("Helvetica-Bold", 7)
+    p.drawString(15*mm, y, "Date | Type | Réf. | Client | Événement/Produit | Qté | Brut | Frais | Net | Statut")
+    y -= 5*mm
+    p.setFont("Helvetica", 7)
+    for r in rows:
+        if y < 20*mm:
+            p.showPage()
+            p.setFont("Helvetica", 7)
+            y = height - 15*mm
+        line = f"{r['created_at'].strftime('%d/%m/%y')} | {r['kind']} | {r['order_number']} | {r['client_name'][:20]} | {r['event'][:20]} | {r['quantity']} | {int(r['gross'])} | {int(r['fees'])} | {int(r['net'])} | {r['status_display']}"
+        p.drawString(15*mm, y, line[:140])
+        y -= 4.5*mm
+        total_gross += r['gross']; total_fees += r['fees']; total_net += r['net']
+
+    if y < 40*mm:
+        p.showPage()
+        y = height - 15*mm
+    y -= 6*mm
+    p.setFont("Helvetica-Bold", 8)
+    currency = rows[0]['currency'] if rows else 'XOF'
+    for label, value in _export_metadata_lines(request, filters, len(rows), total_gross, total_fees, total_net, currency):
+        p.drawString(15*mm, y, f"{label} : {value}")
+        y -= 4.5*mm
+
+    p.save()
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="transactions_ivoirpass.pdf"'
+
+    log_action(action=AuditLog.Action.EXPORT, description="Export PDF des transactions (back-office)",
+               user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
+               ip_address=get_client_ip(request))
+    return response

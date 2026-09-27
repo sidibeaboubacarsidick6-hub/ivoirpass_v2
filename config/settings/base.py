@@ -22,7 +22,7 @@ ACCOUNT_ADAPTER = 'apps.accounts.adapters.NoPublicSignupAdapter'
 # ============================================
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost').split(',')
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev', 'prepod.ivoirpass.com']
 
 # ============================================
 # APPLICATIONS INSTALLÉES
@@ -35,6 +35,7 @@ DJANGO_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+    'django.contrib.sitemaps',
 ]
 
 THIRD_PARTY_APPS = [
@@ -77,6 +78,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.accounts.middleware.ScannerAccessRestrictionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
@@ -222,6 +224,15 @@ CRISPY_TEMPLATE_PACK = 'bootstrap5'
 # ALLAUTH — Authentification
 # ============================================
 ACCOUNT_UNIQUE_EMAIL            = True
+# Par défaut, allauth masque volontairement si un email existe déjà (envoie
+# un email "vous avez déjà un compte" plutôt qu'une erreur sur le
+# formulaire) pour empêcher un tiers de deviner quels emails sont inscrits.
+# Désactivé ici à la demande explicite : le formulaire affiche directement
+# "cet email est déjà utilisé" plutôt que d'envoyer silencieusement un lien
+# à une adresse qui n'est peut-être pas celle de la personne qui s'inscrit.
+# Compromis assumé : un tiers peut désormais déduire qu'un email est déjà
+# enregistré en tentant une inscription avec.
+ACCOUNT_PREVENT_ENUMERATION     = False
 ACCOUNT_LOGIN_METHODS           = {'email'}
 ACCOUNT_SIGNUP_FIELDS           = ['email*', 'password1*', 'password2*']
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
@@ -296,8 +307,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ============================================
 # CELERY — Tâches asynchrones
 # ============================================
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://127.0.0.1:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://127.0.0.1:6379/0')
+CELERY_BROKER_URL = config(
+    'CELERY_BROKER_URL',
+    default='redis://redis:6379/0'
+)
+CELERY_RESULT_BACKEND = config(
+    'CELERY_RESULT_BACKEND',
+    default='redis://redis:6379/0'
+)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -316,6 +333,20 @@ CELERY_BEAT_SCHEDULE = {
     'check-pending-withdrawals': {
         'task': 'apps.dashboard.tasks.check_pending_withdrawals',
         'schedule': crontab(hour='8,14,20', minute=0),
+    },
+    'reconcile-pending-payments': {
+        # Rapprochement PayDunya ↔ IvoirPass (audit R-04) : rattrape les
+        # paiements confirmés côté PayDunya mais jamais reçus par webhook,
+        # et signale les paiements PENDING anormalement anciens.
+        'task': 'apps.payments.tasks.reconcile_pending_payments',
+        'schedule': crontab(minute='*/20'),
+    },
+    'release-expired-pending-orders': {
+        # ✅ Correctif audit H-1 : libère le stock billetterie réservé par
+        # des commandes PENDING abandonnées (jamais de paiement initié),
+        # voir apps/payments/tasks.py::release_expired_pending_orders.
+        'task': 'apps.payments.tasks.release_expired_pending_orders',
+        'schedule': crontab(minute='*/15'),
     },
     'generate-bceao-report': {
         'task': 'apps.dashboard.tasks.generate_bceao_report',
@@ -355,6 +386,8 @@ PAYDUNYA_MODE        = config('PAYDUNYA_MODE',         default='test')
 PAYDUNYA_BASE_URL    = config('PAYDUNYA_BASE_URL',     default='http://localhost:8000')
 
 # URL de l'API PayDunya selon le mode
+PAYDUNYA_DISBURSEMENT_API_BASE = config('PAYDUNYA_DISBURSEMENT_API_BASE', default='https://app.paydunya.com/api/v2')
+
 PAYDUNYA_API_BASE = (
     'https://app.paydunya.com/sandbox-api/v1'
     if PAYDUNYA_MODE == 'test'
@@ -413,6 +446,7 @@ CSP_CONNECT_SRC = (
 CSP_FRAME_SRC = (
     "'self'",
     "https://app.paydunya.com",
+    
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo
 

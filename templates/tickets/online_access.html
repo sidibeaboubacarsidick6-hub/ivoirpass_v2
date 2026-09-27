@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}Accès à {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <div class="ip-card p-5 text-center">
+
+        <div style="width:80px; height:80px; border-radius:50%;
+                    background:linear-gradient(135deg,#1B7A3E,#28a857);
+                    display:flex; align-items:center; justify-content:center;
+                    margin:0 auto 1.5rem; font-size:2.2rem;">
+          🎥
+        </div>
+
+        <h3 class="fw-bold mb-2">{{ event.title }}</h3>
+        <p class="text-muted mb-4">
+          <i class="bi bi-calendar3 me-1"></i>
+          {{ event.start_date|date:"d F Y — H\hi" }}
+        </p>
+
+        <div class="alert ip-alert alert-info mb-4 text-start">
+          <i class="bi bi-info-circle me-2"></i>
+          Votre billet est valide. Cliquez sur le bouton ci-dessous pour
+          rejoindre l'événement.
+        </div>
+
+        <a href="{{ online_link }}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="btn btn-green btn-lg w-100 mb-3">
+          <i class="bi bi-box-arrow-up-right me-2"></i>
+          Rejoindre l'événement
+        </a>
+
+        <p class="text-muted small mb-0">
+          Ticket <strong>{{ ticket.ticket_number }}</strong> —
+          commande <strong>{{ ticket.order_item.order.order_number }}</strong>
+        </p>
+
+      </div>
+
+      <div class="alert ip-alert alert-warning mt-4" role="alert">
+        <i class="bi bi-shield-exclamation me-2"></i>
+        <strong>Ce lien est personnel.</strong> Ne le partagez pas — il est
+        associé à votre billet.
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

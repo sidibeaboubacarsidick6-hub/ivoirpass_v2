@@ -23,11 +23,22 @@ urlpatterns = [
          views.mark_order_shipped, name='mark_shipped'),
     path('reversement/valider/<str:reference>/',
          views.verify_otp, name='verify_otp'),
+    path('reversement/paydunya/webhook/',
+         views.paydunya_payout_webhook, name='paydunya_payout_webhook'),
     path('audit/',
          views.audit_log, name='audit_log'),
+    path('audit/global/',
+         views.audit_log_admin, name='audit_log_admin'),
    path('export/csv/', views.export_sales_csv, name='export_csv'),
    path('export/excel/', views.export_sales_excel, name='export_excel'),
    path('export/pdf/', views.export_sales_pdf, name='export_pdf'),
-   
+
+   # Back-office financier plateforme (Admin/Finance/Support/Auditeur)
+   path('transactions/', views.transactions_list, name='transactions'),
+   path('transactions/<str:order_number>/', views.transaction_detail, name='transaction_detail'),
+   path('transactions/export/csv/', views.export_transactions_csv, name='export_transactions_csv'),
+   path('transactions/export/excel/', views.export_transactions_excel, name='export_transactions_excel'),
+   path('transactions/export/pdf/', views.export_transactions_pdf, name='export_transactions_pdf'),
+
    path('reclamation/', views.submit_dispute, name='submit_dispute'),
 ]
