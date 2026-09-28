@@ -2,7 +2,7 @@
 IvoirPass V2 — Boutique Culturelle
 Livres, Albums, Produits numériques
 """
-import uuid
+import uuid as uuid_lib
 import os
 import random
 import string
@@ -74,7 +74,7 @@ class Product(models.Model):
 
     # Identifiants
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )
@@ -418,7 +418,7 @@ class ProductOrder(models.Model):
         blank=True
     )
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )
@@ -722,7 +722,7 @@ class DownloadLink(models.Model):
     Chaque achat génère un lien unique avec expiration.
     """
     token = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )
@@ -799,7 +799,7 @@ class GuestProductOrder(models.Model):
         DELIVERY = 'delivery', _('Livraison')
         BOTH     = 'both',     _('Bundle (physique + numérique)')
 
-    # Numéro unique
+    # Numéro unique (usage interne, affiché, jamais utilisé seul dans une URL publique)
     order_number = models.CharField(
         _('numéro de commande'),
         max_length=25,
@@ -807,9 +807,21 @@ class GuestProductOrder(models.Model):
         blank=True
     )
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
+    )
+    # Jeton secret utilisé dans les URLs publiques (confirmation, annulation,
+    # retour paiement) — évite qu'un `order_number` devinable ou fuité permette
+    # à un tiers d'accéder à la commande ou de l'annuler (IDOR).
+    # Voir fix/idor-guest-orders 2026-09-28.
+    access_token = models.UUIDField(
+        _('jeton d\'accès'),
+        default=uuid_lib.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        help_text="Jeton secret pour les URLs publiques — ne pas exposer.",
     )
 
     # Infos acheteur (sans compte)
@@ -1186,7 +1198,7 @@ class GuestDownloadLink(models.Model):
     Lien de téléchargement pour acheteur sans compte — indépendant par commande.
     """
     token = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )

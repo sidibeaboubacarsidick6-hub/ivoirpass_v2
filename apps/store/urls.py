@@ -12,17 +12,17 @@ urlpatterns = [
     # ============================================
     path('acheter/<slug:slug>/',
          views.guest_buy_product, name='guest_buy'),
-    path('guest/payer/<str:order_number>/',
+    path('guest/payer/<uuid:access_token>/',
          views.guest_store_payment_initiate, name='guest_payment'),
-    path('guest/retour/<str:order_number>/',
+    path('guest/retour/<uuid:access_token>/',
          views.guest_store_payment_return, name='guest_return'),
-    path('guest/confirmation/<str:order_number>/',
+    path('guest/confirmation/<uuid:access_token>/',
          views.guest_store_confirmation, name='guest_confirmation'),
     path('guest/webhook/',
          views.guest_store_webhook, name='guest_webhook'),
     path('guest/telecharger/<uuid:token>/',
          views.guest_download_file, name='guest_download'),
-    path('guest/annulation/<str:order_number>/',
+    path('guest/annulation/<uuid:access_token>/',
          views.guest_store_payment_cancel, name='guest_payment_cancel'),
 
     # ============================================

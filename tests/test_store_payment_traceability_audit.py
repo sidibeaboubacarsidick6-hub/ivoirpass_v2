@@ -81,7 +81,7 @@ class GuestStorePaymentInitiationTests(TestCase):
         mock_post.return_value = MagicMock(json=lambda: {
             'response_code': '00', 'token': 'tok_store_init', 'response_text': 'https://paydunya.test/pay',
         })
-        Client().get(reverse('store:guest_payment', kwargs={'order_number': self.order.order_number}))
+        Client().get(reverse('store:guest_payment', kwargs={'access_token': self.order.access_token}))
 
         payment = Payment.objects.get(guest_product_order=self.order)
         self.assertEqual(payment.status, Payment.Status.PENDING)
