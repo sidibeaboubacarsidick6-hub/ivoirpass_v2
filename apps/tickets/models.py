@@ -394,7 +394,6 @@ class GuestOrder(models.Model):
         editable=False,
         unique=True,
         db_index=True,
-        null=True,  # temporaire, retiré par la migration
         help_text="Jeton secret pour les URLs publiques — ne pas exposer.",
     )
 
@@ -584,7 +583,6 @@ class GuestTicket(models.Model):
         editable=False,
         unique=True,
         db_index=True,
-        null=True,  # temporaire, retiré par la migration
         help_text="Jeton secret pour le PDF du billet — ne pas exposer.",
     )
     ticket_number = models.CharField(
