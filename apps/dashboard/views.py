@@ -22,7 +22,11 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.events.models import Event
-from apps.tickets.models import Order, OrderItem, Ticket, GuestTicket, GuestOrder
+from apps.tickets.models import (
+    Order, OrderItem, Ticket,
+    GuestOrder, GuestOrderItem,
+    GuestTicket,
+)
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP, AuditLog, Dispute
 
 
@@ -176,12 +180,35 @@ def event_stats(request, slug):
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
 
     # Stats par type de ticket
+    # ⚠️ CORRECTIF COMPTABLE : le CA doit se baser sur les subtotals
+    # RÉELLEMENT ENCAISSÉS (figés au moment de l'achat), pas sur le
+    # prix actuel du TicketType — sinon un changement de prix réécrit
+    # l'historique des revenus affichés (bug remonté 2026-09-28).
     ticket_stats = []
     gross_revenue = Decimal('0')
 
     for tt in event.ticket_types.all():
-        revenue = Decimal(str(tt.quantity_sold)) * tt.price
+        # CA guest (tunnel actif)
+        guest_rev = (
+            GuestOrderItem.objects
+            .filter(
+                ticket_type=tt,
+                order__status=GuestOrder.Status.PAID,
+            )
+            .aggregate(t=Sum('subtotal'))['t'] or Decimal('0')
+        )
+        # CA "avec compte" (legacy, conservé pour cohérence)
+        account_rev = (
+            OrderItem.objects
+            .filter(
+                ticket_type=tt,
+                order__status=Order.Status.PAID,
+            )
+            .aggregate(t=Sum('subtotal'))['t'] or Decimal('0')
+        )
+        revenue = guest_rev + account_rev
         gross_revenue += revenue
+
         fill = round(
             (tt.quantity_sold / tt.quantity * 100), 1
         ) if tt.quantity > 0 else 0
@@ -198,21 +225,37 @@ def event_stats(request, slug):
     commission      = gross_revenue * commission_rate
     net_revenue     = gross_revenue - commission
 
-    # Commandes récentes
-    recent_orders = Order.objects.filter(
-        items__ticket_type__event=event,
-        status=Order.Status.PAID
-    ).distinct().select_related('buyer').order_by('-paid_at')[:20]
+    # Commandes récentes — fusion guest (tunnel actif) + compte (legacy)
+    recent_guest = list(
+        GuestOrder.objects.filter(
+            guest_items__ticket_type__event=event,
+            status=GuestOrder.Status.PAID,
+        ).distinct().order_by('-paid_at')[:20]
+    )
+    recent_account = list(
+        Order.objects.filter(
+            items__ticket_type__event=event,
+            status=Order.Status.PAID,
+        ).distinct().select_related('buyer').order_by('-paid_at')[:20]
+    )
+    recent_orders = sorted(
+        recent_guest + recent_account,
+        key=lambda o: o.paid_at or timezone.now(),
+        reverse=True,
+    )[:20]
 
     # Timeline des ventes
+    # ⚠️ PAS D'IMPORT LOCAL ICI — tout est importé en haut du fichier.
+    # Un import local dans cette fonction fait de GuestOrder/GuestOrderItem
+    # des variables LOCALES, ce qui provoque UnboundLocalError dès qu'on
+    # les utilise plus haut (ticket_stats, recent_orders).
     sales_timeline = []
     if event.published_at:
         start = event.published_at.date()
         end   = min(timezone.now().date(), event.start_date.date())
         delta = (end - start).days + 1
         for i in range(min(delta, 30)):
-            day     = start + timedelta(days=i)
-            from apps.tickets.models import GuestOrderItem, GuestOrder
+            day = start + timedelta(days=i)
             day_qty = (OrderItem.objects.filter(
                 ticket_type__event=event,
                 order__status=Order.Status.PAID,
@@ -228,8 +271,7 @@ def event_stats(request, slug):
             })
 
     # Stats participants
-    from apps.tickets.models import GuestTicket, GuestOrder
-
+    # ⚠️ Même règle : pas d'import local ici.
     total_participants = Ticket.objects.filter(
         order_item__ticket_type__event=event,
         order_item__order__status=Order.Status.PAID,
