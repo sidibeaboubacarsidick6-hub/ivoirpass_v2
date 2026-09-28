@@ -56,22 +56,11 @@
             {% endif %}
           </div>
           <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-md-12">
               <label class="form-label fw-semibold small">{{ form.category.label }}</label>
               {{ form.category }}
               {% if form.category.errors %}
                 {% for error in form.category.errors %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">{{ form.event_type.label }}</label>
-              {{ form.event_type }}
-              {% if form.event_type.errors %}
-                {% for error in form.event_type.errors %}
                 <div class="text-danger small mt-1">
                   <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                 </div>
@@ -347,7 +336,7 @@
                   {% endif %}
                 </div>
                 <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Max/commande</label>
+                  <label class="form-label small fw-semibold">Max commandes / personnes</label>
                   {{ ticket_form.max_per_order }}
                   {% if ticket_form.max_per_order.errors %}
                     {% for error in ticket_form.max_per_order.errors %}
@@ -358,7 +347,7 @@
                   {% endif %}
                 </div>
                 <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Ordre</label>
+                  <label class="form-label small fw-semibold">Ordre d'affichage</label>
                   {{ ticket_form.order }}
                   {% if ticket_form.order.errors %}
                     {% for error in ticket_form.order.errors %}
