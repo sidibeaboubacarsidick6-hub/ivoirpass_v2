@@ -181,17 +181,28 @@
               </span>
             </td>
             <td>
-              <div class="fw-semibold small">{{ order.buyer.get_full_name }}</div>
+              {# Fusion guest (tunnel actif) + compte (legacy) — voir vue event_stats #}
+              <div class="fw-semibold small">
+                {% if order.buyer_name %}{{ order.buyer_name }}{% else %}{{ order.buyer.get_full_name }}{% endif %}
+              </div>
               <div class="text-muted" style="font-size:0.78rem;">
-                {{ order.buyer.email }}
+                {% if order.email %}{{ order.email }}{% else %}{{ order.buyer.email }}{% endif %}
               </div>
             </td>
             <td>
-              {% for item in order.items.all %}
-                <span class="badge bg-light text-dark border small">
-                  {{ item.quantity }}× {{ item.ticket_type.name }}
-                </span>
-              {% endfor %}
+              {% if order.buyer_name %}
+                {% for item in order.guest_items.all %}
+                  <span class="badge bg-light text-dark border small">
+                    {{ item.quantity }}× {{ item.ticket_type.name }}
+                  </span>
+                {% endfor %}
+              {% else %}
+                {% for item in order.items.all %}
+                  <span class="badge bg-light text-dark border small">
+                    {{ item.quantity }}× {{ item.ticket_type.name }}
+                  </span>
+                {% endfor %}
+              {% endif %}
             </td>
             <td class="fw-semibold text-green">
               {{ order.total|floatformat:0 }} FCFA
