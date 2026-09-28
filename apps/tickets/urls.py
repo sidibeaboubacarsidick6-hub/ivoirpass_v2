@@ -17,21 +17,23 @@ urlpatterns = [
     # ✅ ACHAT SANS COMPTE (GUEST)
     path('acheter/<slug:slug>/',
          views.guest_checkout,          name='guest_checkout'),
-    path('guest/payer/<str:order_number>/',
+    path('guest/payer/<uuid:access_token>/',
          views.guest_payment_initiate,  name='guest_payment'),
-    path('guest/retour/<str:order_number>/',
+    path('guest/retour/<uuid:access_token>/',
          views.guest_payment_return,    name='guest_return'),
-    path('guest/annulation/<str:order_number>/',
+    path('guest/annulation/<uuid:access_token>/',
          views.guest_payment_cancel,    name='guest_cancel'),
     path('guest/webhook/',
          views.guest_webhook,           name='guest_webhook'),
-    path('guest/confirmation/<str:order_number>/',
+    path('guest/confirmation/<uuid:access_token>/',
          views.guest_confirmation,      name='guest_confirmation'),
-     # Téléchargement PDF billet invité (sans compte)
-    path('guest/billet/<str:ticket_number>/pdf/',
-     views.download_guest_ticket_pdf,
-     name='guest_download_pdf'),
-         # Accès événement en ligne — URL unique envoyée à l'acheteur
+
+    # Téléchargement PDF billet invité (sans compte)
+    path('guest/billet/<uuid:access_token>/pdf/',
+         views.download_guest_ticket_pdf,
+         name='guest_download_pdf'),
+
+    # Accès événement en ligne — URL unique envoyée à l'acheteur
     path('live/<str:token>/',
          views.online_access_redirect,
          name='online_access'),

@@ -705,24 +705,24 @@ def guest_buy_product(request, slug):
             ip_address=get_client_ip(request),
         )
 
-        return redirect('store:guest_payment', order_number=order.order_number)
+        return redirect('store:guest_payment', access_token=order.access_token)
 
     return render(request, 'store/guest_checkout.html', {'product': product})
 
 
-def guest_store_payment_initiate(request, order_number):
+def guest_store_payment_initiate(request, access_token):
     """Initie le paiement PayDunya pour une commande boutique invité."""
     from django.conf import settings
     import requests as req
 
-    order = get_object_or_404(GuestProductOrder, order_number=order_number)
+    order = get_object_or_404(GuestProductOrder, access_token=access_token)
 
     if order.status == GuestProductOrder.Status.PAID:
-        return redirect('store:guest_confirmation', order_number=order_number)
+        return redirect('store:guest_confirmation', access_token=order.access_token)
 
     base_url    = settings.PAYDUNYA_BASE_URL
-    return_url  = f"{base_url}/boutique/guest/retour/{order.order_number}/"
-    cancel_url  = f"{base_url}/boutique/guest/annulation/{order.order_number}/"
+    return_url  = f"{base_url}/boutique/guest/retour/{order.access_token}/"
+    cancel_url  = f"{base_url}/boutique/guest/annulation/{order.access_token}/"
     webhook_url = f"{base_url}/boutique/guest/webhook/"
 
     payload = {
@@ -771,7 +771,7 @@ def guest_store_payment_initiate(request, order_number):
 
         if data.get('response_code') == '00':
             token = data['token']
-            request.session[f'guest_store_token_{order_number}'] = token
+            request.session[f'guest_store_token_{order.order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
 
@@ -787,8 +787,8 @@ def guest_store_payment_initiate(request, order_number):
 
             log_action(
                 action=AuditLog.Action.PAYMENT_INITIATED,
-                description=f"Paiement initié pour la commande boutique invité {order_number}",
-                model_name='GuestProductOrder', object_id=order_number,
+                description=f"Paiement initié pour la commande boutique invité {order.order_number}",
+                model_name='GuestProductOrder', object_id=order.order_number,
                 metadata={'amount': str(order.total), 'provider': 'paydunya'},
                 ip_address=get_client_ip(request),
             )
@@ -796,8 +796,8 @@ def guest_store_payment_initiate(request, order_number):
         else:
             log_action(
                 action=AuditLog.Action.PAYMENT_FAILED,
-                description=f"Échec d'initiation du paiement boutique invité {order_number}",
-                model_name='GuestProductOrder', object_id=order_number,
+                description=f"Échec d'initiation du paiement boutique invité {order.order_number}",
+                model_name='GuestProductOrder', object_id=order.order_number,
                 metadata={'reason': str(data.get('response_text', ''))[:200]},
                 ip_address=get_client_ip(request),
             )
@@ -806,8 +806,8 @@ def guest_store_payment_initiate(request, order_number):
     except Exception as e:
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
-            description=f"Erreur connexion PayDunya (boutique invité) {order_number}",
-            model_name='GuestProductOrder', object_id=order_number,
+            description=f"Erreur connexion PayDunya (boutique invité) {order.order_number}",
+            model_name='GuestProductOrder', object_id=order.order_number,
             metadata={'reason': str(e)[:200]},
             ip_address=get_client_ip(request),
         )
@@ -816,18 +816,18 @@ def guest_store_payment_initiate(request, order_number):
     return redirect('store:detail', slug=order.product.slug)
 
 
-def guest_store_payment_return(request, order_number):
+def guest_store_payment_return(request, access_token):
     """Retour paiement PayDunya — boutique invité."""
     from apps.payments.paydunya import PayDunyaService
 
-    order = get_object_or_404(GuestProductOrder, order_number=order_number)
+    order = get_object_or_404(GuestProductOrder, access_token=access_token)
 
     if order.status == GuestProductOrder.Status.PAID:
-        return redirect('store:guest_confirmation', order_number=order_number)
+        return redirect('store:guest_confirmation', access_token=access_token)
 
     token = (
         request.GET.get('token', '').strip()
-        or request.session.get(f'guest_store_token_{order_number}', '')
+        or request.session.get(f'guest_store_token_{order.order_number}', '')
         or order.payment_reference or ''
     )
 
@@ -856,12 +856,12 @@ def guest_store_payment_return(request, order_number):
             else:
                 messages.success(request, f"Commande {order.order_number} confirmée !")
 
-    return redirect('store:guest_confirmation', order_number=order_number)
+    return redirect('store:guest_confirmation', access_token=access_token)
 
 
-def guest_store_confirmation(request, order_number):
+def guest_store_confirmation(request, access_token):
     """Page de confirmation boutique invité."""
-    order = get_object_or_404(GuestProductOrder, order_number=order_number)
+    order = get_object_or_404(GuestProductOrder, access_token=access_token)
     download_links = GuestDownloadLink.objects.filter(order=order) if order.product.is_digital else []
 
     return render(request, 'store/guest_confirmation.html', {
@@ -923,7 +923,7 @@ def guest_store_webhook(request):
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
                     description=f"Webhook boutique invité : commande {order_number} introuvable ou déjà traitée",
-                    model_name='GuestProductOrder', object_id=order_number,
+                    model_name='GuestProductOrder', object_id=order.order_number,
                     ip_address=get_client_ip(request),
                 )
 
@@ -990,9 +990,12 @@ def guest_download_file(request, token):
     return response
 
 
-def guest_store_payment_cancel(request, order_number):
-    """Annulation paiement boutique invité."""
-    order = get_object_or_404(GuestProductOrder, order_number=order_number)
+def guest_store_payment_cancel(request, access_token):
+    """
+    Annulation paiement boutique invité.
+    ...
+    """
+    order = get_object_or_404(GuestProductOrder, access_token=access_token)
     if order.status == GuestProductOrder.Status.PENDING:
         from apps.payments.models import Payment
 
@@ -1005,11 +1008,11 @@ def guest_store_payment_cancel(request, order_number):
         log_action(
             action=AuditLog.Action.PAYMENT_CANCELLED,
             description=(
-                f"Paiement annulé par l'acheteur pour la commande boutique invité {order_number}. "
+                f"Paiement annulé par l'acheteur pour la commande boutique invité {order.order_number}. "
                 f"Les paiements PENDING associés ont été clôturés pour empêcher toute "
                 f"confirmation tardive par la réconciliation."
             ),
-            model_name='Payment', object_id=order_number,
+            model_name='Payment', object_id=order.order_number,
             ip_address=get_client_ip(request),
         )
-    return redirect('store:guest_confirmation', order_number=order.order_number)
+    return redirect('store:guest_confirmation', access_token=order.access_token)

@@ -1,7 +1,7 @@
 """
 IvoirPass V2 — Modèles de billetterie
 """
-import uuid
+import uuid as uuid_lib
 import hmac
 import hashlib
 import random
@@ -33,7 +33,7 @@ class Order(models.Model):
         blank=True,
     )
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )
@@ -231,7 +231,7 @@ class Ticket(models.Model):
 
     # Identifiants
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
     )
@@ -382,7 +382,20 @@ class GuestOrder(models.Model):
         max_length=20, unique=True, blank=True
     )
     uuid = models.UUIDField(
-        default=uuid.uuid4, editable=False, unique=True
+        default=uuid_lib.uuid4, editable=False, unique=True
+    )
+    # Jeton secret utilisé dans les URLs publiques (paiement, retour,
+    # confirmation, annulation) — évite qu'un order_number devinable ou
+    # fuité permette à un tiers d'accéder à la commande ou de l'annuler
+    # (IDOR). Voir fix/idor-guest-orders 2026-09-28.
+    access_token = models.UUIDField(
+        _("jeton d'accès"),
+        default=uuid_lib.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        null=True,  # temporaire, retiré par la migration
+        help_text="Jeton secret pour les URLs publiques — ne pas exposer.",
     )
 
     # Infos acheteur (sans compte)
@@ -558,9 +571,21 @@ class GuestTicket(models.Model):
         VOID    = 'void',    _('Annulé')
 
     uuid = models.UUIDField(
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         editable=False,
         unique=True
+    )
+    # Jeton secret pour le téléchargement PDF — évite qu'un ticket_number
+    # fuité (visible dans l'email) permette de télécharger le billet d'un
+    # tiers. Voir fix/idor-guest-orders 2026-09-28.
+    access_token = models.UUIDField(
+        _("jeton d'accès"),
+        default=uuid_lib.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        null=True,  # temporaire, retiré par la migration
+        help_text="Jeton secret pour le PDF du billet — ne pas exposer.",
     )
     ticket_number = models.CharField(
         max_length=30,

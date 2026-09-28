@@ -15,18 +15,6 @@ from apps.dashboard.services import log_action, get_client_ip
 
 # ============================================
 # ✅ CORRECTIF AUDIT — H-3 : suppression du code mort
-#
-# L'achat "avec compte" (panier, checkout, mes billets, téléchargement PDF
-# authentifié) a été entièrement remplacé par le tunnel invité ci-dessous
-# (GUEST CHECKOUT). Les vues correspondantes contenaient un
-# `return redirect('home')` suivi de logique inatteignable — supprimée ici.
-#
-# Trois routes sont conservées à l'état de simples redirections, car
-# apps/payments/views.py (ancien flux de paiement "avec compte") les
-# référence encore explicitement (initiate_payment, payment_return,
-# payment_cancel) : 'tickets:cart', 'tickets:checkout', 'tickets:confirmation'.
-# Les routes sans dépendance externe (panier ajouter/retirer, mes billets,
-# détail billet, PDF) ont été supprimées avec leurs templates et leurs URLs.
 # ============================================
 
 def cart_view(request):
@@ -52,9 +40,7 @@ def guest_checkout(request, slug):
     event = get_object_or_404(Event, slug=slug, status='published')
     ticket_types = event.ticket_types.filter(is_visible=True).order_by('order', 'price')
 
-    # 🔒 Vérification serveur : la vente doit être ouverte. Le template
-    # cache le bouton "Acheter" quand is_on_sale est False, mais un POST
-    # direct vers cette URL contournerait ce garde-fou. On ferme le trou.
+    # 🔒 Vérification serveur : la vente doit être ouverte.
     if not event.is_on_sale:
         messages.error(
             request,
@@ -75,7 +61,10 @@ def guest_checkout(request, slug):
             if qty > 0 and qty <= tt.max_per_order:
                 subtotal = tt.price * qty
                 total += subtotal
-                selected_items.append({'ticket_type': tt, 'quantity': qty, 'unit_price': tt.price, 'subtotal': subtotal})
+                selected_items.append({
+                    'ticket_type': tt, 'quantity': qty,
+                    'unit_price': tt.price, 'subtotal': subtotal,
+                })
 
         errors = []
         if not first_name: errors.append("Le prénom est requis.")
@@ -86,16 +75,16 @@ def guest_checkout(request, slug):
         if errors:
             for e in errors:
                 messages.error(request, e)
-            return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})
+            return render(request, 'tickets/guest_checkout.html', {
+                'event': event, 'ticket_types': ticket_types,
+            })
 
         order = GuestOrder.objects.create(
             first_name=first_name, last_name=last_name, email=email, phone=phone,
             subtotal=total, total=total, status=GuestOrder.Status.PENDING,
         )
 
-        # Verrouille chaque type de billet le temps de vérifier ET de
-        # décrémenter le stock — empêche la survente si plusieurs acheteurs
-        # (avec ou sans compte) valident en même temps.
+        # Verrouillage : empêche la survente en cas de concurrence.
         with transaction.atomic():
             locked_types = {
                 item['ticket_type'].pk: TicketType.objects.select_for_update().select_related('event').get(pk=item['ticket_type'].pk)
@@ -111,7 +100,9 @@ def guest_checkout(request, slug):
                         f"Stock insuffisant pour « {tt_locked.name} » — "
                         f"il ne reste que {max(0, tt_locked.quantity - tt_locked.quantity_sold)} billet(s)."
                     )
-                    return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})
+                    return render(request, 'tickets/guest_checkout.html', {
+                        'event': event, 'ticket_types': ticket_types,
+                    })
 
             for item in selected_items:
                 GuestOrderItem.objects.create(
@@ -132,20 +123,23 @@ def guest_checkout(request, slug):
             ip_address=get_client_ip(request),
         )
 
-        return redirect('tickets:guest_payment', order_number=order.order_number)
+        # ✅ IDOR fix : on redirige avec access_token, pas order_number
+        return redirect('tickets:guest_payment', access_token=order.access_token)
 
-    return render(request, 'tickets/guest_checkout.html', {'event': event, 'ticket_types': ticket_types})
+    return render(request, 'tickets/guest_checkout.html', {
+        'event': event, 'ticket_types': ticket_types,
+    })
 
 
-def guest_payment_initiate(request, order_number):
+def guest_payment_initiate(request, access_token):
     from .models import GuestOrder
     from django.conf import settings
     import requests
 
-    order = get_object_or_404(GuestOrder, order_number=order_number)
+    order = get_object_or_404(GuestOrder, access_token=access_token)
 
     if order.status == GuestOrder.Status.PAID:
-        return redirect('tickets:guest_confirmation', order_number=order_number)
+        return redirect('tickets:guest_confirmation', access_token=access_token)
 
     from apps.payments.models import Payment
     payment, _created = Payment.objects.get_or_create(
@@ -153,15 +147,13 @@ def guest_payment_initiate(request, order_number):
         defaults={'amount': order.total, 'provider': Payment.Provider.PAYDUNYA},
     )
     if payment.status != Payment.Status.PENDING:
-        # Nouvelle tentative après un échec/annulation précédent — on
-        # réutilise la même ligne plutôt que d'en créer une nouvelle.
         payment.status = Payment.Status.PENDING
         payment.amount = order.total
         payment.save(update_fields=['status', 'amount'])
 
     base_url = settings.PAYDUNYA_BASE_URL
-    return_url = f"{base_url}/billets/guest/retour/{order.order_number}/"
-    cancel_url = f"{base_url}/billets/guest/annulation/{order.order_number}/"
+    return_url  = f"{base_url}/billets/guest/retour/{order.access_token}/"
+    cancel_url  = f"{base_url}/billets/guest/annulation/{order.access_token}/"
     webhook_url = f"{base_url}/billets/guest/webhook/"
 
     invoice_items = {}
@@ -176,10 +168,17 @@ def guest_payment_initiate(request, order_number):
 
     payload = {
         "store": {"name": "IvoirPass", "tagline": "Votre billetterie ivoirienne", "website_url": base_url},
-        "invoice": {"items": invoice_items, "taxes": {}, "total_amount": str(int(order.total)),
-                    "description": f"Billets IvoirPass — {order.order_number}"},
+        "invoice": {
+            "items": invoice_items, "taxes": {},
+            "total_amount": str(int(order.total)),
+            "description": f"Billets IvoirPass — {order.order_number}",
+        },
         "actions": {"cancel_url": cancel_url, "return_url": return_url, "callback_url": webhook_url},
-        "custom_data": {"guest_order_number": order.order_number, "buyer_email": order.email, "buyer_name": order.buyer_name}
+        "custom_data": {
+            "guest_order_number": order.order_number,
+            "buyer_email": order.email,
+            "buyer_name": order.buyer_name,
+        },
     }
 
     headers = {
@@ -190,11 +189,14 @@ def guest_payment_initiate(request, order_number):
     }
 
     try:
-        response = requests.post(settings.PAYDUNYA_API_BASE + '/checkout-invoice/create', json=payload, headers=headers, timeout=30)
+        response = requests.post(
+            settings.PAYDUNYA_API_BASE + '/checkout-invoice/create',
+            json=payload, headers=headers, timeout=30,
+        )
         data = response.json()
         if data.get('response_code') == '00':
             token = data['token']
-            request.session[f'guest_paydunya_token_{order_number}'] = token
+            request.session[f'guest_token_{order.order_number}'] = token
             order.payment_reference = token
             order.save(update_fields=['payment_reference'])
             payment.paydunya_token = token
@@ -213,42 +215,34 @@ def guest_payment_initiate(request, order_number):
     return redirect('events:detail', slug=order.guest_items.first().ticket_type.event.slug)
 
 
-def guest_payment_return(request, order_number):
+def guest_payment_return(request, access_token):
     """Retour après paiement PayDunya — commande invité."""
     from .models import GuestOrder
     from apps.payments.paydunya import PayDunyaService
 
-    order = get_object_or_404(GuestOrder, order_number=order_number)
+    order = get_object_or_404(GuestOrder, access_token=access_token)
 
-    # Si déjà payé
     if order.status == GuestOrder.Status.PAID:
         messages.success(request, "🎉 Votre paiement a été confirmé !")
-        return redirect('tickets:guest_confirmation', order_number=order_number)
+        return redirect('tickets:guest_confirmation', access_token=access_token)
 
-    # Récupère le token
     token = request.GET.get('token', '').strip() or order.payment_reference or ''
 
     if token:
         result = PayDunyaService.verify_payment(token)
-        
+
         if result.get('success') and result.get('status') == 'completed':
-            # ✅ CORRECTIF CRITIQUE : mark_as_paid() refuse désormais
-            # explicitement si order.is_payment_cancelled() (annulée il y a
-            # moins de 2h) — voir apps/tickets/models.py. On distingue ce
-            # cas pour afficher un message clair plutôt que de laisser
-            # croire que le paiement est "en cours de vérification".
             if order.is_payment_cancelled():
                 messages.error(
                     request,
                     "❌ Votre paiement avait été annulé. Il ne peut pas être "
                     "relancé dans les 2 heures. Veuillez contacter le support."
                 )
-                return redirect('tickets:guest_confirmation', order_number=order_number)
+                return redirect('tickets:guest_confirmation', access_token=access_token)
 
-            # mark_as_paid() est verrouillé et idempotent : si le webhook a
-            # déjà confirmé la commande entre-temps, il renvoie False et on
-            # évite de dupliquer le log d'audit et l'email des billets.
-            newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+            newly_confirmed = order.mark_as_paid(
+                payment_method='paydunya', payment_reference=token,
+            )
             if newly_confirmed:
                 from apps.payments.models import Payment
                 Payment.objects.filter(guest_order=order).update(
@@ -258,50 +252,41 @@ def guest_payment_return(request, order_number):
                 )
                 log_action(
                     action=AuditLog.Action.PAYMENT_SUCCESS,
-                    description=f"Paiement confirmé (retour) pour la commande invité {order_number}",
-                    model_name='Payment', object_id=order_number,
+                    description=f"Paiement confirmé (retour) pour la commande invité {order.order_number}",
+                    model_name='Payment', object_id=order.order_number,
                     metadata={'provider': 'paydunya', 'amount': str(order.total)},
                     ip_address=get_client_ip(request),
                 )
-                # Envoi asynchrone des billets par email (commande payante, invité)
                 from apps.notifications.tasks import send_guest_ticket_email_async
                 send_guest_ticket_email_async.delay(str(order.uuid))
-            messages.success(request, f"🎉 Paiement confirmé !")
-            return redirect('tickets:guest_confirmation', order_number=order_number)
+            messages.success(request, "🎉 Paiement confirmé !")
+            return redirect('tickets:guest_confirmation', access_token=access_token)
 
     messages.info(request, "⏳ Vérification du paiement en cours...")
-    return redirect('tickets:guest_confirmation', order_number=order_number)
+    return redirect('tickets:guest_confirmation', access_token=access_token)
 
 
-def guest_confirmation(request, order_number):
+def guest_confirmation(request, access_token):
     from .models import GuestOrder, GuestTicket
 
-    order = get_object_or_404(GuestOrder, order_number=order_number)
+    order = get_object_or_404(GuestOrder, access_token=access_token)
     tickets = GuestTicket.objects.filter(order_item__order=order)
-    return render(request, 'tickets/guest_confirmation.html', {'order': order, 'tickets': tickets})
+
+    return render(request, 'tickets/guest_confirmation.html', {
+        'order': order,
+        'tickets': tickets,
+    })
 
 
-def guest_payment_cancel(request, order_number):
+def guest_payment_cancel(request, access_token):
     """
-    URL appelee si l'acheteur invite annule le paiement sur PayDunya.
-    Marque la commande comme annulee (au lieu de rester PENDING
-    indefiniment) et affiche un message clair, distinct de l'attente
-    de confirmation.
-
-    ✅ CORRECTIF CRITIQUE : avant, cette vue changeait le statut de la
-    commande mais ne touchait jamais le Payment associé (resté PENDING)
-    ni n'enregistrait de timestamp d'annulation. La tâche de
-    réconciliation périodique retombait alors sur ce Payment PENDING,
-    revérifiait chez PayDunya, et confirmait la commande malgré son
-    annulation — d'où une commande annulée qui « ressuscitait » payée
-    quelques minutes plus tard. mark_payment_cancelled() + le passage
-    des Payment PENDING à CANCELLED ferment ce trou, avec la même
-    fenêtre de sécurité de 2h que le tunnel "avec compte".
+    URL appelée si l'acheteur invité annule le paiement sur PayDunya.
+    Marque la commande annulée + le Payment associé CANCELLED.
     """
-    from .models import GuestOrder, GuestTicket
+    from .models import GuestOrder
     from apps.payments.models import Payment
 
-    order = get_object_or_404(GuestOrder, order_number=order_number)
+    order = get_object_or_404(GuestOrder, access_token=access_token)
 
     if order.status == GuestOrder.Status.PENDING:
         order.status = GuestOrder.Status.CANCELLED
@@ -316,20 +301,20 @@ def guest_payment_cancel(request, order_number):
             action=AuditLog.Action.PAYMENT_CANCELLED,
             description=(
                 f"Paiement annulé par l'acheteur pour la commande invité "
-                f"{order_number}. Timestamp d'annulation enregistré pour "
+                f"{order.order_number}. Timestamp d'annulation enregistré pour "
                 f"sécurité race condition."
             ),
-            model_name='Payment', object_id=order_number,
+            model_name='Payment', object_id=order.order_number,
             metadata={'cancelled_at': str(order.payment_cancelled_at)},
             ip_address=get_client_ip(request),
         )
 
-    tickets = GuestTicket.objects.filter(order_item__order=order)
-    return render(request, 'tickets/guest_confirmation.html', {'order': order, 'tickets': tickets})
+    return redirect('tickets:guest_confirmation', access_token=access_token)
 
 
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+
 
 @csrf_exempt
 @require_POST
@@ -339,9 +324,7 @@ def guest_webhook(request):
     from .models import GuestOrder
     from apps.payments.paydunya import PayDunyaService
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA — sans ce contrôle, n'importe qui
-    # pouvait POSTer un faux JSON prétendant qu'une commande invité est
-    # payée et obtenir des billets gratuits (faille corrigée ici).
+    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not PayDunyaService.verify_webhook_signature(request):
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
@@ -359,15 +342,13 @@ def guest_webhook(request):
         token = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_order_number', '')
 
-        # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR — on ne fait jamais confiance
-        # au seul contenu du POST reçu : on redemande le statut réel
-        # directement à l'API PayDunya avant de considérer le paiement
-        # comme confirmé (même logique que le webhook du flux "compte").
+        # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR
         if status == 'completed' and token:
             verify_result = PayDunyaService.verify_payment(token)
             if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
+                    # ✅ Fix : order_number (pas order.order_number, order n'existe pas encore)
                     description=f"Webhook invité : vérification serveur-à-serveur échouée pour {order_number}",
                     model_name='Payment', object_id=order_number,
                     ip_address=get_client_ip(request),
@@ -376,13 +357,12 @@ def guest_webhook(request):
 
         if status == 'completed' and order_number:
             try:
-                order = GuestOrder.objects.get(order_number=order_number, status=GuestOrder.Status.PENDING)
-                # mark_as_paid() est verrouillé et idempotent, et refuse
-                # désormais aussi toute commande annulée il y a moins de 2h
-                # (voir apps/tickets/models.py) : si le retour navigateur a
-                # déjà confirmé la commande entre-temps, il renvoie False et
-                # on évite de dupliquer log/email.
-                newly_confirmed = order.mark_as_paid(payment_method='paydunya', payment_reference=token)
+                order = GuestOrder.objects.get(
+                    order_number=order_number, status=GuestOrder.Status.PENDING,
+                )
+                newly_confirmed = order.mark_as_paid(
+                    payment_method='paydunya', payment_reference=token,
+                )
                 if newly_confirmed:
                     from apps.payments.models import Payment
                     Payment.objects.filter(guest_order=order).update(
@@ -392,20 +372,15 @@ def guest_webhook(request):
                     )
                     log_action(
                         action=AuditLog.Action.PAYMENT_SUCCESS,
-                        description=f"Paiement confirmé (webhook) pour la commande invité {order_number}",
-                        model_name='Payment', object_id=order_number,
+                        description=f"Paiement confirmé (webhook) pour la commande invité {order.order_number}",
+                        model_name='Payment', object_id=order.order_number,
                         metadata={'provider': 'paydunya', 'amount': str(order.total)},
                         ip_address=get_client_ip(request),
                     )
-                    # Envoi asynchrone des billets par email (commande payante, invité — via webhook)
                     from apps.notifications.tasks import send_guest_ticket_email_async
                     send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
-                # ✅ Couvre aussi le cas d'une commande CANCELLED : le
-                # filtre status=PENDING ci-dessus l'exclut déjà (protection
-                # « par accident » avant ce correctif), on le trace
-                # explicitement pour ne pas le confondre avec une commande
-                # réellement inexistante.
+                # ✅ Fix : order_number (pas order.order_number)
                 cancelled = GuestOrder.objects.filter(
                     order_number=order_number, status=GuestOrder.Status.CANCELLED,
                 ).exists()
@@ -420,20 +395,22 @@ def guest_webhook(request):
                     ip_address=get_client_ip(request),
                 )
         return HttpResponse('OK', status=200)
-    except:
+    except Exception:
         return HttpResponse('OK', status=200)
 
-def download_guest_ticket_pdf(request, ticket_number):
+
+def download_guest_ticket_pdf(request, access_token):
     """
     Téléchargement PDF du billet invité — sans compte requis.
     Accessible via le lien unique dans l'email de confirmation.
+    ✅ Fix IDOR : utilise access_token au lieu de ticket_number.
     """
     from .models import GuestTicket
     from .utils import generate_guest_ticket_pdf
 
     ticket = get_object_or_404(
         GuestTicket,
-        ticket_number=ticket_number,
+        access_token=access_token,
     )
 
     pdf_bytes = generate_guest_ticket_pdf(ticket)
@@ -443,24 +420,18 @@ def download_guest_ticket_pdf(request, ticket_number):
     )
     return response
 
+
 def online_access_redirect(request, token):
     """
     Page d'accès à un événement en ligne.
-
     L'acheteur reçoit dans son email une URL unique
-    (/billets/live/<token>/) qui pointe ici. On vérifie le jeton, on
-    logue l'accès dans AuditLog, puis on affiche une page avec un
-    bouton vers le lien réel (Zoom / Meet).
-
-    Le vrai lien n'est jamais exposé dans l'email : ça limite le
-    partage sauvage et permet de tracer qui a cliqué, quand.
+    (/billets/live/<token>/) qui pointe ici.
     """
     from .models import GuestTicket
 
     ticket = get_object_or_404(GuestTicket, online_access_token=token)
     event = ticket.event
 
-    # Vérifications
     invalid_reason = None
     if ticket.status == GuestTicket.Status.VOID:
         invalid_reason = "Ce billet a été annulé. Le lien d'accès n'est plus valide."
@@ -474,7 +445,6 @@ def online_access_redirect(request, token):
     elif event.status == Event.Status.CANCELLED:
         invalid_reason = "Cet événement a été annulé."
 
-    # Log de l'accès (même si invalide : trace utile pour audit)
     log_action(
         action=AuditLog.Action.ONLINE_ACCESS,
         description=(

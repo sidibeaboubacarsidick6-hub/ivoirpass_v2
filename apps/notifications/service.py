@@ -141,7 +141,7 @@ class NotificationService:
 
             tickets_with_links = [
                 {'ticket': t,
-                 'download_url': f"{base_url}/billets/guest/billet/{t.ticket_number}/pdf/"}
+                 'download_url': f"{base_url}/billets/guest/billet/{t.access_token}/pdf/"}
                 for t in tickets
             ]
             subject = f"Vos billets — {order.order_number}"

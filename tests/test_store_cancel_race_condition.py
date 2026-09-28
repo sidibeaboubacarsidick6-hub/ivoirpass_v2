@@ -46,7 +46,7 @@ class GuestProductOrderCancelRaceTests(TestCase):
     def test_annulation_boutique_cloture_le_payment(self):
         order, payment = self._make_order()
 
-        Client().get(reverse('store:guest_payment_cancel', kwargs={'order_number': order.order_number}))
+        Client().get(reverse('store:guest_payment_cancel', kwargs={'access_token': order.access_token}))
 
         order.refresh_from_db()
         payment.refresh_from_db()
@@ -55,7 +55,7 @@ class GuestProductOrderCancelRaceTests(TestCase):
 
     def test_commande_annulee_ne_peut_plus_etre_confirmee(self):
         order, payment = self._make_order()
-        Client().get(reverse('store:guest_payment_cancel', kwargs={'order_number': order.order_number}))
+        Client().get(reverse('store:guest_payment_cancel', kwargs={'access_token': order.access_token}))
 
         order.refresh_from_db()
         confirmed = order.mark_as_paid(
@@ -68,7 +68,7 @@ class GuestProductOrderCancelRaceTests(TestCase):
 
     def test_payment_annule_exclu_de_la_reconciliation(self):
         order, payment = self._make_order()
-        Client().get(reverse('store:guest_payment_cancel', kwargs={'order_number': order.order_number}))
+        Client().get(reverse('store:guest_payment_cancel', kwargs={'access_token': order.access_token}))
 
         candidates = Payment.objects.filter(
             pk=payment.pk, status=Payment.Status.PENDING

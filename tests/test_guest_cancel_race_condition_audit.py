@@ -59,7 +59,7 @@ class GuestOrderCancelThenReconcileTests(TestCase):
     def test_commande_annulee_ne_peut_plus_etre_confirmee_par_mark_as_paid(self):
         order, payment, ticket_type = _make_pending_guest_order()
 
-        Client().get(reverse('tickets:guest_cancel', kwargs={'order_number': order.order_number}))
+        Client().get(reverse('tickets:guest_cancel', kwargs={'access_token': order.access_token}))
 
         order.refresh_from_db()
         payment.refresh_from_db()
@@ -83,7 +83,7 @@ class GuestOrderCancelThenReconcileTests(TestCase):
     def test_commande_annulee_exclue_des_candidats_de_reconciliation(self):
         """Le Payment CANCELLED ne doit plus jamais être repris par la tâche de réconciliation."""
         order, payment, ticket_type = _make_pending_guest_order()
-        Client().get(reverse('tickets:guest_cancel', kwargs={'order_number': order.order_number}))
+        Client().get(reverse('tickets:guest_cancel', kwargs={'access_token': order.access_token}))
 
         candidates = Payment.objects.filter(status=Payment.Status.PENDING, pk=payment.pk)
         self.assertEqual(candidates.count(), 0, "Un paiement annulé ne doit plus apparaître PENDING")
