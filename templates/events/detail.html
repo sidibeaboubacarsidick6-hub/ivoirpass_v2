@@ -215,11 +215,18 @@
           </div>
           {% endif %}
           {% if event.online_link %}
+          {% comment %}
+            SÉCURITÉ : ne JAMAIS afficher event.online_link sur une page publique.
+            Le lien d'accès est envoyé par email à chaque acheteur (via son token personnel).
+            Voir templates/tickets/online_access.html et la vue _redirect live.
+          {% endcomment %}
           <div class="col-12">
-            <div class="text-muted small mb-1">Lien en ligne</div>
-            <a href="{{ event.online_link }}" target="_blank" class="btn btn-outline-success btn-sm">
-              <i class="bi bi-camera-video me-1"></i>Rejoindre en ligne
-            </a>
+            <div class="text-muted small mb-1">Accès en ligne</div>
+            <div class="alert alert-info small mb-0 py-2">
+              <i class="bi bi-envelope-check me-1 text-green"></i>
+              <strong>Événement en ligne.</strong>
+              Le lien d'accès personnel vous sera envoyé par email après l'achat de votre billet.
+            </div>
           </div>
           {% endif %}
         </div>
