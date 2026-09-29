@@ -13,7 +13,7 @@ class EventForm(forms.ModelForm):
         model = Event
         fields = [
             'title', 'subtitle', 'category',
-            'description', 'short_description', 'tags',
+            'description', 'short_description', 'custom_message', 'tags',
             'event_type',
             'start_date', 'end_date', 'doors_open',
             'venue_name', 'venue_address', 'venue_city',
@@ -42,6 +42,12 @@ class EventForm(forms.ModelForm):
                 'maxlength': 150,
                 'required': True,
                 'placeholder': "Numéro de contact de l'organisateur",
+            }),
+            'custom_message': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'maxlength': 500,
+                'placeholder': "Ex: Merci d'avoir acheté ! Rendez-vous bientôt 🌟",
             }),
             'tags': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -102,6 +108,7 @@ class EventForm(forms.ModelForm):
             'category':          'Catégorie *',
             'description':       'Description complète *',
             'short_description': 'InfoLine',
+            'custom_message':    'Message personnalisé (email de confirmation)',
             'tags':              'Mots-clés',
             'event_type':        'Type d\'événement',
             'start_date':        'Date et heure de début *',

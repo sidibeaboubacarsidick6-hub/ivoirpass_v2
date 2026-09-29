@@ -98,6 +98,23 @@ class Event(models.Model):
     )
 
     # ============================================
+    # MESSAGE PERSONNALISÉ DANS LES EMAILS DE BILLETS
+    # ============================================
+    # Texte simple uniquement (pas de HTML) — affiché dans le mail de
+    # confirmation d'achat, au-dessus des billets. Optionnel. Voir
+    # templates/notifications/email/guest_ticket_confirmed.html.
+    custom_message = models.TextField(
+        _('message personnalisé'),
+        max_length=500,
+        blank=True,
+        help_text=(
+            "Message optionnel ajouté dans l'email de confirmation d'achat "
+            "de billets. Ex: « Merci d'avoir acheté ! Rendez-vous bientôt 🌟 ». "
+            "Texte simple uniquement (pas de HTML), 500 caractères max."
+        ),
+    )
+
+    # ============================================
     # CLASSIFICATION
     # ============================================
     category = models.ForeignKey(

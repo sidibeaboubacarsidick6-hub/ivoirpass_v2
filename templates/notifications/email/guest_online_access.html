@@ -12,6 +12,19 @@
   Cliquez sur le bouton ci-dessous pour rejoindre l'événement en ligne.
 </p>
 
+{% if event.custom_message %}
+<div style="background:#f0f7f3; border-left:4px solid #1B7A3E;
+            border-radius:8px; padding:16px 20px; margin:20px 0;">
+  <div style="font-size:11px; color:#1B7A3E; font-weight:700;
+              text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+    💬 Message de l'organisateur
+  </div>
+  <div style="font-size:14px; color:#1a1a2e; line-height:1.6;">
+    {{ event.custom_message|linebreaksbr }}
+  </div>
+</div>
+{% endif %}
+
 <div class="info-box">
   <div class="info-row">
     <span class="info-label">Événement</span>
