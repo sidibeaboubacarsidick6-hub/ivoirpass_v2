@@ -177,9 +177,9 @@
                           <input type="checkbox" class="form-check-input" id="cgu" required />
                           <label class="form-check-label small text-muted" for="cgu">
                             J'accepte les
-                            <a href="#" class="text-green">conditions d'utilisation</a>
+                            <a href="{% url 'core:cgu' %}" target="_blank" rel="noopener" class="text-green">conditions d'utilisation</a>
                             et la
-                            <a href="#" class="text-green">politique de confidentialité</a>
+                            <a href="{% url 'core:privacy_policy' %}" target="_blank" rel="noopener" class="text-green">politique de confidentialité</a>
                           </label>
                         </div>
 
