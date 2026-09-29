@@ -108,15 +108,31 @@ def dashboard_index(request):
         tickets_net += float(item.subtotal) * (1 - rate)
 
     # Revenus boutique — brut et net
-    from apps.store.models import ProductOrder
-    store_orders = ProductOrder.objects.filter(
+    # ✅ FIX 2026-09-29 : le dashboard utilisait ProductOrder (tunnel
+    # "avec compte" DÉSACTIVÉ, 0 ligne en base) → le CA boutique
+    # affiché était toujours à 0. On utilise maintenant GuestProductOrder
+    # (le tunnel actif) + ProductOrder (legacy, au cas où des données
+    # historiques existeraient).
+    from apps.store.models import ProductOrder, GuestProductOrder
+    store_orders_account = ProductOrder.objects.filter(
         product__seller=user,
         status='paid',
     )
-    store_gross = store_orders.aggregate(t=Sum('subtotal'))['t'] or 0
+    store_orders_guest = GuestProductOrder.objects.filter(
+        product__seller=user,
+        status=GuestProductOrder.Status.PAID,
+    )
+
+    store_gross = (
+        (store_orders_account.aggregate(t=Sum('subtotal'))['t'] or 0)
+        + (store_orders_guest.aggregate(t=Sum('subtotal'))['t'] or 0)
+    )
 
     store_net = 0
-    for order in store_orders.select_related('product'):
+    for order in store_orders_account.select_related('product'):
+        rate = float(order.product.commission_rate) / 100
+        store_net += float(order.subtotal) * (1 - rate)
+    for order in store_orders_guest.select_related('product'):
         rate = float(order.product.commission_rate) / 100
         store_net += float(order.subtotal) * (1 - rate)
 

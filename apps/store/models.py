@@ -1031,10 +1031,13 @@ class GuestProductOrder(models.Model):
             if self.delivery_method in (self.DeliveryMethod.DOWNLOAD, self.DeliveryMethod.BOTH):
                 self._generate_download_links()
 
-            # Met a jour le stock UNIQUEMENT si le client a reellement
-            # choisi la livraison physique (seule ou bundle) — meme
-            # correction que ci-dessus.
+            # ✅ FIX 2026-09-29 : sold_count doit compter TOUTES les
+            # ventes (physiques + numériques). Avant, on ne l'incrémentait
+            # que pour delivery/both → un bundle vendu en download seul
+            # ne comptait pas dans les "exemplaires vendus", ce qui
+            # donnait un compteur inférieur au nombre réel de commandes.
             if self.delivery_method in (self.DeliveryMethod.DELIVERY, self.DeliveryMethod.BOTH):
+                # Physique vendu : on décrémente le stock ET on incrémente sold_count
                 updated = Product.objects.select_for_update().filter(
                     pk=self.product.pk,
                     stock__gte=self.quantity
@@ -1046,6 +1049,12 @@ class GuestProductOrder(models.Model):
                 if not updated:
                     logger.error(f"Stock insuffisant pour guest {self.order_number}")
                     raise ValueError("Stock insuffisant")
+            else:
+                # Numérique seul : pas de stock à décrémenter, mais on
+                # compte quand même la vente dans sold_count.
+                Product.objects.filter(pk=self.product.pk).update(
+                    sold_count=F('sold_count') + self.quantity
+                )
 
                 # ✅ Notifie le vendeur qu'il doit préparer une livraison
                 try:
