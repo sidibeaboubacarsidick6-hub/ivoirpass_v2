@@ -8,6 +8,37 @@ from .models import Product, ProductCategory
 class ProductForm(forms.ModelForm):
     """Formulaire de création/modification d'un produit."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Le champ `price` a 3 significations selon le type de produit :
+        #   - physical : prix version physique
+        #   - digital  : prix version numérique
+        #   - bundle   : prix TOTAL du bundle (physique + numérique)
+        # On adapte le label + placeholder + help pour éviter la confusion
+        # (bug UX remonté 2026-09-29 : "Prix *" sans contexte sur bundle).
+        product_type = None
+        if self.instance and self.instance.pk:
+            product_type = self.instance.product_type
+        elif self.data.get('product_type'):
+            product_type = self.data.get('product_type')
+
+        if product_type == 'bundle':
+            self.fields['price'].label = 'Prix bundle complet (physique + numérique) *'
+            self.fields['price'].help_text = (
+                "Prix total du bundle. Les champs ci-dessous permettent "
+                "de définir des prix séparés pour la version physique et "
+                "la version numérique seules."
+            )
+            self.fields['price'].widget.attrs['placeholder'] = '5000'
+        elif product_type == 'digital':
+            self.fields['price'].label = 'Prix version numérique (FCFA) *'
+            self.fields['price'].widget.attrs['placeholder'] = '2000'
+        elif product_type == 'physical':
+            self.fields['price'].label = 'Prix version physique (FCFA) *'
+            self.fields['price'].widget.attrs['placeholder'] = '3000'
+        # Si pas de type détecté → on garde le label statique 'Prix (FCFA) *'
+
     class Meta:
         model  = Product
         fields = [
@@ -136,7 +167,7 @@ class ProductForm(forms.ModelForm):
             'preview_file':           'Fichier aperçu (extrait gratuit)',
             'digital_file':           'Fichier numérique complet',
             'external_url':           'Lien externe (album/streaming)',
-            'price':                  'Prix (FCFA) *',
+            'price':                  'Prix (FCFA) *',  # surchargé dynamiquement dans __init__
             'price_physical':         'Prix version physique',
             'price_digital':          'Prix version numérique',
             'stock':                  'Stock physique (0 = illimité pour numérique)',
