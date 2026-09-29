@@ -175,3 +175,64 @@ class CustomMessageEmailRenderTests(TestCase):
         self.assertNotIn("Message de l'organisateur", html)
         # Le reste du mail doit être là
         self.assertIn('TEST-001', html)
+class CustomMessageServiceContextTests(TestCase):
+    """
+    Régression 2026-09-29 : le service guest_tickets_confirmed (cas physical)
+    ne passait pas 'event' dans le contexte → le bloc custom_message
+    restait vide dans l'email, alors que les templates étaient corrects.
+    """
+
+    def test_service_passe_event_au_contexte(self):
+        from django.core.mail import EmailMultiAlternatives
+        from apps.notifications.service import NotificationService
+        from apps.tickets.models import GuestOrder, GuestOrderItem, GuestTicket
+        from apps.events.models import TicketType
+
+        # Setup
+        org = _make_organizer()
+        event = _make_event(
+            org,
+            title='Concert Custom Message',
+            custom_message='MARKER_SERVICE_TEST',
+        )
+        tt, _ = TicketType.objects.get_or_create(
+            event=event, name='Std',
+            defaults={'price': 1000, 'quantity': 100},
+        )
+        order = GuestOrder.objects.create(
+            first_name='Jean', last_name='A', email='j@test.com',
+            subtotal=1000, total=1000, status=GuestOrder.Status.PAID,
+            paid_at=timezone.now(),
+        )
+        item = GuestOrderItem.objects.create(
+            order=order, ticket_type=tt, quantity=1, unit_price=1000,
+        )
+        GuestTicket.objects.create(order_item=item)
+
+        # Intercepter l'envoi
+        captured = []
+        original_send = EmailMultiAlternatives.send
+        def fake_send(self):
+            captured.append({
+                'alternatives': [(c, m) for c, m in self.alternatives],
+            })
+            return 1
+        EmailMultiAlternatives.send = fake_send
+
+        try:
+            NotificationService.guest_tickets_confirmed(order)
+        finally:
+            EmailMultiAlternatives.send = original_send
+
+        # Vérifier que le message apparaît dans le HTML envoyé
+        self.assertEqual(len(captured), 1, "Un seul email attendu")
+        html_content = next(
+            (c for c, m in captured[0]['alternatives'] if m == 'text/html'),
+            None,
+        )
+        self.assertIsNotNone(html_content, "Contenu HTML attendu")
+        self.assertIn(
+            'MARKER_SERVICE_TEST', html_content,
+            "Le service doit passer 'event' au contexte du template (sinon "
+            "custom_message est vide dans l'email réel).",
+        )

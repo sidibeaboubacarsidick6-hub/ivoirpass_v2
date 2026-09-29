@@ -147,6 +147,7 @@ class NotificationService:
             subject = f"Vos billets — {order.order_number}"
             context = {
                 'order': order,
+                'event': event,                    # ← AJOUT : nécessaire pour custom_message
                 'tickets': tickets,
                 'tickets_with_links': tickets_with_links,
                 'buyer_name': order.buyer_name,
