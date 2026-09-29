@@ -4,6 +4,13 @@ Bonjour {{ buyer_name }},
 
 Commande : {{ order.order_number }}
 Total    : {{ order.total|floatformat:0 }} FCFA
+{% if event.custom_message %}
+------------------------------------------------------------
+💬 Message de l'organisateur :
+
+{{ event.custom_message }}
+------------------------------------------------------------
+{% endif %}
 
 Vos billets :
 {% for ticket in tickets %}

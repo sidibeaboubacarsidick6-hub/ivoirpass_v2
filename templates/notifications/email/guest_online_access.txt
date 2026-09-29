@@ -3,6 +3,14 @@ Votre accès en ligne IvoirPass
 Bonjour {{ buyer_name }},
 
 Votre paiement a été confirmé. Voici votre accès à l'événement en ligne.
+{% if event.custom_message %}
+
+------------------------------------------------------------
+💬 Message de l'organisateur :
+
+{{ event.custom_message }}
+------------------------------------------------------------
+{% endif %}
 
 Événement   : {{ event.title }}
 Date        : {{ event.start_date|date:"d F Y à H\hi" }}
