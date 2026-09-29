@@ -1,9 +1,24 @@
-Commande IvoirPass confirmée !
+Commande confirmée IvoirPass
+
+Bonjour {{ order.buyer_name }},
 
 Commande : {{ order.order_number }}
 Produit  : {{ order.product.name }}
 Total    : {{ order.total|floatformat:0 }} FCFA
 
-Livraison sous 3-5 jours ouvrés.
+Livraison sous 3-5 jours ouvrés à :
+
+  {{ order.delivery_name }}
+  {{ order.delivery_phone }}
+  {{ order.delivery_address }}
+  {{ order.delivery_city }}{% if order.delivery_commune %} — {{ order.delivery_commune }}{% endif %}
+
+{% if links_with_urls %}
+------------------------------------------------------------
+Votre version numérique (inclus dans ce bundle) :
+
+{% for item in links_with_urls %}Télécharger : {{ item.url }}
+{% endfor %}------------------------------------------------------------
+{% endif %}
 
 © {{ year }} IvoirPass

@@ -253,16 +253,56 @@ class NotificationService:
         base_url = settings.PAYDUNYA_BASE_URL
         year = timezone.now().year
 
-        if order.product.is_digital:
+        # ✅ CORRECTIF 2026-09-29 : on se base sur le `delivery_method`
+        # RÉELLEMENT choisi par l'acheteur, PAS sur `product.is_digital`
+        # (qui est toujours True pour un BUNDLE, même quand l'acheteur
+        # n'a pris que la version physique → l'email "téléchargements
+        # prêts" partait sans aucun lien, ce qui est absurde et non
+        # conforme).
+        #
+        # Cas possibles :
+        #   - download : 100% numérique → mail digital avec liens
+        #   - delivery : 100% physique → mail physique, pas de liens
+        #   - both     : bundle physique + numérique → mail physique
+        #                enrichi des liens de téléchargement
+        is_download_only = (order.delivery_method == order.DeliveryMethod.DOWNLOAD)
+        is_bundle_both   = (order.delivery_method == order.DeliveryMethod.BOTH)
+
+        if is_download_only:
             template_name = 'notifications/email/guest_store_digital'
             subject = f"Vos téléchargements — {order.order_number}"
             download_links = GuestDownloadLink.objects.filter(order=order)
-            links_with_urls = [{'link': l, 'url': f"{base_url}/boutique/guest/telecharger/{l.token}/"} for l in download_links]
-            context = {'order': order, 'links_with_urls': links_with_urls, 'platform_name': 'IvoirPass', 'platform_url': base_url, 'year': year, 'buyer_name': order.buyer_name}
+            links_with_urls = [
+                {'link': l, 'url': f"{base_url}/boutique/guest/telecharger/{l.token}/"}
+                for l in download_links
+            ]
+            context = {
+                'order': order,
+                'links_with_urls': links_with_urls,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'year': year,
+                'buyer_name': order.buyer_name,
+            }
         else:
+            # delivery seul ou both
             template_name = 'notifications/email/guest_store_physical'
             subject = f"Commande confirmée — {order.order_number}"
-            context = {'order': order, 'platform_name': 'IvoirPass', 'platform_url': base_url, 'year': year, 'buyer_name': order.buyer_name}
+            context = {
+                'order': order,
+                'platform_name': 'IvoirPass',
+                'platform_url': base_url,
+                'year': year,
+                'buyer_name': order.buyer_name,
+            }
+            # Si bundle : on ajoute AUSSI les liens numériques au contexte
+            # (le template physique les affichera dans une section dédiée).
+            if is_bundle_both:
+                download_links = GuestDownloadLink.objects.filter(order=order)
+                context['links_with_urls'] = [
+                    {'link': l, 'url': f"{base_url}/boutique/guest/telecharger/{l.token}/"}
+                    for l in download_links
+                ]
 
         try:
             html_message  = render_to_string(f'{template_name}.html', context)
