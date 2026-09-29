@@ -399,31 +399,36 @@
         </h5>
 
         {% for ticket in ticket_types %}
-        <div class="border rounded-3 p-3 mb-3
-                    {% if ticket.is_sold_out %}opacity-50{% endif %}">
-          <div class="d-flex justify-content-between align-items-start mb-1">
-            <div class="fw-bold">{{ ticket.name }}</div>
-            <div class="fw-bold text-green">
-              {{ ticket.price|floatformat:0 }} FCFA
-            </div>
+        <div class="ticket-card {% if ticket.is_sold_out %}ticket-card-sold-out{% endif %}">
+          <!-- Nom + Prix -->
+          <div class="ticket-card-head">
+            <div class="ticket-card-name">{{ ticket.name }}</div>
+            <div class="ticket-card-price">{{ ticket.price|floatformat:0 }} FCFA</div>
           </div>
-          {% if ticket.valid_date %}
-            <span class="badge bg-orange-subtle text-orange small mb-2">
-              <i class="bi bi-calendar-day me-1"></i>Valable le {{ ticket.valid_date|date:"l d F" }}
-            </span>
-          {% endif %}
+
+          <!-- Métadonnées -->
+          <div class="ticket-card-meta">
+            {% if ticket.valid_date %}
+              <span class="ticket-card-meta-item">
+                <i class="bi bi-calendar-day"></i>
+                Valable le {{ ticket.valid_date|date:"l d F" }}
+              </span>
+            {% endif %}
+            {% if ticket.remaining is not None %}
+              <span class="ticket-card-meta-item">
+                <i class="bi bi-people"></i>
+                {% if ticket.is_sold_out %}
+                  <span class="text-danger fw-semibold">Épuisé</span>
+                {% else %}
+                  {{ ticket.remaining }} place{{ ticket.remaining|pluralize }} restante{{ ticket.remaining|pluralize }}
+                {% endif %}
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Description -->
           {% if ticket.description %}
-            <div class="text-muted small mb-2">{{ ticket.description }}</div>
-          {% endif %}
-          {% if ticket.remaining is not None %}
-            <div class="text-muted small mb-2">
-              <i class="bi bi-people me-1"></i>
-              {% if ticket.is_sold_out %}
-                <span class="text-danger">Épuisé</span>
-              {% else %}
-                {{ ticket.remaining }} place{{ ticket.remaining|pluralize }} restante{{ ticket.remaining|pluralize }}
-              {% endif %}
-            </div>
+            <div class="ticket-card-desc">{{ ticket.description }}</div>
           {% endif %}
         </div>
         {% empty %}
