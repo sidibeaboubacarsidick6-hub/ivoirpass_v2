@@ -82,6 +82,18 @@ class ScanLog(models.Model):
         related_name='scan_logs',
         verbose_name=_('ticket')
     )
+    event_day = models.ForeignKey(
+        'events.EventDay',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='scan_logs',
+        verbose_name=_("jour d'événement"),
+        help_text=(
+            "Jour concerné par ce scan (multi-jours uniquement). "
+            "NULL pour les billets legacy."
+        ),
+    )
+
     qr_data_received = models.CharField(
         _('données QR reçues'),
         max_length=500,
@@ -121,6 +133,9 @@ class ScanLog(models.Model):
         verbose_name = _('log de scan')
         verbose_name_plural = _('logs de scan')
         ordering = ['-scanned_at']
+        indexes = [
+            models.Index(fields=['event_day', 'result']),
+        ]
 
     def __str__(self):
         return (

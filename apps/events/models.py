@@ -484,6 +484,74 @@ class Event(models.Model):
         from django.urls import reverse
         return reverse('events:detail', kwargs={'slug': self.slug})
 
+class EventDay(models.Model):
+    """
+    Jour d'un événement multi-jours (Vague 4 — 2026-09-30).
+
+    Un événement peut avoir plusieurs EventDays. Un TicketType peut être
+    lié à 1 ou N EventDays :
+      - 1 EventDay  → billet 1 jour (ex. « Vendredi soir »)
+      - N EventDays → pass multi-jours (ex. « Pass 3 jours »)
+
+    Un TicketType sans EventDay = billet legacy (1 scan définitif, pas
+    de contrainte de date). Le mode multi-jours ne s'active QUE si au
+    moins 1 EventDay est lié au TicketType.
+    """
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='event_days',
+        verbose_name=_('événement'),
+    )
+    date = models.DateField(
+        _('date'),
+        help_text="Jour concerné par ce créneau.",
+    )
+    name = models.CharField(
+        _('nom du jour'),
+        max_length=100,
+        blank=True,
+        help_text=(
+            "Optionnel. Ex : « Soirée d'ouverture », « Finale ». "
+            "Si vide, la date sera utilisée comme nom."
+        ),
+    )
+    doors_open = models.TimeField(
+        _('ouverture des portes'),
+        null=True,
+        blank=True,
+        help_text="Heure d'ouverture des portes (optionnel).",
+    )
+    order = models.PositiveIntegerField(
+        _("ordre d'affichage"),
+        default=0,
+        help_text="Ordre croissant. Les jours s'affichent dans cet ordre.",
+    )
+
+    class Meta:
+        verbose_name = _("jour d'événement")
+        verbose_name_plural = _("jours d'événement")
+        ordering = ['order', 'date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'date'],
+                name='unique_event_day_per_date',
+            ),
+        ]
+
+    def __str__(self):
+        label = self.name or self.date.strftime('%d/%m/%Y')
+        return f"{self.event.title} — {label}"
+
+    @property
+    def display_name(self):
+        """Nom affiché : name personnalisé ou date formatée."""
+        if self.name:
+            return self.name
+        return self.date.strftime('%A %d %B %Y').capitalize()
+
+
+
 
 class TicketType(models.Model):
     """
@@ -550,6 +618,25 @@ class TicketType(models.Model):
     order = models.PositiveIntegerField(
         _('ordre d\'affichage'),
         default=0
+    )
+
+    order = models.PositiveIntegerField(
+        _('ordre d\'affichage'),
+        default=0
+    )
+    # ── Vague 4 : jours couverts par ce type de ticket ──────────────
+    # Vide = billet legacy (1 scan définitif). Non vide = 1 scan par
+    # jour couvert (billet 1 jour ou pass multi-jours).
+    event_days = models.ManyToManyField(
+        EventDay,
+        blank=True,
+        related_name='ticket_types',
+        verbose_name=_('jours couverts'),
+        help_text=(
+            "Laisser vide pour un billet classique (1 scan définitif). "
+            "Sélectionner 1 jour = billet 1 jour. "
+            "Sélectionner N jours = pass multi-jours (1 scan par jour)."
+        ),
     )
 
     class Meta:
