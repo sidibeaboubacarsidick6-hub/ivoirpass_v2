@@ -118,3 +118,101 @@
 
 - `0f9d617` — 500 `product_create` (return manquant sur GET) + `product_delete` restaure
 - `289da83` — extensions sans point (Django) + bandeau erreurs form + logs serveur
+## Dernière mise à jour — 2026-09-30
+
+### ✅ Vagues terminées
+
+#### Vague 1 — Fix bugs + UI (terminée 2026-09-29)
+- Bug mail bundle (template selon `delivery_method`)
+- Bug stats boutique dashboard (utilisait `ProductOrder` legacy → `GuestProductOrder`)
+- `sold_count` incrémenté pour TOUTES les ventes (physiques + numériques)
+- Label prix dynamique selon type produit (physical/digital/bundle)
+- Refonte cartes de billets (minimaliste pro)
+- Script rattrapage `recalc_sold_count` (appliqué preprod : 5 produits corrigés)
+
+#### Vague 2 — Vidéo + Codes gratuits (terminée 2026-09-30)
+**2.1 — Upload vidéo événement**
+- Champ `video_file` (mp4, 100 Mo max) sur `Event`
+- Propriété `video_embed_url` (conversion YouTube/Vimeo auto)
+- Section vidéo sur la landing (HTML5 `<video>` ou `<iframe>` responsive)
+- Fix nginx preprod `client_max_body_size 110M` (note dans `docs/vps/`)
+
+**2.2 — Codes de billets gratuits**
+- Modèle `FreeTicketCode` (`apps/tickets`) : code `FREE-XXXX-XXXX` unique
+- `Event.free_tickets_quota` (défaut 20) + `free_tickets_generated`
+- Vue organisateur : génération en masse (textarea nom + email), export CSV
+- Vue publique `/evenements/<slug>/code-gratuit/` : réclamation par code
+- Création auto d'une `GuestOrder` gratuite + `GuestTicket` + email
+- Action admin bulk : augmenter le quota (traçabilité AuditLog)
+
+#### Vague 3.1 — Wallet divisé (terminée 2026-09-30)
+- `OrganizerWallet` : 4 nouveaux champs (`balance_events_available/pending`,
+  `balance_store_available/pending`) + 2 propriétés calculées
+  (`balance_available`, `balance_pending` = events + store)
+- `WalletTransaction.source` : events / store / legacy
+- `WithdrawalRequest.source` : events / store — choix au moment du reversement
+- Migration `dashboard.0015_wallet_split` avec `RunPython` (historique
+  attribué à Événements)
+- Méthodes refactorées : `credit(source=)`, `reserve(source=)`,
+  `release_reserved(source=)`, `complete_reserved(source=)`,
+  `debit(source=)`, `refund_charge(source=)`
+- **Impossible de piocher dans l'autre poche** (ValueError sinon)
+- Admin : `WalletTransactionAdmin` créé, `OrganizerWalletAdmin` refondu
+- Templates : 3 soldes affichés (Général / Événements / Boutique),
+  radios de choix de source dans le formulaire de reversement
+
+**Bonus Vague 3.1** — Action admin dégel wallet
+- Action bulk `unfreeze_wallets` sur `OrganizerWalletAdmin`
+- Form avec raison obligatoire + traçabilité AuditLog (`WALLET_UNFROZEN`)
+- Utile quand un wallet a été gelé par `cancel_event_organizer_liable`
+
+### 📊 État des tests
+
+- **302 tests OK** (2 skipped)
+- Nouveaux tests : `test_wallet_split.py` (17 tests), `test_free_tickets.py`
+  (7 tests), `test_free_tickets_claim.py` (7 tests), `test_events_video.py`
+  (14 tests)
+
+### 🚀 État preprod
+
+- **Dernière migration appliquée :** `dashboard.0016`
+- **Dernier commit déployé :** `d6c1864`
+- **Tag rollback :** `preprod-avant-vague2-video` (Vague 2)
+- **Toutes les features ci-dessus sont en ligne et testées.**
+
+### ⏳ Backlog
+
+| Priorité | Chantier | Effort estimé |
+|---|---|---|
+| 🔴 Haute | **EventDay + Pass multi-jours** — un événement peut avoir plusieurs jours, un pass peut couvrir 1 jour ou tous les jours. À cadrer (design + modèle + scanner). | ~1 semaine |
+| 🟡 Moyenne | **Bug bouton hero partie gauche** — non résolu, à investiguer | ~1 h |
+| 🟡 Moyenne | **SendGrid fallback** — dès que les clés sont reçues | ~1/2 j |
+| 🟢 Basse | **Doc PayDunya** (`docs/09-providers-paiement.md`) | ~1/2 j |
+| 🟢 Basse | **Vague 3.2** — split multi-source d'un reversement (80k events + 20k store) — non demandé mais possible | ~1 j |
+
+### 📌 Décisions actées
+
+- **Wallet historique :** l'ancien solde global a été attribué entièrement
+  à Événements (migration `0015`).
+- **Codes gratuits :** nominatifs, quota 20 par défaut, dépassement soumis à
+  validation admin. L'organisateur distribue lui-même les codes.
+- **Email codes gratuits :** pas d'email de distribution automatique, mais
+  email de confirmation après réclamation du billet.
+- **Reversement :** 1 seule source par reversement (pas de split multi-source
+  pour l'instant).
+
+### 🔧 Notes VPS
+
+- Config nginx `prepod.ivoirpass.com` : `client_max_body_size 110M`
+  (voir `docs/vps/nginx-prepod.conf.md`). Ne pas remettre à 20M.
+- Migrations `.py` : **toujours rebuild l'image Docker** avant `migrate`
+  (le container ne voit pas les nouveaux fichiers sinon).
+
+### 💡 Leçons de la session
+
+- **Toujours vérifier `git status` avant de committer** — on a oublié des
+  fichiers 2 fois (migration `0006` puis `service.py + templates`).
+- **Rebuild Docker obligatoire** après tout ajout de fichier `.py`
+  (migrations, vues, tests…). `collectstatic` seul ne suffit pas.
+- **Ne pas utiliser `A 2>/dev/null || B`** dans les commandes shell pour
+  les push git — ça part en boucle si `A` ne fait rien.
