@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="ids" value="{{ ids }}">
+
+  <p>
+    Nouveau quota à appliquer à <strong>{{ events.count }}</strong>
+    événement(s) sélectionné(s) :
+  </p>
+
+  <table style="width:100%; margin: 16px 0; border-collapse: collapse;">
+    <thead>
+      <tr style="background:#f6f6f6;">
+        <th style="text-align:left; padding:8px;">Titre</th>
+        <th style="text-align:left; padding:8px;">Organisateur</th>
+        <th style="text-align:left; padding:8px;">Quota actuel</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ev in events %}
+      <tr style="border-top:1px solid #eee;">
+        <td style="padding:8px;">{{ ev.title }}</td>
+        <td style="padding:8px;">{{ ev.organizer.email }}</td>
+        <td style="padding:8px;">{{ ev.free_tickets_quota }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <fieldset class="module aligned">
+    {{ form.as_p }}
+  </fieldset>
+
+  <div class="submit-row" style="margin-top:20px;">
+    <input type="submit" value="Appliquer" class="default">
+    <a href="{% url 'admin:events_event_changelist' %}"
+       class="button cancel-link" style="margin-left:12px;">Annuler</a>
+  </div>
+</form>
+{% endblock %}
