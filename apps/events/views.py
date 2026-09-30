@@ -9,7 +9,10 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from .models import Event, Category, TicketType
-from .forms import EventForm, TicketTypeFormSet, EventFAQFormSet, EventGalleryItemFormSet, EventPartnerFormSet
+from .forms import (
+    EventForm, TicketTypeFormSet, EventDayFormSet,
+    EventFAQFormSet, EventGalleryItemFormSet, EventPartnerFormSet,
+)
 from django.views.decorators.http import require_POST
 from django.db.models import F
 
@@ -891,10 +894,37 @@ def multi_day_step_1(request):
 
 @organizer_required
 def multi_day_step_2(request, event_id):
-    """Étape 2/3 — à implémenter en V4-T2."""
+    """
+    Étape 2/3 du tunnel multi-jours : définition des jours.
+
+    - GET : auto-génère les jours depuis start/end si aucun n'existe,
+            puis affiche le formset pour édition.
+    - POST : valide et sauvegarde les jours, redirige vers étape 3.
+    """
     event = get_object_or_404(Event, pk=event_id, organizer=request.user)
+
+    # Auto-génération au premier accès si l'événement n'a pas encore de jours
+    if not event.event_days.exists():
+        event.generate_event_days()
+
+    formset = EventDayFormSet(instance=event)
+
+    if request.method == 'POST':
+        formset = EventDayFormSet(request.POST, instance=event)
+        if formset.is_valid():
+            formset.save()
+            messages.success(
+                request,
+                f"{event.event_days.count()} jour(s) enregistré(s). "
+                f"Configurez maintenant vos billets."
+            )
+            return redirect('events:multi_day_step_3', event_id=event.pk)
+        else:
+            messages.error(request, "Corrigez les erreurs ci-dessous.")
+
     return render(request, 'events/multi_day/step_2.html', {
         'event': event,
+        'formset': formset,
     })
 
 

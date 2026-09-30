@@ -3,7 +3,10 @@ IvoirPass V2 — Formulaires des événements
 """
 from django import forms
 from django.forms import inlineformset_factory
-from .models import Event, TicketType, Category, EventFAQ, EventGalleryItem, EventPartner
+from .models import (
+    Event, EventDay, TicketType,
+    Category, EventFAQ, EventGalleryItem, EventPartner,
+)
 
 
 class EventForm(forms.ModelForm):
@@ -280,6 +283,29 @@ EventPartnerFormSet = inlineformset_factory(
         'order': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
             'min': '0',
+        }),
+    },
+    extra=1,
+    can_delete=True,
+)
+
+# ── Vague 4 : Jours d'un événement multi-jours (tunnel étape 2) ──
+EventDayFormSet = inlineformset_factory(
+    Event,
+    EventDay,
+    fields=['date', 'name', 'doors_open'],
+    widgets={
+        'date': forms.DateInput(attrs={
+            'class': 'form-control form-control-sm',
+            'type': 'date',
+        }),
+        'name': forms.TextInput(attrs={
+            'class': 'form-control form-control-sm',
+            'placeholder': "Ex : Soirée d'ouverture, Finale…",
+        }),
+        'doors_open': forms.TimeInput(attrs={
+            'class': 'form-control form-control-sm',
+            'type': 'time',
         }),
     },
     extra=1,

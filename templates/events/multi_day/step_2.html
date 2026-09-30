@@ -1,8 +1,190 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Jours — {{ event.title }}{% endblock %}
+
 {% block content %}
 <div class="container py-5">
-  <h1>Étape 2 — Jours</h1>
-  <p>À implémenter (V4-T2).</p>
-  <p>Event #{{ event.pk }} : {{ event.title }}</p>
+
+  <!-- Fil d'Ariane -->
+  <div class="d-flex justify-content-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-success">
+        <i class="bi bi-check-circle me-1"></i>1. Infos
+      </span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-success">2. Jours</span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-secondary">3. Billets</span>
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'events:multi_day_step_1' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-calendar-week me-2 text-orange"></i>
+        Jours de l'événement
+      </h4>
+      <p class="text-muted small mb-0">
+        Étape 2 sur 3 — {{ event.title }}
+      </p>
+    </div>
+  </div>
+
+  <div class="alert alert-light border small">
+    <i class="bi bi-info-circle text-green me-1"></i>
+    Les jours ont été générés automatiquement depuis les dates de l'événement.
+    Vous pouvez les <strong>renommer</strong> (ex : « Finale »), ajuster leur
+    <strong>heure d'ouverture</strong>, ou en <strong>ajouter / retirer</strong>.
+  </div>
+
+  <form method="POST">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <div class="ip-card p-4 mb-4">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+        <i class="bi bi-calendar-day me-2 text-green"></i>
+        Liste des jours
+        <span class="text-muted fw-normal">({{ event.event_days.count }} jour{{ event.event_days.count|pluralize }})</span>
+      </h6>
+
+      <!-- En-têtes (desktop) -->
+      <div class="row g-2 d-none d-md-flex mb-2 small fw-bold text-muted text-uppercase">
+        <div class="col-md-3">Date *</div>
+        <div class="col-md-5">Nom du jour (optionnel)</div>
+        <div class="col-md-2">Ouverture</div>
+        <div class="col-md-2 text-end">Actions</div>
+      </div>
+
+      <div id="days-formset">
+        {% for day_form in formset %}
+        <div class="day-form border rounded-3 p-3 mb-2 bg-light">
+          {{ day_form.id }}
+
+          <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold d-md-none">Date *</label>
+              {{ day_form.date }}
+              {% if day_form.date.errors %}
+                {% for error in day_form.date.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold d-md-none">Nom du jour</label>
+              {{ day_form.name }}
+              {% if day_form.name.errors %}
+                {% for error in day_form.name.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold d-md-none">Ouverture</label>
+              {{ day_form.doors_open }}
+              {% if day_form.doors_open.errors %}
+                {% for error in day_form.doors_open.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-2 text-end">
+              {% if day_form.instance.pk %}
+                {# Jour existant : case à cocher Supprimer #}
+                <div class="form-check form-check-inline">
+                  {{ day_form.DELETE }}
+                  <label class="form-check-label text-danger small" for="{{ day_form.DELETE.id_for_label }}">
+                    Supprimer
+                  </label>
+                </div>
+              {% else %}
+                {# Nouveau jour : bouton qui retire la ligne du DOM #}
+                <button type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        onclick="this.closest('.day-form').remove(); updateTotals();">
+                  <i class="bi bi-x-circle"></i>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <button type="button"
+              class="btn btn-outline-success btn-sm mt-2"
+              onclick="addDayForm()">
+        <i class="bi bi-plus-circle me-1"></i>Ajouter un jour
+      </button>
+    </div>
+
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'events:multi_day_step_1' %}" class="btn btn-outline-secondary">
+        ← Retour à l'Étape 1
+      </a>
+      <button type="submit" class="btn btn-orange">
+        Continuer → Billets
+      </button>
+    </div>
+  </form>
+
 </div>
+
+{# Template caché pour cloner une nouvelle ligne côté JS #}
+<template id="empty-day-template">
+  <div class="day-form border rounded-3 p-3 mb-2 bg-light">
+    <input type="hidden" name="event_days-__prefix__-id" id="id_event_days-__prefix__-id">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold d-md-none">Date *</label>
+        <input type="date" name="event_days-__prefix__-date" id="id_event_days-__prefix__-date" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label small fw-semibold d-md-none">Nom du jour</label>
+        <input type="text" name="event_days-__prefix__-name" id="id_event_days-__prefix__-name" class="form-control form-control-sm" placeholder="Ex : Finale">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold d-md-none">Ouverture</label>
+        <input type="time" name="event_days-__prefix__-doors_open" id="id_event_days-__prefix__-doors_open" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-2 text-end">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.day-form').remove(); updateTotals();">
+          <i class="bi bi-x-circle"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addDayForm() {
+  const container = document.getElementById('days-formset');
+  const totalForms = document.getElementById('id_event_days-TOTAL_FORMS');
+  const template = document.getElementById('empty-day-template');
+
+  if (!container || !totalForms || !template) return;
+
+  const idx = parseInt(totalForms.value, 10);
+  const html = template.innerHTML.replace(/__prefix__/g, idx);
+
+  // Insertion du HTML
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = html.trim();
+  container.appendChild(wrapper.firstChild);
+
+  totalForms.value = idx + 1;
+}
+
+function updateTotals() {
+  // Rien de spécial pour l'instant — le total reste inchangé
+  // (les lignes supprimées côté JS n'étaient pas comptées dans le formset).
+}
+</script>
 {% endblock %}

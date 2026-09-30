@@ -87,3 +87,109 @@ class MultiDayStep1Tests(TestCase):
         resp = self.client.get(reverse('events:multi_day_step_1'))
         self.assertEqual(resp.status_code, 302)
         self.assertIn('/accounts/login/', resp.url)
+
+
+class MultiDayStep2Tests(TestCase):
+    def setUp(self):
+        self.org = _make_organizer()
+        self.client.force_login(self.org)
+        self.category = Category.objects.create(
+            name='Test', slug='test-step2-multiday',
+        )
+        # Crée un event multi-jours 3 jours
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Festival Étape 2',
+            slug='festival-etape-2',
+            description='d',
+            short_description='0700000000',
+            category=self.category,
+            organizer=self.org,
+            start_date=now + timezone.timedelta(days=30),
+            end_date=now + timezone.timedelta(days=32),
+            status=Event.Status.DRAFT,
+            is_multi_day=True,
+        )
+
+    def test_get_genere_les_jours_automatiquement(self):
+        """GET génère 3 jours depuis les dates si aucun n'existe."""
+        self.assertEqual(self.event.event_days.count(), 0)
+        resp = self.client.get(
+            reverse('events:multi_day_step_2', args=[self.event.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.event.event_days.count(), 3)
+
+    def test_post_enregistre_les_noms(self):
+        """POST sauvegarde les jours modifiés (nom personnalisé)."""
+        # Pré-génère les jours
+        self.event.generate_event_days()
+        days = list(self.event.event_days.order_by('date'))
+        self.assertEqual(len(days), 3)
+
+        data = {
+            'event_days-TOTAL_FORMS': '3',
+            'event_days-INITIAL_FORMS': '3',
+            'event_days-MIN_NUM_FORMS': '0',
+            'event_days-MAX_NUM_FORMS': '1000',
+            'event_days-0-id': str(days[0].pk),
+            'event_days-0-date': days[0].date.strftime('%Y-%m-%d'),
+            'event_days-0-name': 'Soirée d\'ouverture',
+            'event_days-0-doors_open': '',
+            'event_days-1-id': str(days[1].pk),
+            'event_days-1-date': days[1].date.strftime('%Y-%m-%d'),
+            'event_days-1-name': '',
+            'event_days-1-doors_open': '19:00',
+            'event_days-2-id': str(days[2].pk),
+            'event_days-2-date': days[2].date.strftime('%Y-%m-%d'),
+            'event_days-2-name': 'Finale',
+            'event_days-2-doors_open': '',
+        }
+        resp = self.client.post(
+            reverse('events:multi_day_step_2', args=[self.event.pk]),
+            data,
+        )
+        # Redirection vers étape 3
+        self.assertEqual(resp.status_code, 302)
+        days[0].refresh_from_db()
+        self.assertEqual(days[0].name, 'Soirée d\'ouverture')
+        days[1].refresh_from_db()
+        self.assertEqual(days[1].doors_open.strftime('%H:%M'), '19:00')
+
+    def test_post_ajoute_un_nouveau_jour(self):
+        """POST peut ajouter un 4e jour via le formset."""
+        self.event.generate_event_days()
+        days = list(self.event.event_days.order_by('date'))
+
+        data = {
+            'event_days-TOTAL_FORMS': '4',
+            'event_days-INITIAL_FORMS': '3',
+            'event_days-MIN_NUM_FORMS': '0',
+            'event_days-MAX_NUM_FORMS': '1000',
+            # 3 jours existants
+            'event_days-0-id': str(days[0].pk),
+            'event_days-0-date': days[0].date.strftime('%Y-%m-%d'),
+            'event_days-0-name': '',
+            'event_days-0-doors_open': '',
+            'event_days-1-id': str(days[1].pk),
+            'event_days-1-date': days[1].date.strftime('%Y-%m-%d'),
+            'event_days-1-name': '',
+            'event_days-1-doors_open': '',
+            'event_days-2-id': str(days[2].pk),
+            'event_days-2-date': days[2].date.strftime('%Y-%m-%d'),
+            'event_days-2-name': '',
+            'event_days-2-doors_open': '',
+            # 1 nouveau jour
+            'event_days-3-date': '2026-12-18',
+            'event_days-3-name': 'Bonus',
+            'event_days-3-doors_open': '',
+        }
+        resp = self.client.post(
+            reverse('events:multi_day_step_2', args=[self.event.pk]),
+            data,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(self.event.event_days.count(), 4)
+        self.assertTrue(
+            self.event.event_days.filter(name='Bonus').exists()
+        )

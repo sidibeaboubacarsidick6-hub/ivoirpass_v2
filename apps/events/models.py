@@ -414,6 +414,41 @@ class Event(models.Model):
 
         super().save(*args, **kwargs)
 
+    def generate_event_days(self):
+        """
+        Génère les EventDays manquants depuis start_date / end_date.
+
+        Appelée manuellement par le tunnel multi-jours (étape 2).
+        Ne supprime PAS les jours existants (l'organisateur peut les
+        renommer ou en ajouter), se contente d'ajouter les manquants.
+
+        Vague 4 — 2026-09-30.
+        """
+        from datetime import timedelta
+
+        if not (self.start_date and self.end_date):
+            return
+
+        start = self.start_date.date()
+        end = self.end_date.date()
+
+        # Liste des dates attendues (1 par jour inclus)
+        expected_dates = []
+        cur = start
+        while cur <= end:
+            expected_dates.append(cur)
+            cur += timedelta(days=1)
+
+        # Jours déjà existants (par date)
+        existing_dates = set(self.event_days.values_list('date', flat=True))
+
+        # Crée les jours manquants
+        for i, d in enumerate(expected_dates, start=1):
+            if d not in existing_dates:
+                EventDay.objects.create(
+                    event=self, date=d, order=i,
+                )
+
     # ============================================
     # PROPRIÉTÉS UTILES
     # ============================================
