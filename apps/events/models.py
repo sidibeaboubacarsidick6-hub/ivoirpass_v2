@@ -352,6 +352,30 @@ class Event(models.Model):
         default=False
     )
 
+    requires_approval = models.BooleanField(
+        _('inscription sur approbation'),
+        default=False
+    )
+
+    # ============================================
+    # 🗓️ VAGUE 4 — ÉVÉNEMENT MULTI-JOURS
+    # ============================================
+    # Marqueur explicite : True si l'événement a été créé via le tunnel
+    # multi-jours. Permet de :
+    #  - afficher/regrouper les billets par jour sur la landing
+    #  - adapter le scanner (1 scan par jour au lieu de 1 seul)
+    #  - filtrer dans l'admin
+    #
+    # Les événements existants restent à False (comportement legacy).
+    is_multi_day = models.BooleanField(
+        _('événement multi-jours'),
+        default=False,
+        help_text=(
+            "Coché automatiquement quand l'événement est créé via le "
+            "tunnel multi-jours. Active la validation 1 scan par jour."
+        ),
+    )
+
     # ============================================
     # DATES SYSTÈME
     # ============================================

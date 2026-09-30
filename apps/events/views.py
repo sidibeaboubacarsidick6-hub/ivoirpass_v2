@@ -810,3 +810,98 @@ def claim_free_ticket(request, slug):
         'tickets:guest_confirmation',
         access_token=str(guest_order.access_token),
     )
+
+# ============================================
+# 🗓️ VAGUE 4 — TUNNEL MULTI-JOURS
+# ============================================
+
+@organizer_required
+def multi_day_step_1(request):
+    """
+    Étape 1/3 du tunnel multi-jours : informations de base.
+
+    Reprend le formulaire complet de création d'événement (EventForm +
+    FAQ + Galerie + Partenaires), SAUF les Types de tickets qui seront
+    configurés à l'Étape 3.
+
+    Crée un Event en brouillon avec `is_multi_day=True`.
+    """
+    form            = EventForm()
+    faq_formset     = EventFAQFormSet()
+    gallery_formset = EventGalleryItemFormSet()
+    partner_formset = EventPartnerFormSet()
+
+    if request.method == 'POST':
+        form            = EventForm(request.POST, request.FILES)
+        faq_formset     = EventFAQFormSet(request.POST, instance=Event())
+        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES, instance=Event())
+        partner_formset = EventPartnerFormSet(request.POST, request.FILES, instance=Event())
+
+        # Erreurs détaillées pour débug (affiche chaque champ invalide)
+        errors_found = []
+
+        if form.is_valid() and faq_formset.is_valid() and gallery_formset.is_valid() and partner_formset.is_valid():
+            event = form.save(commit=False)
+            event.organizer = request.user
+            event.status = Event.Status.DRAFT
+            event.is_multi_day = True
+            event.save()
+
+            # Sauvegarde des formsets annexes
+            faq_formset.instance = event
+            faq_formset.save()
+
+            gallery_formset.instance = event
+            gallery_formset.save()
+
+            partner_formset.instance = event
+            partner_formset.save()
+
+            messages.success(
+                request,
+                "Étape 1 terminée. Ajoutez maintenant vos jours."
+            )
+            return redirect('events:multi_day_step_2', event_id=event.pk)
+
+        # Construction d'un message d'erreur lisible
+        for field, errs in form.errors.items():
+            for e in errs:
+                errors_found.append(f"{field} : {e}")
+        for fs in (faq_formset, gallery_formset, partner_formset):
+            for f_errs in fs.errors:
+                for field, errs in f_errs.items():
+                    for e in errs:
+                        errors_found.append(f"{field} : {e}")
+
+        if errors_found:
+            messages.error(
+                request,
+                "Corrigez les erreurs suivantes : " + " · ".join(errors_found[:5]),
+                extra_tags='danger'
+            )
+        else:
+            messages.error(request, "Veuillez corriger les erreurs.")
+
+    return render(request, 'events/multi_day/step_1.html', {
+        'form':            form,
+        'faq_formset':     faq_formset,
+        'gallery_formset': gallery_formset,
+        'partner_formset': partner_formset,
+    })
+
+@organizer_required
+def multi_day_step_2(request, event_id):
+    """Étape 2/3 — à implémenter en V4-T2."""
+    event = get_object_or_404(Event, pk=event_id, organizer=request.user)
+    return render(request, 'events/multi_day/step_2.html', {
+        'event': event,
+    })
+
+
+@organizer_required
+def multi_day_step_3(request, event_id):
+    """Étape 3/3 — à implémenter en V4-T3."""
+    event = get_object_or_404(Event, pk=event_id, organizer=request.user)
+    return render(request, 'events/multi_day/step_3.html', {
+        'event': event,
+    })

@@ -7,6 +7,14 @@ urlpatterns = [
     # ✅ Routes fixes EN PREMIER
     path('mes-evenements/',        views.my_events,    name='my_events'),
     path('creer/',                 views.event_create, name='create'),
+
+    # 🗓️ Vague 4 : tunnel multi-jours (3 étapes)
+    path('creer-multijour/etape-1/',
+         views.multi_day_step_1, name='multi_day_step_1'),
+    path('creer-multijour/etape-2/<int:event_id>/',
+         views.multi_day_step_2, name='multi_day_step_2'),
+    path('creer-multijour/etape-3/<int:event_id>/',
+         views.multi_day_step_3, name='multi_day_step_3'),
     path('<slug:slug>/modifier/',  views.event_edit,   name='edit'),
     path('<slug:slug>/supprimer/', views.event_delete, name='delete'),
     path('<slug:slug>/agents-scanner/', views.assign_scanner_agents, name='assign_scanner_agents'),

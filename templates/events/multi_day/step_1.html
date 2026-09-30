@@ -1,44 +1,48 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ action }} un événement{% endblock %}
+{% block title %}Créer un événement multi-jours — Étape 1{% endblock %}
 
 {% block content %}
 <div class="container py-5">
 
-  <!-- 💡 Vague 4 : bandeau tunnel multi-jours (uniquement en création) -->
-  {% if action == 'Créer' %}
-  <div class="alert alert-light border d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
-    <div>
-      <i class="bi bi-calendar-week text-orange me-2"></i>
-      <strong>Votre événement dure plusieurs jours ?</strong>
-      <span class="text-muted ms-2">
-        Utilisez le tunnel dédié pour configurer vos jours et vos packs.
-      </span>
+  <!-- 🗓️ Vague 4 : fil d'Ariane du tunnel multi-jours -->
+  <div class="d-flex justify-content-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-success">1. Infos</span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-secondary">2. Jours</span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-secondary">3. Billets</span>
     </div>
-    <a href="{% url 'events:multi_day_step_1' %}" class="btn btn-orange btn-sm">
-      <i class="bi bi-arrow-right me-1"></i>Tunnel multi-jours
-    </a>
   </div>
-  {% endif %}
 
   <div class="d-flex align-items-center gap-3 mb-4">
-    <a href="{% url 'events:my_events' %}" class="btn btn-outline-secondary btn-sm">
+    <a href="{% url 'events:create' %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i>
     </a>
     <div>
       <h4 class="fw-bold mb-0">
-        {% if action == 'Créer' %}
-          <i class="bi bi-plus-circle me-2 text-orange"></i>Créer un événement
-        {% else %}
-          <i class="bi bi-pencil me-2 text-green"></i>Modifier l'événement
-        {% endif %}
+        <i class="bi bi-calendar-week me-2 text-orange"></i>
+        Créer un événement multi-jours
       </h4>
+      <p class="text-muted small mb-0">
+        Étape 1 sur 3 — Informations de base
+      </p>
     </div>
+  </div>
+
+  <div class="alert alert-light border small">
+    <i class="bi bi-info-circle text-green me-1"></i>
+    Remplissez les informations générales de l'événement.
+    Vous configurerez les <strong>jours</strong> à l'étape 2
+    et les <strong>billets / packs</strong> à l'étape 3.
   </div>
 
   <form method="POST" enctype="multipart/form-data">
     {% csrf_token %}
+    {# 🗓️ Vague 4 : l'événement est toujours créé en Brouillon à l'étape 1 #}
+    <input type="hidden" name="status" value="draft">
     <div class="row g-4">
 
       <!-- Colonne principale -->
@@ -261,12 +265,6 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label fw-semibold small">{{ form.cover_image.label }}</label>
-              {% if event.cover_image %}
-                <div class="mb-2">
-                  <img src="{{ event.cover_image.url }}" alt="{{ event.title }}" class="rounded-2"
-                       style="max-height:100px;" />
-                </div>
-              {% endif %}
               {{ form.cover_image }}
               {% if form.cover_image.errors %}
                 {% for error in form.cover_image.errors %}
@@ -315,17 +313,6 @@
                 Fichier mp4 uniquement, 100 Mo max.
                 <strong>Prioritaire sur le lien ci-dessus</strong> si renseigné.
               </div>
-              {% if event.video_file %}
-                <div class="mt-2 d-flex align-items-center gap-2">
-                  <span class="badge bg-success-subtle text-success small">
-                    <i class="bi bi-check-circle me-1"></i>Vidéo actuelle
-                  </span>
-                  <a href="{{ event.video_file.url }}" target="_blank" rel="noopener"
-                     class="small text-decoration-none">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Ouvrir
-                  </a>
-                </div>
-              {% endif %}
               {% if form.video_file.errors %}
                 {% for error in form.video_file.errors %}
                 <div class="text-danger small mt-1">
@@ -337,129 +324,12 @@
           </div>
         </div>
 
-        <!-- Section types de tickets améliorée -->
-        <div class="ip-card p-4 mb-4">
-          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
-            <i class="bi bi-ticket-perforated me-2 text-green"></i>
-            Types de tickets
-            <span class="text-muted fw-normal">(VIP, Standard, Early Bird...)</span>
-          </h6>
-
-          {{ formset.management_form }}
-
-          <div id="ticket-formset">
-            {% for ticket_form in formset %}
-            <div class="ticket-form border rounded-3 p-3 mb-3 bg-light position-relative">
-              {{ ticket_form.id }}
-
-              <!-- En-tête du ticket -->
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="fw-bold small text-green">
-                  <i class="bi bi-ticket me-1"></i>
-                  Ticket {% if forloop.first %}principal{% else %}{{ forloop.counter }}{% endif %}
-                </span>
-                {% if ticket_form.instance.pk %}
-                <div class="form-check form-check-inline">
-                  {{ ticket_form.DELETE }}
-                  <label class="form-check-label text-danger small">Supprimer</label>
-                </div>
-                {% endif %}
-              </div>
-
-              <div class="row g-2">
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold">Nom du ticket *</label>
-                  {{ ticket_form.name }}
-                  <div class="text-muted" style="font-size:0.72rem;">
-                    Ex: VIP, VVIP, Standard, Early Bird, Étudiant
-                  </div>
-                  {% if ticket_form.name.errors %}
-                    {% for error in ticket_form.name.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Prix (FCFA) *</label>
-                  {{ ticket_form.price }}
-                  {% if ticket_form.price.errors %}
-                    {% for error in ticket_form.price.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Quantité</label>
-                  {{ ticket_form.quantity }}
-                  <div class="text-muted" style="font-size:0.72rem;">0 = illimité</div>
-                  {% if ticket_form.quantity.errors %}
-                    {% for error in ticket_form.quantity.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Max commandes / personnes</label>
-                  {{ ticket_form.max_per_order }}
-                  {% if ticket_form.max_per_order.errors %}
-                    {% for error in ticket_form.max_per_order.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label small fw-semibold">Ordre d'affichage</label>
-                  {{ ticket_form.order }}
-                  {% if ticket_form.order.errors %}
-                    {% for error in ticket_form.order.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-12">
-                  <label class="form-label small fw-semibold">Description</label>
-                  {{ ticket_form.description }}
-                  {% if ticket_form.description.errors %}
-                    {% for error in ticket_form.description.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-                <div class="col-md-4 d-flex align-items-end">
-                  <div class="form-check">
-                    {{ ticket_form.is_visible }}
-                    <label class="form-check-label small">Visible publiquement</label>
-                  </div>
-                  {% if ticket_form.is_visible.errors %}
-                    {% for error in ticket_form.is_visible.errors %}
-                    <div class="text-danger small mt-1">
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    </div>
-                    {% endfor %}
-                  {% endif %}
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-
-          <!-- Bouton ajouter un ticket -->
-          <button type="button" class="btn btn-outline-success btn-sm mt-2"
-                  onclick="addTicketForm()">
-            <i class="bi bi-plus-lg me-1"></i>Ajouter un type de ticket
-          </button>
+        <!-- 🎫 Section Types de tickets DÉPLACÉE à l'Étape 3 -->
+        <div class="alert alert-light border small mb-4">
+          <i class="bi bi-ticket-perforated text-orange me-2"></i>
+          <strong>Types de billets / packs :</strong>
+          la configuration se fera à l'<strong>Étape 3</strong>
+          (après avoir défini les jours).
         </div>
 
         <!-- Section FAQ (facultatif) -->
@@ -618,26 +488,8 @@
       <div class="col-lg-4">
         <div class="ip-card p-4 sticky-top" style="top:80px;">
           <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
-            <i class="bi bi-sliders me-2 text-green"></i>Publication
+            <i class="bi bi-sliders me-2 text-green"></i>Progression
           </h6>
-
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">{{ form.status.label }}</label>
-            {{ form.status }}
-            <div class="text-muted small mt-1">
-              💡 Enregistrez en <strong>Brouillon</strong> pour continuer plus tard,
-              ou <strong>Publiez</strong> pour rendre visible.
-            </div>
-            {% if form.status.errors %}
-              {% for error in form.status.errors %}
-              <div class="text-danger small mt-1">
-                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-              </div>
-              {% endfor %}
-            {% endif %}
-          </div>
-
-          <hr>
 
           <div class="mb-3">
             <label class="form-label fw-semibold small">{{ form.total_capacity.label }}</label>
@@ -651,18 +503,28 @@
             {% endif %}
           </div>
 
+          <hr>
+
+          <div class="text-muted small mb-3">
+            <i class="bi bi-info-circle me-1 text-green"></i>
+            L'événement sera enregistré en <strong>Brouillon</strong> à la fin
+            de l'étape 1. Vous le publierez après avoir configuré les jours
+            et les billets.
+          </div>
 
           <hr>
 
           <div class="d-grid gap-2">
             <button type="submit" class="btn btn-orange btn-lg">
-              <i class="bi bi-check-lg me-2"></i>
-              {% if action == 'Créer' %}Créer l'événement{% else %}Enregistrer{% endif %}
+              <i class="bi bi-arrow-right-circle me-2"></i>Continuer → Jours
             </button>
+            <a href="{% url 'events:my_events' %}" class="btn btn-outline-secondary">
+              Annuler
+            </a>
           </div>
 
-          <!-- Bloc d'erreurs global amélioré -->
-          {% if form.errors or formset.errors or faq_formset.errors or gallery_formset.errors or partner_formset.errors %}
+          <!-- Bloc d'erreurs global -->
+          {% if form.errors or faq_formset.errors or gallery_formset.errors or partner_formset.errors %}
           <div class="alert ip-alert alert-danger mt-3 mb-0">
             <i class="bi bi-exclamation-triangle me-2"></i>
             <strong>Erreurs à corriger :</strong>
@@ -670,13 +532,6 @@
               {% for field, errors in form.errors.items %}
                 {% for error in errors %}
                 <li>{{ field|title }} : {{ error }}</li>
-                {% endfor %}
-              {% endfor %}
-              {% for form_errors in formset.errors %}
-                {% for field, errors in form_errors.items %}
-                  {% for error in errors %}
-                  <li>Ticket — {{ field|title }} : {{ error }}</li>
-                  {% endfor %}
                 {% endfor %}
               {% endfor %}
               {% for form_errors in faq_formset.errors %}
@@ -689,7 +544,7 @@
               {% for form_errors in gallery_formset.errors %}
                 {% for field, errors in form_errors.items %}
                   {% for error in errors %}
-                  <li>Galerie/Programme — {{ field|title }} : {{ error }}</li>
+                  <li>Galerie — {{ field|title }} : {{ error }}</li>
                   {% endfor %}
                 {% endfor %}
               {% endfor %}
@@ -714,52 +569,16 @@
 
 {% block extra_js %}
 <script>
-function addTicketForm() {
-  const formset = document.getElementById('ticket-formset');
-  const totalForms = document.getElementById('id_ticket_types-TOTAL_FORMS');
-  const formCount = parseInt(totalForms.value, 10);
-
-  const firstForm = formset.querySelector('.ticket-form');
-  if (!firstForm) return;
-
-  const newForm = firstForm.cloneNode(true);
-
-  newForm.innerHTML = newForm.innerHTML.replace(
-    /ticket_types-\d+/g,
-    `ticket_types-${formCount}`
-  );
-
-  newForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(el => {
-    if (el.type === 'checkbox') {
-      el.checked = false;
-    } else {
-      el.value = '';
-    }
-  });
-
-  const deleteCheck = newForm.querySelector('[id*="DELETE"]');
-  if (deleteCheck) {
-    deleteCheck.closest('.form-check')?.remove();
-  }
-
-  formset.appendChild(newForm);
-  totalForms.value = formCount + 1;
-  initFileInputs(newForm);
-}
-
 function addExtraForm(containerId, prefix) {
   const container = document.getElementById(containerId);
   const totalForms = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
-
   if (!container || !totalForms) return;
 
   const formCount = parseInt(totalForms.value, 10);
   const firstForm = container.querySelector('.extra-form');
-
   if (!firstForm) return;
 
   const newForm = firstForm.cloneNode(true);
-
   newForm.innerHTML = newForm.innerHTML.replace(
     new RegExp(`${prefix}-\\d+`, 'g'),
     `${prefix}-${formCount}`
@@ -783,16 +602,13 @@ function addExtraForm(containerId, prefix) {
   initFileInputs(newForm);
 }
 
-/* Gestion universelle des uploads : retirer puis remplacer un fichier sans recharger. */
 function initFileInputs(root = document) {
   root.querySelectorAll('input[type="file"]').forEach(input => {
     if (input.dataset.fileManagerInitialized === '1') return;
-
     input.dataset.fileManagerInitialized = '1';
 
     const wrapper = document.createElement('div');
     wrapper.className = 'file-upload-manager';
-
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(input);
 
@@ -826,13 +642,11 @@ function initFileInputs(root = document) {
     }
 
     input.addEventListener('change', refresh);
-
     removeBtn.addEventListener('click', function () {
       input.value = '';
       refresh();
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-
     refresh();
   });
 }
