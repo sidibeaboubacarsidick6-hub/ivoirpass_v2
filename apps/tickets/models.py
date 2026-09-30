@@ -693,3 +693,95 @@ class GuestTicket(models.Model):
     @property
     def buyer_email(self):
         return self.order_item.order.email
+
+class FreeTicketCode(models.Model):
+    """
+    Code de billet gratuit nominatif (Vague 2.2 — 2026-09-30).
+
+    L'organisateur génère N codes, chacun associé à un bénéficiaire
+    (nom + email fournis par l'organisateur). Le bénéficiaire saisit
+    ensuite son code sur la landing de l'événement pour recevoir son
+    billet gratuit.
+
+    Le quota `event.free_tickets_quota` limite le nombre de codes
+    qu'un organisateur peut générer sans validation admin.
+    """
+    event = models.ForeignKey(
+        'events.Event',
+        on_delete=models.CASCADE,
+        related_name='free_ticket_codes',
+        verbose_name=_('événement'),
+    )
+    ticket_type = models.ForeignKey(
+        'events.TicketType',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('type de ticket'),
+        help_text="Optionnel — laisser vide pour utiliser le premier type."
+    )
+    code = models.CharField(
+        _('code'),
+        max_length=20,
+        unique=True,
+        db_index=True,
+        help_text="Format FREE-XXXX-XXXX (généré automatiquement).",
+    )
+    beneficiary_name = models.CharField(
+        _('nom du bénéficiaire'),
+        max_length=200,
+    )
+    beneficiary_email = models.EmailField(
+        _('email du bénéficiaire'),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='created_free_ticket_codes',
+        verbose_name=_('créé par'),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Utilisation
+    used_at = models.DateTimeField(_('utilisé le'), null=True, blank=True)
+    guest_ticket = models.OneToOneField(
+        GuestTicket,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='free_code',
+        verbose_name=_('billet émis'),
+    )
+
+    class Meta:
+        verbose_name = _('code de billet gratuit')
+        verbose_name_plural = _('codes de billets gratuits')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['event', 'used_at']),
+        ]
+
+    def __str__(self):
+        status = "utilisé" if self.used_at else "disponible"
+        return f"{self.code} — {self.beneficiary_name} ({status})"
+
+    @property
+    def is_used(self):
+        return self.used_at is not None
+
+    @staticmethod
+    def generate_code():
+        """Génère un code unique au format FREE-XXXX-XXXX.
+
+        Exclut les caractères confusables (0/O, 1/I/L) pour faciliter
+        la saisie manuelle par le bénéficiaire.
+        """
+        import secrets
+        alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        while True:
+            part1 = ''.join(secrets.choice(alphabet) for _ in range(4))
+            part2 = ''.join(secrets.choice(alphabet) for _ in range(4))
+            code = f"FREE-{part1}-{part2}"
+            if not FreeTicketCode.objects.filter(code=code).exists():
+                return code

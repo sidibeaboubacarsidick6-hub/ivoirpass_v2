@@ -286,9 +286,29 @@ class Event(models.Model):
         help_text="0 = illimité"
     )
     tickets_sold = models.PositiveIntegerField(
-        _('tickets vendus'),
+        _('billets vendus'),
         default=0,
         editable=False
+    )
+    # ============================================
+    # 🎫 TICKETS GRATUITS (Vague 2.2 — 2026-09-30)
+    # L'organisateur peut générer des codes de billets gratuits
+    # nominatifs, dans la limite du quota. Au-delà, validation admin MKS.
+    # ============================================
+    free_tickets_quota = models.PositiveIntegerField(
+        _('quota billets gratuits'),
+        default=20,
+        help_text=(
+            "Nombre maximum de codes gratuits que l'organisateur peut "
+            "générer pour cet événement. Au-delà, une validation admin "
+            "est nécessaire."
+        )
+    )
+    free_tickets_generated = models.PositiveIntegerField(
+        _('codes gratuits générés'),
+        default=0,
+        editable=False,
+        help_text="Compteur interne — mis à jour à chaque génération."
     )
 
     # ============================================
