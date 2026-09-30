@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}J'ai un code gratuit — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+
+      <div class="text-center mb-4">
+        <i class="bi bi-gift text-orange" style="font-size:3rem;"></i>
+        <h2 class="fw-bold mt-2 mb-1">J'ai un code gratuit</h2>
+        <p class="text-muted">{{ event.title }}</p>
+      </div>
+
+      <div class="ip-card p-4">
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label for="code" class="form-label fw-semibold small">
+              Votre code
+            </label>
+            <input type="text"
+                   name="code"
+                   id="code"
+                   class="form-control form-control-lg text-center"
+                   placeholder="FREE-XXXX-XXXX"
+                   style="letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700;"
+                   autocomplete="off"
+                   autofocus
+                   required>
+            <div class="text-muted small mt-2 text-center">
+              <i class="bi bi-info-circle me-1"></i>
+              Saisissez le code reçu (ex. <code>FREE-A3F9-2B7K</code>).
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-orange btn-lg w-100">
+            <i class="bi bi-check-circle me-1"></i>Obtenir mon billet
+          </button>
+        </form>
+      </div>
+
+      <div class="text-center mt-4">
+        <a href="{% url 'events:detail' event.slug %}"
+           class="text-muted text-decoration-none small">
+          <i class="bi bi-arrow-left me-1"></i>Retour à l'événement
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -10,6 +10,8 @@ from django.db.models import Q
 from django.utils import timezone
 from .models import Event, Category, TicketType
 from .forms import EventForm, TicketTypeFormSet, EventFAQFormSet, EventGalleryItemFormSet, EventPartnerFormSet
+from django.views.decorators.http import require_POST
+from django.db.models import F
 
 
 # ============================================
@@ -484,3 +486,327 @@ def create_scanner_agent(request):
             return redirect('events:my_events')
 
     return render(request, 'events/create_scanner_agent.html')
+
+# ============================================
+# 🎫 CODES DE BILLETS GRATUITS (Vague 2.2 — 2026-09-30)
+# ============================================
+
+@organizer_required
+def free_tickets_list(request, slug):
+    """Liste des codes de billets gratuits générés pour l'événement."""
+    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+    codes = event.free_ticket_codes.select_related(
+        'ticket_type', 'guest_ticket'
+    ).order_by('-created_at')
+
+    used_count = codes.filter(used_at__isnull=False).count()
+    remaining_quota = max(0, event.free_tickets_quota - event.free_tickets_generated)
+
+    return render(request, 'events/free_tickets_list.html', {
+        'event':           event,
+        'codes':           codes,
+        'used_count':      used_count,
+        'remaining_quota': remaining_quota,
+        'ticket_types':    event.ticket_types.all(),
+    })
+
+
+@organizer_required
+@require_POST
+def generate_free_tickets(request, slug):
+    """
+    Génère N codes de billets gratuits à partir d'un textarea.
+
+    Format attendu : 1 ligne = "Nom Prénom, email@domain.com"
+    """
+    import re
+    from django.db import transaction
+    from apps.tickets.models import FreeTicketCode
+    from apps.dashboard.models import AuditLog
+    from apps.dashboard.services import log_action
+
+    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+
+    # --- 1. Parser le textarea ---
+    raw = request.POST.get('beneficiaries', '').strip()
+    if not raw:
+        messages.error(request, "Veuillez saisir au moins un bénéficiaire.")
+        return redirect('events:free_tickets_list', slug=event.slug)
+
+    lines = [l.strip() for l in raw.splitlines() if l.strip()]
+    beneficiaries = []
+    errors = []
+    email_re = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+    for i, line in enumerate(lines, start=1):
+        # Accepte virgule OU point-virgule OU tab comme séparateur
+        parts = re.split(r'[;,\t]', line, maxsplit=1)
+        if len(parts) != 2:
+            errors.append(f"Ligne {i} : format invalide (attendu 'Nom, email').")
+            continue
+        name, email = parts[0].strip(), parts[1].strip()
+        if not name:
+            errors.append(f"Ligne {i} : nom vide.")
+            continue
+        if not email_re.match(email):
+            errors.append(f"Ligne {i} : email invalide ({email}).")
+            continue
+        beneficiaries.append({'name': name, 'email': email})
+
+    if errors:
+        for e in errors:
+            messages.error(request, e)
+        return redirect('events:free_tickets_list', slug=event.slug)
+
+    if not beneficiaries:
+        messages.error(request, "Aucun bénéficiaire valide détecté.")
+        return redirect('events:free_tickets_list', slug=event.slug)
+
+    # --- 2. Vérifier le quota ---
+    count = len(beneficiaries)
+    if event.free_tickets_generated + count > event.free_tickets_quota:
+        remaining = max(0, event.free_tickets_quota - event.free_tickets_generated)
+        messages.error(
+            request,
+            f"Quota dépassé : {count} demandé(s), {remaining} restant(s) "
+            f"sur {event.free_tickets_quota}. Contactez l'administration "
+            f"pour augmenter votre quota."
+        )
+        return redirect('events:free_tickets_list', slug=event.slug)
+
+    # --- 3. Type de ticket (optionnel) ---
+    ticket_type_id = request.POST.get('ticket_type')
+    ticket_type = None
+    if ticket_type_id:
+        ticket_type = event.ticket_types.filter(pk=ticket_type_id).first()
+    if not ticket_type:
+        ticket_type = event.ticket_types.order_by('order', 'price').first()
+
+    # --- 4. Créer les codes en transaction ---
+    with transaction.atomic():
+        created = []
+        for b in beneficiaries:
+            code = FreeTicketCode.objects.create(
+                event=event,
+                ticket_type=ticket_type,
+                code=FreeTicketCode.generate_code(),
+                beneficiary_name=b['name'],
+                beneficiary_email=b['email'],
+                created_by=request.user,
+            )
+            created.append(code)
+
+        event.free_tickets_generated = F('free_tickets_generated') + count
+        event.save(update_fields=['free_tickets_generated'])
+
+        log_action(
+            action=AuditLog.Action.FREE_TICKETS_GENERATED,
+            description=(
+                f"{count} code(s) de billet(s) gratuit(s) généré(s) "
+                f"pour « {event.title} »."
+            ),
+            user=request.user,
+            obj=event,
+            metadata={
+                'event_slug': event.slug,
+                'count':      count,
+                'ticket_type': ticket_type.name if ticket_type else None,
+            },
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+    messages.success(
+        request,
+        f"{count} code(s) de billet(s) gratuit(s) généré(s). "
+        f"Vous pouvez les copier ou télécharger le CSV."
+    )
+    return redirect('events:free_tickets_list', slug=event.slug)
+
+
+@organizer_required
+def download_free_tickets_csv(request, slug):
+    """Export CSV des codes de billets gratuits."""
+    import csv
+    from django.http import HttpResponse
+
+    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+    codes = event.free_ticket_codes.order_by('created_at')
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="codes-gratuits-{event.slug}.csv"'
+    )
+    response.write('\ufeff')  # BOM pour Excel FR
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(['Code', 'Bénéficiaire', 'Email', 'Statut', 'Utilisé le'])
+    for c in codes:
+        writer.writerow([
+            c.code,
+            c.beneficiary_name,
+            c.beneficiary_email,
+            'Utilisé' if c.used_at else 'Disponible',
+            c.used_at.strftime('%d/%m/%Y %H:%M') if c.used_at else '',
+        ])
+    return response
+
+def claim_free_ticket(request, slug):
+    """
+    Page PUBLIQUE : un bénéficiaire saisit son code gratuit et reçoit
+    son billet.
+
+    Flux (POST réussi) :
+    1. Valide le code (existe, non utilisé, lié à cet événement)
+    2. Crée une GuestOrder gratuite (total=0, PAID direct)
+    3. Crée un GuestOrderItem (unit_price=0)
+    4. Génère le GuestTicket
+    5. Marque le code utilisé
+    6. Log AuditLog FREE_TICKET_CLAIMED
+    7. Redirige vers tickets:guest_confirmation (même template que l'achat normal)
+    """
+    from django.db import transaction
+    from apps.tickets.models import (
+        FreeTicketCode, GuestOrder, GuestOrderItem, GuestTicket,
+    )
+    from apps.dashboard.models import AuditLog
+    from apps.dashboard.services import log_action
+
+    event = get_object_or_404(
+        Event,
+        slug=slug,
+        status=Event.Status.PUBLISHED,
+    )
+
+    # --- GET : affiche le formulaire ---
+    if request.method == 'GET':
+        return render(request, 'events/free_ticket_claim.html', {
+            'event': event,
+        })
+
+    # --- POST : traite la réclamation ---
+    raw_code = (request.POST.get('code') or '').strip().upper()
+
+    if not raw_code:
+        messages.error(request, "Veuillez saisir votre code.")
+        return render(request, 'events/free_ticket_claim.html', {
+            'event': event,
+        })
+
+    with transaction.atomic():
+        # 1. Verrouille + valide le code
+        code = (
+            FreeTicketCode.objects
+            .select_for_update()
+            .filter(event=event, code=raw_code)
+            .first()
+        )
+
+        if not code:
+            messages.error(
+                request,
+                "Code introuvable pour cet événement. Vérifiez la saisie."
+            )
+            return render(request, 'events/free_ticket_claim.html', {
+                'event': event,
+            })
+
+        if code.used_at is not None:
+            messages.error(
+                request,
+                "Ce code a déjà été utilisé."
+            )
+            return render(request, 'events/free_ticket_claim.html', {
+                'event': event,
+            })
+
+        # 2. Détermine le ticket_type (celui du code ou le 1er dispo)
+        ticket_type = code.ticket_type
+        if not ticket_type:
+            ticket_type = event.ticket_types.order_by('order', 'price').first()
+            if not ticket_type:
+                messages.error(
+                    request,
+                    "Aucun type de billet disponible pour cet événement."
+                )
+                return render(request, 'events/free_ticket_claim.html', {
+                    'event': event,
+                })
+
+        # 3. Split du nom bénéficiaire en first_name / last_name
+        name_parts = code.beneficiary_name.strip().split(maxsplit=1)
+        first_name = name_parts[0] if name_parts else 'Bénéficiaire'
+        last_name  = name_parts[1] if len(name_parts) > 1 else ''
+
+        # 4. Crée la GuestOrder gratuite (PAID direct)
+        guest_order = GuestOrder.objects.create(
+            first_name=first_name,
+            last_name=last_name,
+            email=code.beneficiary_email,
+            phone='',
+            subtotal=0,
+            total=0,
+            status=GuestOrder.Status.PAID,
+            payment_method='free_code',
+            payment_reference=code.code,
+            paid_at=timezone.now(),
+        )
+
+        # 5. Crée la ligne de commande
+        guest_item = GuestOrderItem.objects.create(
+            order=guest_order,
+            ticket_type=ticket_type,
+            quantity=1,
+            unit_price=0,
+            subtotal=0,
+        )
+
+        # 6. Génère le GuestTicket
+        guest_item.generate_tickets()
+        ticket = GuestTicket.objects.filter(order_item=guest_item).first()
+
+        # 7. Marque le code utilisé
+        code.used_at = timezone.now()
+        code.guest_ticket = ticket
+        code.save(update_fields=['used_at', 'guest_ticket'])
+
+        # 8. Log
+        log_action(
+            action=AuditLog.Action.FREE_TICKET_CLAIMED,
+            description=(
+                f"Billet gratuit réclamé pour « {event.title} » "
+                f"(bénéficiaire : {code.beneficiary_name}, code {code.code})."
+            ),
+            user=None,
+            model_name='GuestOrder',
+            object_id=guest_order.order_number,
+            metadata={
+                'event_slug':    event.slug,
+                'code':          code.code,
+                'guest_order':   guest_order.order_number,
+                'ticket_number': ticket.ticket_number if ticket else None,
+            },
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+    # ✅ Envoi de l'email de confirmation au bénéficiaire — même flux
+    # que pour un achat normal (voir guest_payment_return dans
+    # apps/tickets/views.py). Hors transaction pour ne pas bloquer
+    # l'enregistrement si le SMTP est lent.
+    try:
+        from apps.notifications.tasks import send_guest_ticket_email_async
+        send_guest_ticket_email_async.delay(str(guest_order.uuid))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Échec envoi email billet gratuit {guest_order.order_number}: {e}"
+        )
+
+    messages.success(
+        request,
+        f"🎉 Votre billet gratuit est prêt ! Code {code.code} validé. "
+        f"Un email de confirmation a été envoyé à {guest_order.email}."
+    )
+    return redirect(
+        'tickets:guest_confirmation',
+        access_token=str(guest_order.access_token),
+    )

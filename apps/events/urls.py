@@ -12,6 +12,12 @@ urlpatterns = [
     path('<slug:slug>/agents-scanner/', views.assign_scanner_agents, name='assign_scanner_agents'),
     path('agents-scanner/nouveau/', views.create_scanner_agent, name='create_scanner_agent'),
 
+    # 🎫 Codes de billets gratuits (Vague 2.2)
+    path('<slug:slug>/code-gratuit/',            views.claim_free_ticket,           name='claim_free_ticket'),
+    path('<slug:slug>/codes-gratuits/',          views.free_tickets_list,           name='free_tickets_list'),
+    path('<slug:slug>/codes-gratuits/generer/',  views.generate_free_tickets,       name='generate_free_tickets'),
+    path('<slug:slug>/codes-gratuits/export.csv', views.download_free_tickets_csv,   name='download_free_tickets_csv'),
+
     # ✅ Routes dynamiques EN DERNIER
     path('',                       views.event_list,   name='list'),
     path('<slug:slug>/',           views.event_detail, name='detail'),

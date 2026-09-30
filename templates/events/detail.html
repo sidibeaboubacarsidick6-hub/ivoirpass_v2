@@ -474,6 +474,16 @@
         <p class="text-muted small">Aucun type de billet configuré.</p>
         {% endfor %}
 
+        <!-- 🎫 Lien discret "J'ai un code gratuit" (Vague 2.2) -->
+        {% if event.free_tickets_quota > 0 %}
+        <div class="text-center mt-3">
+          <a href="{% url 'events:claim_free_ticket' event.slug %}"
+             class="text-muted small text-decoration-none">
+            <i class="bi bi-gift me-1"></i>J'ai un code gratuit
+          </a>
+        </div>
+        {% endif %}
+
         <!-- ============================================ -->
         <!-- 🔥 BOUTON ACHAT MODIFIÉ (Phase 4) 🔥          -->
         <!-- ============================================ -->

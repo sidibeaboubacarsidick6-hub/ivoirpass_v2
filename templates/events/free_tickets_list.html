@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Codes gratuits — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- En-tête -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <a href="{% url 'events:my_events' %}" class="text-muted text-decoration-none small">
+        <i class="bi bi-arrow-left me-1"></i>Mes événements
+      </a>
+      <h2 class="fw-bold mt-1 mb-0">
+        <i class="bi bi-gift text-orange me-2"></i>Codes de billets gratuits
+      </h2>
+      <p class="text-muted mb-0">{{ event.title }}</p>
+    </div>
+    <a href="{% url 'events:download_free_tickets_csv' event.slug %}"
+       class="btn btn-outline-secondary">
+      <i class="bi bi-download me-1"></i>Export CSV
+    </a>
+  </div>
+
+  <!-- Card quota -->
+  <div class="ip-card p-4 mb-4">
+    <div class="row g-3 text-center">
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Codes générés</div>
+        <div class="fw-bold fs-4 text-green">{{ event.free_tickets_generated }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Quota total</div>
+        <div class="fw-bold fs-4">{{ event.free_tickets_quota }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Restants</div>
+        <div class="fw-bold fs-4 {% if remaining_quota == 0 %}text-danger{% else %}text-orange{% endif %}">
+          {{ remaining_quota }}
+        </div>
+      </div>
+    </div>
+    {% if remaining_quota == 0 %}
+      <div class="alert alert-warning mt-3 mb-0 small">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        Quota atteint. Contactez l'administration pour augmenter votre quota.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Card ajout -->
+  {% if remaining_quota > 0 %}
+  <div class="ip-card p-4 mb-4">
+    <h5 class="fw-bold mb-3 text-green">
+      <i class="bi bi-plus-circle me-2"></i>Ajouter des bénéficiaires
+    </h5>
+    <form method="post" action="{% url 'events:generate_free_tickets' event.slug %}">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Type de billet</label>
+        <select name="ticket_type" class="form-select">
+          <option value="">— Premier type par défaut —</option>
+          {% for tt in ticket_types %}
+            <option value="{{ tt.pk }}">{{ tt.name }} ({{ tt.price|floatformat:0 }} FCFA)</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">
+          Bénéficiaires — 1 par ligne, format <code>Nom Prénom, email@domain.com</code>
+        </label>
+        <textarea name="beneficiaries" class="form-control" rows="6"
+                  placeholder="Jean Dupont, jean@test.com
+Marie Curie, marie@test.com"
+                  required></textarea>
+        <div class="text-muted small mt-1">
+          <i class="bi bi-info-circle me-1"></i>
+          Maximum {{ remaining_quota }} bénéficiaire(s) par soumission.
+          Séparateur accepté : virgule, point-virgule ou tabulation.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-orange">
+        <i class="bi bi-magic me-1"></i>Générer les codes
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Card liste -->
+  <div class="ip-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0 text-green">
+        <i class="bi bi-list-ul me-2"></i>Codes générés ({{ codes.count }})
+      </h5>
+      {% if codes %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="copy-all-btn">
+          <i class="bi bi-clipboard me-1"></i>Copier tout
+        </button>
+      {% endif %}
+    </div>
+
+    {% if codes %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Bénéficiaire</th>
+            <th>Type</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in codes %}
+          <tr>
+            <td><code class="fw-bold">{{ c.code }}</code></td>
+            <td>
+              <div class="fw-semibold">{{ c.beneficiary_name }}</div>
+              <div class="text-muted small">{{ c.beneficiary_email }}</div>
+            </td>
+            <td class="small text-muted">{{ c.ticket_type.name|default:"—" }}</td>
+            <td>
+              {% if c.used_at %}
+                <span class="badge bg-secondary">Utilisé</span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success">Disponible</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="text-muted mb-0">Aucun code généré pour l'instant.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  // Bouton "Copier tout" — copie code + bénéficiaire au format CSV
+  document.getElementById('copy-all-btn')?.addEventListener('click', () => {
+    const rows = document.querySelectorAll('table tbody tr');
+    const lines = Array.from(rows).map(tr => {
+      const code = tr.querySelector('code').textContent.trim();
+      const name = tr.querySelector('.fw-semibold').textContent.trim();
+      const email = tr.querySelector('.text-muted.small').textContent.trim();
+      return `${code};${name};${email}`;
+    });
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      const btn = document.getElementById('copy-all-btn');
+      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Copié !';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copier tout';
+      }, 2000);
+    });
+  });
+</script>
+{% endblock %}

@@ -513,6 +513,9 @@ class AuditLog(models.Model):
         # --- Billets ---
         TICKET_CREATED = 'ticket_created', _('Billet(s) généré(s)')
         TICKET_SCANNED = 'ticket_scanned', _('Billet scanné')
+        # --- Billets gratuits (Vague 2.2) ---
+        FREE_TICKETS_GENERATED = 'free_tickets_generated', _('Codes gratuits générés')
+        FREE_TICKET_CLAIMED    = 'free_ticket_claimed',    _('Billet gratuit réclamé')
         # --- Emails ---
         EMAIL_SENT = 'email_sent', _('Email envoyé')
         EMAIL_FAILED = 'email_failed', _('Email échoué')
