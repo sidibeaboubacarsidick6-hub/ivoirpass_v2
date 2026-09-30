@@ -193,7 +193,7 @@ class WithdrawBlockedWhenFrozenTests(TestCase):
         self.org = _make_organizer()
         self.wallet = OrganizerWallet.objects.create(
             organizer=self.org,
-            balance_available=Decimal('50000'),
+            balance_events_available=Decimal('50000'),
             is_frozen=True,
             frozen_reason='Test',
         )

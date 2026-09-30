@@ -456,10 +456,22 @@ def withdraw_request(request):
         errors = []
         if amount < MIN_AMOUNT:
             errors.append(f"Montant minimum : {MIN_AMOUNT:,} FCFA.")
-        if amount > wallet.balance_available:
+        # Vague 3.1 — vérif sur la bonne poche (events ou store)
+        source = request.POST.get('source', 'events')
+        if source not in ('events', 'store'):
+            source = 'events'
+
+        if source == 'events':
+            source_available = wallet.balance_events_available
+            source_label = 'Événements'
+        else:
+            source_available = wallet.balance_store_available
+            source_label = 'Boutique'
+
+        if amount > source_available:
             errors.append(
-                f"Solde insuffisant. Disponible : "
-                f"{wallet.balance_available:,} FCFA."
+                f"Solde insuffisant sur le portefeuille {source_label}. "
+                f"Disponible : {source_available:,} FCFA."
             )
         if not phone:
             errors.append("Numéro Mobile Money requis.")
@@ -480,17 +492,38 @@ def withdraw_request(request):
         else:
             with transaction.atomic():
                 wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
-                if amount > wallet.balance_available:
-                    messages.error(request, f"Solde insuffisant. Disponible : {wallet.balance_available:,} FCFA.")
+
+                # Re-vérif sur la bonne poche (après verrou)
+                if source == 'events':
+                    source_available = wallet.balance_events_available
+                    source_label = 'Événements'
+                else:
+                    source_available = wallet.balance_store_available
+                    source_label = 'Boutique'
+
+                if amount > source_available:
+                    messages.error(
+                        request,
+                        f"Solde insuffisant sur le portefeuille {source_label}. "
+                        f"Disponible : {source_available:,} FCFA."
+                    )
                     return redirect('dashboard:withdraw')
+
                 if wallet.withdrawal_requests.filter(status__in=[WithdrawalRequest.Status.PENDING, WithdrawalRequest.Status.PROCESSING]).exists():
                     messages.error(request, "Une demande est déjà en cours.")
                     return redirect('dashboard:wallet')
+
                 wr = WithdrawalRequest.objects.create(
                     wallet=wallet, amount=amount, fee=0, amount_net=amount,
                     payout_method=method, payout_phone=phone, payout_name=name,
+                    source=source,
                 )
-                wallet.reserve(wr.amount, description=f"Réservation reversement {wr.reference}", reference=wr.reference)
+                wallet.reserve(
+                    wr.amount,
+                    source=source,
+                    description=f"Réservation reversement {wr.reference}",
+                    reference=wr.reference,
+                )
 
             # Notifier l'admin
             from apps.notifications.models import AdminNotification
@@ -777,6 +810,7 @@ def verify_otp(request, reference):
                 withdrawal.save(update_fields=['status', 'admin_note'])
                 withdrawal.wallet.release_reserved(
                     withdrawal.amount,
+                    source=withdrawal.source,
                     description=f"Libération après rejet OTP {withdrawal.reference}",
                     reference=withdrawal.reference,
                 )

@@ -74,7 +74,11 @@ def bceao_report_view(request):
 class WalletTransactionInline(admin.TabularInline):
     model = WalletTransaction
     extra = 0
-    readonly_fields = ('type', 'amount', 'balance_after', 'description', 'reference', 'created_at')
+    readonly_fields = (
+        'type', 'source', 'amount', 'balance_after',
+        'description', 'reference', 'created_at',
+    )
+    fields = ('created_at', 'type', 'source', 'amount', 'balance_after', 'description', 'reference')
     can_delete = False
     max_num = 0
 
@@ -85,10 +89,57 @@ class WalletTransactionInline(admin.TabularInline):
 
 @admin.register(OrganizerWallet)
 class OrganizerWalletAdmin(admin.ModelAdmin):
-    list_display = ('organizer', 'balance_available', 'balance_pending', 'balance_withdrawn', 'preferred_payout_method', 'payout_phone')
+    list_display = (
+        'organizer',
+        'balance_events_available', 'balance_store_available',
+        'balance_available', 'balance_pending',
+        'balance_withdrawn',
+        'is_frozen', 'preferred_payout_method',
+    )
+    list_filter = ('is_frozen', 'preferred_payout_method')
     search_fields = ('organizer__email', 'organizer__first_name', 'payout_phone')
-    readonly_fields = ('balance_withdrawn', 'created_at', 'updated_at')
+    readonly_fields = (
+        'balance_events_available', 'balance_events_pending',
+        'balance_store_available', 'balance_store_pending',
+        'balance_available', 'balance_pending', 'balance_withdrawn',
+        'total_balance', 'created_at', 'updated_at',
+    )
     inlines = [WalletTransactionInline]
+
+    fieldsets = (
+        ('Organisateur', {
+            'fields': ('organizer',)
+        }),
+        ('Soldes Événements (billetterie)', {
+            'fields': (
+                'balance_events_available', 'balance_events_pending',
+            )
+        }),
+        ('Soldes Boutique (produits)', {
+            'fields': (
+                'balance_store_available', 'balance_store_pending',
+            )
+        }),
+        ('Totaux (calculés)', {
+            'fields': (
+                'balance_available', 'balance_pending',
+                'total_balance', 'balance_withdrawn',
+            )
+        }),
+        ('Reversement', {
+            'fields': ('preferred_payout_method', 'payout_phone', 'payout_name')
+        }),
+        ('État du wallet', {
+            'fields': ('is_frozen', 'frozen_reason')
+        }),
+        ('Dates', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def has_add_permission(self, request):
+        # Un wallet est créé automatiquement au premier crédit
+        return False
 
 
 # ============================================
@@ -97,11 +148,30 @@ class OrganizerWalletAdmin(admin.ModelAdmin):
 
 @admin.register(WithdrawalRequest)
 class WithdrawalRequestAdmin(admin.ModelAdmin):
-    list_display = ('reference', 'get_organizer', 'amount', 'payout_method', 'payout_phone', 'status_badge', 'created_at')
-    list_filter = ('status', 'payout_method')
+    list_display = (
+        'reference', 'get_organizer', 'amount', 'source_badge',
+        'payout_method', 'payout_phone', 'status_badge', 'created_at',
+    )
+    list_filter = ('status', 'source', 'payout_method')
     search_fields = ('reference', 'wallet__organizer__email', 'payout_phone')
-    readonly_fields = ('reference', 'amount_net', 'created_at', 'processed_at', 'completed_at', 'status', 'provider', 'provider_token', 'provider_transaction_id', 'provider_reference', 'provider_status', 'retry_count', 'last_error')
+    readonly_fields = (
+        'reference', 'amount_net', 'source', 'created_at', 'processed_at',
+        'completed_at', 'status', 'provider', 'provider_token',
+        'provider_transaction_id', 'provider_reference', 'provider_status',
+        'retry_count', 'last_error',
+    )
     actions = []
+
+    def source_badge(self, obj):
+        colors = {'events': '#1B7A3E', 'store': '#F47920'}
+        icons = {'events': '🎫', 'store': '👜'}
+        color = colors.get(obj.source, '#6c757d')
+        icon = icons.get(obj.source, '')
+        return format_html(
+            '<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;">{} {}</span>',
+            color, icon, obj.get_source_display(),
+        )
+    source_badge.short_description = "Source"
 
     def get_organizer(self, obj):
         return obj.wallet.organizer.get_full_name()
@@ -314,3 +384,47 @@ def export_admin_excel(request):
     response['Content-Disposition'] = 'attachment; filename="ivoirpass_export_complet.xlsx"'
     wb.save(response)
     return response
+
+# ============================================
+# WALLET TRANSACTION (vue admin — lecture seule)
+# ============================================
+
+@admin.register(WalletTransaction)
+class WalletTransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        'created_at', 'wallet_organizer', 'type', 'source',
+        'amount', 'balance_after', 'reference',
+    )
+    list_filter = ('type', 'source', 'created_at')
+    search_fields = (
+        'wallet__organizer__email',
+        'wallet__organizer__first_name',
+        'wallet__organizer__last_name',
+        'reference',
+        'description',
+    )
+    readonly_fields = (
+        'wallet', 'type', 'source', 'amount', 'balance_after',
+        'description', 'reference', 'created_at',
+    )
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+
+    def wallet_organizer(self, obj):
+        if not obj.wallet_id:
+            return '—'
+        return obj.wallet.organizer.get_full_name() or obj.wallet.organizer.email
+    wallet_organizer.short_description = 'Organisateur'
+    wallet_organizer.admin_order_field = 'wallet__organizer__first_name'
+
+    def has_add_permission(self, request):
+        # Les transactions sont créées par les services métier, jamais à la main
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Lecture seule
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # On ne supprime jamais une transaction (traçabilité)
+        return False

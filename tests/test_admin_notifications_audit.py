@@ -118,12 +118,12 @@ class AdminNotificationEmailTests(TestCase):
     def test_demande_reversement_notifie_admin(self):
         mail.outbox.clear()
 
-        wallet = OrganizerWallet.objects.create(
+        self.wallet = OrganizerWallet.objects.create(
             organizer=self.organizer,
-            balance_available=100000,
+            balance_events_available=100000,
         )
         withdrawal = WithdrawalRequest.objects.create(
-            wallet=wallet,
+            wallet=self.wallet,
             amount=50000,
             fee=1000,
             amount_net=49000,

@@ -654,6 +654,7 @@ class ProductOrder(models.Model):
 
                 wallet.credit(
                     amount=net_amount,
+                    source='store',
                     description=f"Vente boutique — {self.product.name}",
                     reference=self.order_number,
                 )
@@ -1100,6 +1101,7 @@ class GuestProductOrder(models.Model):
 
                 wallet.credit(
                     amount=net_amount,
+                    source='store',
                     description=f"Vente boutique — {self.product.name}",
                     reference=self.order_number,
                 )

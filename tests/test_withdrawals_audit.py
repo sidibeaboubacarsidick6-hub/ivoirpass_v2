@@ -23,8 +23,7 @@ class WalletCreditDebitTests(TestCase):
             email="orga@test.com", password="Pass123!",
             first_name="Orga", last_name="Nisateur", role=CustomUser.Role.ORGANIZER,
         )
-        self.wallet = OrganizerWallet.objects.create(organizer=self.organizer, balance_available=Decimal('0'))
-
+        self.wallet = OrganizerWallet.objects.create(organizer=self.organizer, balance_events_available=Decimal('0'))
     def test_credit_augmente_le_solde_et_trace_la_transaction(self):
         self.wallet.credit(Decimal('20000'), description="Vente billet", reference="ORD-1")
         self.wallet.refresh_from_db()
@@ -87,7 +86,7 @@ class WithdrawalRequestLifecycleTests(TestCase):
             email="orga2@test.com", password="Pass123!",
             first_name="Orga", last_name="Deux", role=CustomUser.Role.ORGANIZER,
         )
-        self.wallet = OrganizerWallet.objects.create(organizer=self.organizer, balance_available=Decimal('100000'))
+        self.wallet = OrganizerWallet.objects.create(organizer=self.organizer, balance_events_available=Decimal('100000'))
 
     def test_creation_demande_notifie_admin_par_email(self):
         mail.outbox.clear()

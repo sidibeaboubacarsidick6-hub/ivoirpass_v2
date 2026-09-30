@@ -22,24 +22,40 @@ class OrganizerWallet(models.Model):
         limit_choices_to={'role': 'organizer'}
     )
 
-    # Soldes
-    balance_available = models.DecimalField(
-        _('solde disponible'),
+    # ── Soldes ÉVÉNEMENTS (billetterie) — Vague 3.1 ─────────────────
+    balance_events_available = models.DecimalField(
+        _('solde événements disponible'),
         max_digits=14, decimal_places=0,
         default=0,
-        help_text="Montant disponible pour reversement"
+        help_text="Disponible pour reversement (ventes de billets)"
     )
-    balance_pending = models.DecimalField(
-        _('solde en attente'),
+    balance_events_pending = models.DecimalField(
+        _('solde événements en attente'),
         max_digits=14, decimal_places=0,
         default=0,
-        help_text="Montant en attente de confirmation (délai sécurité 48h)"
+        help_text="Réservé pour un reversement en cours (billetterie)"
     )
+
+    # ── Soldes BOUTIQUE (produits) — Vague 3.1 ──────────────────────
+    balance_store_available = models.DecimalField(
+        _('solde boutique disponible'),
+        max_digits=14, decimal_places=0,
+        default=0,
+        help_text="Disponible pour reversement (ventes boutique)"
+    )
+    balance_store_pending = models.DecimalField(
+        _('solde boutique en attente'),
+        max_digits=14, decimal_places=0,
+        default=0,
+        help_text="Réservé pour un reversement en cours (boutique)"
+    )
+
+    # ── Total global (non ventilé) ─────────────────────────────────
     balance_withdrawn = models.DecimalField(
         _('total reversé'),
         max_digits=14, decimal_places=0,
         default=0,
-        help_text="Total cumulé des reversements effectués"
+        help_text="Total cumulé des reversements effectués (événements + boutique)"
     )
 
     # Informations de reversement
@@ -110,99 +126,188 @@ class OrganizerWallet(models.Model):
     def total_balance(self):
         return self.balance_available + self.balance_pending
 
-    def credit(self, amount, description='', reference=''):
-        """Crédite le wallet après une vente confirmée."""
-        self.balance_available += amount
-        self.save(update_fields=['balance_available', 'updated_at'])
+    @property
+    def balance_available(self):
+        """Solde global disponible (événements + boutique)."""
+        return self.balance_events_available + self.balance_store_available
+
+    @property
+    def balance_pending(self):
+        """Solde global en attente (événements + boutique)."""
+        return self.balance_events_pending + self.balance_store_pending
+
+    def credit(self, amount, source='events', description='', reference=''):
+        """
+        Crédite le wallet après une vente confirmée.
+
+        Args:
+            amount : montant en FCFA
+            source : 'events' (billetterie) ou 'store' (boutique)
+        """
+        if source not in ('events', 'store'):
+            raise ValueError(f"Source inconnue : {source}")
+
+        if source == 'events':
+            self.balance_events_available += amount
+            update_fields = ['balance_events_available', 'updated_at']
+            balance_after = self.balance_events_available
+        else:  # store
+            self.balance_store_available += amount
+            update_fields = ['balance_store_available', 'updated_at']
+            balance_after = self.balance_store_available
+
+        self.save(update_fields=update_fields)
         WalletTransaction.objects.create(
-            wallet      = self,
-            type        = WalletTransaction.Type.CREDIT,
-            amount      = amount,
-            balance_after = self.balance_available,
-            description = description,
-            reference   = reference,
+            wallet        = self,
+            type          = WalletTransaction.Type.CREDIT,
+            amount        = amount,
+            source        = source,
+            balance_after = balance_after,
+            description   = description,
+            reference     = reference,
         )
 
-    def reserve(self, amount, description='', reference=''):
+    def reserve(self, amount, source='events', description='', reference=''):
         """Réserve un montant disponible pour un reversement en cours."""
-        if amount > self.balance_available:
-            raise ValueError("Solde insuffisant pour ce reversement.")
-        self.balance_available -= amount
-        self.balance_pending += amount
-        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
+        if source not in ('events', 'store'):
+            raise ValueError(f"Source inconnue : {source}")
+
+        if source == 'events':
+            if amount > self.balance_events_available:
+                raise ValueError("Solde événements insuffisant pour ce reversement.")
+            self.balance_events_available -= amount
+            self.balance_events_pending += amount
+            update_fields = [
+                'balance_events_available', 'balance_events_pending', 'updated_at',
+            ]
+            balance_after = self.balance_events_available
+        else:  # store
+            if amount > self.balance_store_available:
+                raise ValueError("Solde boutique insuffisant pour ce reversement.")
+            self.balance_store_available -= amount
+            self.balance_store_pending += amount
+            update_fields = [
+                'balance_store_available', 'balance_store_pending', 'updated_at',
+            ]
+            balance_after = self.balance_store_available
+
+        self.save(update_fields=update_fields)
         WalletTransaction.objects.create(
-            wallet=self,
-            type=WalletTransaction.Type.ADJUSTMENT,
-            amount=amount,
-            balance_after=self.balance_available,
-            description=description or 'Montant réservé pour reversement',
-            reference=reference,
+            wallet        = self,
+            type          = WalletTransaction.Type.ADJUSTMENT,
+            amount        = amount,
+            source        = source,
+            balance_after = balance_after,
+            description   = description or 'Montant réservé pour reversement',
+            reference     = reference,
         )
 
-    def complete_reserved(self, amount, description='', reference=''):
+    def complete_reserved(self, amount, source='events', description='', reference=''):
         """Finalise un reversement déjà réservé après confirmation provider."""
-        if amount > self.balance_pending:
-            raise ValueError("Montant réservé insuffisant pour finaliser ce reversement.")
-        self.balance_pending -= amount
+        if source not in ('events', 'store'):
+            raise ValueError(f"Source inconnue : {source}")
+
+        if source == 'events':
+            if amount > self.balance_events_pending:
+                raise ValueError("Montant réservé événements insuffisant.")
+            self.balance_events_pending -= amount
+            balance_after = self.balance_events_available
+            update_fields = [
+                'balance_events_pending', 'balance_withdrawn', 'updated_at',
+            ]
+        else:  # store
+            if amount > self.balance_store_pending:
+                raise ValueError("Montant réservé boutique insuffisant.")
+            self.balance_store_pending -= amount
+            balance_after = self.balance_store_available
+            update_fields = [
+                'balance_store_pending', 'balance_withdrawn', 'updated_at',
+            ]
+
         self.balance_withdrawn += amount
-        self.save(update_fields=['balance_withdrawn', 'balance_pending', 'updated_at'])
+        self.save(update_fields=update_fields)
         WalletTransaction.objects.create(
-            wallet=self,
-            type=WalletTransaction.Type.DEBIT,
-            amount=amount,
-            balance_after=self.balance_available,
-            description=description or 'Reversement confirmé',
-            reference=reference,
+            wallet        = self,
+            type          = WalletTransaction.Type.DEBIT,
+            amount        = amount,
+            source        = source,
+            balance_after = balance_after,
+            description   = description or 'Reversement confirmé',
+            reference     = reference,
         )
 
-    def release_reserved(self, amount, description='', reference=''):
+    def release_reserved(self, amount, source='events', description='', reference=''):
         """Libère un montant réservé après échec/annulation définitive."""
-        if amount > self.balance_pending:
-            raise ValueError("Montant réservé insuffisant pour libération.")
-        self.balance_pending -= amount
-        self.balance_available += amount
-        self.save(update_fields=['balance_available', 'balance_pending', 'updated_at'])
+        if source not in ('events', 'store'):
+            raise ValueError(f"Source inconnue : {source}")
+
+        if source == 'events':
+            if amount > self.balance_events_pending:
+                raise ValueError("Montant réservé événements insuffisant.")
+            self.balance_events_pending -= amount
+            self.balance_events_available += amount
+            update_fields = [
+                'balance_events_pending', 'balance_events_available', 'updated_at',
+            ]
+            balance_after = self.balance_events_available
+        else:  # store
+            if amount > self.balance_store_pending:
+                raise ValueError("Montant réservé boutique insuffisant.")
+            self.balance_store_pending -= amount
+            self.balance_store_available += amount
+            update_fields = [
+                'balance_store_pending', 'balance_store_available', 'updated_at',
+            ]
+            balance_after = self.balance_store_available
+
+        self.save(update_fields=update_fields)
         WalletTransaction.objects.create(
-            wallet=self,
-            type=WalletTransaction.Type.ADJUSTMENT,
-            amount=amount,
-            balance_after=self.balance_available,
-            description=description or 'Montant libéré après échec du reversement',
-            reference=reference,
+            wallet        = self,
+            type          = WalletTransaction.Type.ADJUSTMENT,
+            amount        = amount,
+            source        = source,
+            balance_after = balance_after,
+            description   = description or 'Montant libéré après échec du reversement',
+            reference     = reference,
         )
 
-    def debit(self, amount, description='', reference=''):
+    def debit(self, amount, source='events', description='', reference=''):
         # Compatibilité legacy : finalise un montant déjà réservé.
-        return self.complete_reserved(amount, description=description, reference=reference)
+        return self.complete_reserved(
+            amount, source=source, description=description, reference=reference,
+        )
 
-    def refund_charge(self, amount, description='', reference=''):
-        # Le coût intégral du remboursement client est supporté par l'organisateur.
+    def refund_charge(self, amount, source='events', description='', reference=''):
+        """Remboursement client — coût supporté par l'organisateur."""
         from decimal import Decimal
 
         amount = Decimal(str(amount))
         if amount <= 0:
             raise ValueError("Le montant du remboursement doit être positif.")
 
-        self.balance_available -= amount
-        self.save(update_fields=["balance_available", "updated_at"])
+        if source not in ('events', 'store'):
+            raise ValueError(f"Source inconnue : {source}")
 
+        if source == 'events':
+            self.balance_events_available -= amount
+            update_fields = ['balance_events_available', 'updated_at']
+            balance_after = self.balance_events_available
+        else:
+            self.balance_store_available -= amount
+            update_fields = ['balance_store_available', 'updated_at']
+            balance_after = self.balance_store_available
+
+        self.save(update_fields=update_fields)
         WalletTransaction.objects.create(
-            wallet=self,
-            type=WalletTransaction.Type.REFUND,
-            amount=amount,
-            balance_after=self.balance_available,
-            description=description or "Remboursement client — coût supporté par organisateur",
-            reference=reference,
+            wallet        = self,
+            type          = WalletTransaction.Type.REFUND,
+            amount        = amount,
+            source        = source,
+            balance_after = balance_after,
+            description   = description or "Remboursement client — coût supporté par organisateur",
+            reference     = reference,
         )
-
         return True
-
-    def __str__(self):
-        return (
-            f"{self.get_type_display()} — "
-            f"{self.amount} FCFA — "
-            f"{self.created_at.strftime('%d/%m/%Y')}"
-        )
 
 
 class WalletTransaction(models.Model):
@@ -215,7 +320,18 @@ class WalletTransaction(models.Model):
         DEBIT      = 'debit',      _('Débit (reversement)')
         ADJUSTMENT = 'adjustment', _('Ajustement manuel')
         REFUND     = 'refund',     _('Remboursement')
-
+    source = models.CharField(
+        _('source'),
+        max_length=20,
+        choices=[
+            ('events', 'Événements'),
+            ('store',  'Boutique'),
+            ('legacy', 'Legacy (avant Vague 3.1)'),
+        ],
+        default='legacy',
+        db_index=True,
+        help_text="Origine du mouvement (billetterie / boutique / pré-refonte).",
+    )
     wallet = models.ForeignKey(
         OrganizerWallet,
         on_delete=models.CASCADE,
@@ -305,6 +421,16 @@ class WithdrawalRequest(models.Model):
         on_delete=models.CASCADE,
         related_name='withdrawal_requests',
         verbose_name=_('wallet')
+    )
+    source = models.CharField(
+        _('source du reversement'),
+        max_length=20,
+        choices=[
+            ('events', 'Événements'),
+            ('store',  'Boutique'),
+        ],
+        default='events',
+        help_text="Portefeuille utilisé pour ce reversement.",
     )
 
     # Montant

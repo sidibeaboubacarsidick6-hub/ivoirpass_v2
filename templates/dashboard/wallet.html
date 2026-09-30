@@ -13,45 +13,70 @@
     </h4>
   </div>
 
-  <!-- Soldes -->
+  <!-- Solde général (Vague 3.1) -->
+  <div class="ip-card p-4 mb-4"
+       style="border-top:4px solid #1B7A3E; background:linear-gradient(135deg,#edf7f1,#fff);">
+    <div class="text-center">
+      <div class="text-muted small mb-1">Solde général disponible</div>
+      <div style="font-size:2.6rem; font-weight:900; color:#1B7A3E; line-height:1;">
+        {{ wallet.balance_available|floatformat:0 }}
+      </div>
+      <div class="text-muted small mb-3">FCFA</div>
+      <a href="{% url 'dashboard:withdraw' %}"
+         class="btn btn-green">
+        <i class="bi bi-send me-1"></i>Faire un reversement
+      </a>
+    </div>
+  </div>
+
+  <!-- Détail par portefeuille -->
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <div class="ip-card p-4 text-center"
            style="border-top:4px solid #1B7A3E;">
-        <div class="text-muted small mb-1">Disponible</div>
-        <div style="font-size:2rem; font-weight:900; color:#1B7A3E;">
-          {{ wallet.balance_available|floatformat:0 }}
+        <div class="text-muted small mb-1">
+          <i class="bi bi-ticket-perforated me-1 text-green"></i>Événements
+        </div>
+        <div style="font-size:1.8rem; font-weight:900; color:#1B7A3E;">
+          {{ wallet.balance_events_available|floatformat:0 }}
         </div>
         <div class="text-muted small">FCFA</div>
-        <a href="{% url 'dashboard:withdraw' %}"
-           class="btn btn-green btn-sm mt-3 w-100">
-          <i class="bi bi-send me-1"></i>Reverser
-        </a>
+        {% if wallet.balance_events_pending %}
+          <div class="text-muted mt-2" style="font-size:0.75rem;">
+            <i class="bi bi-clock me-1"></i>
+            {{ wallet.balance_events_pending|floatformat:0 }} en attente
+          </div>
+        {% endif %}
       </div>
     </div>
     <div class="col-md-4">
       <div class="ip-card p-4 text-center"
            style="border-top:4px solid #F47920;">
-        <div class="text-muted small mb-1">En attente</div>
-        <div style="font-size:2rem; font-weight:900; color:#F47920;">
-          {{ wallet.balance_pending|floatformat:0 }}
+        <div class="text-muted small mb-1">
+          <i class="bi bi-bag me-1 text-orange"></i>Boutique
+        </div>
+        <div style="font-size:1.8rem; font-weight:900; color:#F47920;">
+          {{ wallet.balance_store_available|floatformat:0 }}
         </div>
         <div class="text-muted small">FCFA</div>
-        <div class="text-muted mt-3" style="font-size:0.78rem;">
-          <i class="bi bi-clock me-1"></i>Disponible sous 48h
-        </div>
+        {% if wallet.balance_store_pending %}
+          <div class="text-muted mt-2" style="font-size:0.75rem;">
+            <i class="bi bi-clock me-1"></i>
+            {{ wallet.balance_store_pending|floatformat:0 }} en attente
+          </div>
+        {% endif %}
       </div>
     </div>
     <div class="col-md-4">
       <div class="ip-card p-4 text-center"
            style="border-top:4px solid #6c757d;">
         <div class="text-muted small mb-1">Total reversé</div>
-        <div style="font-size:2rem; font-weight:900; color:#6c757d;">
+        <div style="font-size:1.8rem; font-weight:900; color:#6c757d;">
           {{ wallet.balance_withdrawn|floatformat:0 }}
         </div>
         <div class="text-muted small">FCFA</div>
-        <div class="text-muted mt-3" style="font-size:0.78rem;">
-          Cumul total
+        <div class="text-muted mt-2" style="font-size:0.75rem;">
+          Cumul événements + boutique
         </div>
       </div>
     </div>

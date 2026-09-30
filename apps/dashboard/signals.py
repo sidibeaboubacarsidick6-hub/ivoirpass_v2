@@ -77,6 +77,7 @@ def _credit_from_ticket_order(instance, items_related_name='items'):
                 events_str = ', '.join(list(data['events'])[:2])
                 wallet.credit(
                     amount      = int(round(data['amount'])),
+                    source      = 'events',
                     description = f"Vente billetterie — {events_str}",
                     reference   = instance.order_number,
                 )

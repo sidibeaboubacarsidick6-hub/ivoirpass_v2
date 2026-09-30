@@ -154,8 +154,7 @@ def _retry_or_fail_payout(task, withdrawal_id, error):
     with transaction.atomic():
         withdrawal = WithdrawalRequest.objects.select_for_update().select_related('wallet').get(pk=withdrawal_id)
         if withdrawal.status != WithdrawalRequest.Status.COMPLETED:
-            withdrawal.wallet.release_reserved(amount, description=f"Libération après échec définitif {reference}", reference=reference)
-            withdrawal.status = WithdrawalRequest.Status.FAILED
+            withdrawal.wallet.release_reserved(amount, source=withdrawal.source, description=f"Libération après échec définitif {reference}", reference=reference)            withdrawal.status = WithdrawalRequest.Status.FAILED
             withdrawal.save(update_fields=['status'])
     return 'failed'
 
@@ -195,8 +194,7 @@ def check_payout_status(withdrawal_id):
     if withdrawal.retry_count <= 3:
         process_payout.apply_async(args=[withdrawal.pk], countdown=min(300, 60 * (2 ** (withdrawal.retry_count - 1))))
         return 'retrying'
-    withdrawal.wallet.release_reserved(withdrawal.amount, description=f"Libération après échec payout {withdrawal.reference}", reference=withdrawal.reference)
-    withdrawal.status = WithdrawalRequest.Status.FAILED
+    withdrawal.wallet.release_reserved(withdrawal.amount, source=withdrawal.source, description=f"Libération après échec payout {withdrawal.reference}", reference=withdrawal.reference)    withdrawal.status = WithdrawalRequest.Status.FAILED
     withdrawal.save(update_fields=['status'])
     return 'failed'
 
@@ -216,8 +214,7 @@ def finalize_payout_from_provider(withdrawal_id, payload):
             withdrawal.provider_transaction_id = payload.get('transaction_id', '') or payload.get('disburse_tx_id', '')
             withdrawal.provider_reference = payload.get('disburse_tx_id', '') or payload.get('provider_ref', '')
             if status == 'success':
-                withdrawal.wallet.complete_reserved(withdrawal.amount, description=f"Reversement PayDunya {withdrawal.reference}", reference=withdrawal.reference)
-                withdrawal.status = WithdrawalRequest.Status.COMPLETED
+                withdrawal.wallet.complete_reserved(withdrawal.amount, source=withdrawal.source, description=f"Reversement PayDunya {withdrawal.reference}", reference=withdrawal.reference)                withdrawal.status = WithdrawalRequest.Status.COMPLETED
                 withdrawal.completed_at = timezone.now()
                 withdrawal.processed_at = withdrawal.completed_at
                 withdrawal.save(update_fields=['provider_status', 'provider_transaction_id', 'provider_reference', 'status', 'completed_at', 'processed_at'])
@@ -231,8 +228,7 @@ def finalize_payout_from_provider(withdrawal_id, payload):
                     log_action(AuditLog.Action.PAYOUT_RETRY, f"Retry du reversement {withdrawal.reference}", obj=withdrawal, metadata={'amount': str(withdrawal.amount), 'retry_count': withdrawal.retry_count})
                     process_payout.apply_async(args=[withdrawal.pk], countdown=min(300, 60 * (2 ** (withdrawal.retry_count - 1))))
                     return 'retrying'
-                withdrawal.wallet.release_reserved(withdrawal.amount, description=f"Libération après échec définitif {withdrawal.reference}", reference=withdrawal.reference)
-                withdrawal.status = WithdrawalRequest.Status.FAILED
+                withdrawal.wallet.release_reserved(withdrawal.amount, source=withdrawal.source, description=f"Libération après échec définitif {withdrawal.reference}", reference=withdrawal.reference)                withdrawal.status = WithdrawalRequest.Status.FAILED
                 withdrawal.save(update_fields=['status'])
                 log_action(AuditLog.Action.PAYOUT_FAILED, f"Reversement {withdrawal.reference} définitivement échoué", obj=withdrawal, metadata={'amount': str(withdrawal.amount), 'error': withdrawal.last_error})
                 return 'failed'

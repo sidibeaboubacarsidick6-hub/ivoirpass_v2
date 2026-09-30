@@ -17,17 +17,37 @@
         </h4>
       </div>
 
-      <!-- Solde disponible -->
-      <div class="ip-card p-4 mb-4"
-           style="border-left:4px solid #1B7A3E; background:#edf7f1;">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <div class="text-muted small">Solde disponible</div>
-            <div style="font-size:1.8rem; font-weight:900; color:#1B7A3E;">
-              {{ wallet.balance_available|floatformat:0 }} FCFA
+      <!-- Soldes disponibles (Vague 3.1) -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <div class="ip-card p-3"
+               style="border-left:4px solid #1B7A3E; background:#edf7f1;">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="text-muted small">
+                  <i class="bi bi-ticket-perforated me-1"></i>Événements
+                </div>
+                <div style="font-size:1.4rem; font-weight:900; color:#1B7A3E;">
+                  {{ wallet.balance_events_available|floatformat:0 }} FCFA
+                </div>
+              </div>
             </div>
           </div>
-          <i class="bi bi-wallet2" style="font-size:2.5rem; color:#1B7A3E; opacity:0.3;"></i>
+        </div>
+        <div class="col-md-6">
+          <div class="ip-card p-3"
+               style="border-left:4px solid #F47920; background:#fff4e6;">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="text-muted small">
+                  <i class="bi bi-bag me-1"></i>Boutique
+                </div>
+                <div style="font-size:1.4rem; font-weight:900; color:#F47920;">
+                  {{ wallet.balance_store_available|floatformat:0 }} FCFA
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -37,6 +57,40 @@
         <form method="POST" x-data="{ method: 'wave' }">
           {% csrf_token %}
 
+          <!-- Source (Vague 3.1) -->
+          <div class="mb-4">
+            <label class="form-label fw-bold">
+              Portefeuille source *
+            </label>
+            <div class="d-flex gap-2">
+              <label class="flex-fill p-3 border rounded text-center"
+                     style="cursor:pointer;">
+                <input type="radio" name="source" value="events"
+                       checked
+                       onchange="document.getElementById('max-hint').innerText = '{{ wallet.balance_events_available|floatformat:0 }}';">
+                <div class="mt-2 fw-semibold">
+                  <i class="bi bi-ticket-perforated me-1 text-green"></i>
+                  Événements
+                </div>
+                <div class="text-muted small">
+                  {{ wallet.balance_events_available|floatformat:0 }} FCFA
+                </div>
+              </label>
+              <label class="flex-fill p-3 border rounded text-center"
+                     style="cursor:pointer;">
+                <input type="radio" name="source" value="store"
+                       onchange="document.getElementById('max-hint').innerText = '{{ wallet.balance_store_available|floatformat:0 }}';">
+                <div class="mt-2 fw-semibold">
+                  <i class="bi bi-bag me-1 text-orange"></i>
+                  Boutique
+                </div>
+                <div class="text-muted small">
+                  {{ wallet.balance_store_available|floatformat:0 }} FCFA
+                </div>
+              </label>
+            </div>
+          </div>
+
           <!-- Montant -->
           <div class="mb-4">
             <label class="form-label fw-bold">
@@ -45,12 +99,11 @@
             <input type="number" name="amount"
                    class="form-control form-control-lg"
                    min="{{ min_amount }}"
-                   max="{{ wallet.balance_available|floatformat:0 }}"
                    placeholder="{{ min_amount }}"
                    required />
             <div class="text-muted small mt-1">
               Minimum {{ min_amount|floatformat:0 }} FCFA —
-              Maximum {{ wallet.balance_available|floatformat:0 }} FCFA
+              Maximum <span id="max-hint">{{ wallet.balance_events_available|floatformat:0 }}</span> FCFA
             </div>
           </div>
 
