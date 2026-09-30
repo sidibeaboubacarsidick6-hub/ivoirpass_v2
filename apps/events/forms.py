@@ -18,7 +18,7 @@ class EventForm(forms.ModelForm):
             'start_date', 'end_date', 'doors_open',
             'venue_name', 'venue_address', 'venue_city',
             'online_link',
-            'cover_image', 'thumbnail', 'video_url',
+            'cover_image', 'thumbnail', 'video_url', 'video_file',
             'total_capacity',
             'status',
         ]
@@ -93,7 +93,11 @@ class EventForm(forms.ModelForm):
             }),
             'video_url': forms.URLInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'https://youtube.com/...',
+                'placeholder': 'https://youtube.com/... (ou uploadez un mp4 ci-dessous)',
+            }),
+            'video_file': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': 'video/mp4,.mp4',
             }),
             'total_capacity': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -120,7 +124,8 @@ class EventForm(forms.ModelForm):
             'online_link':       'Lien en ligne',
             'cover_image':       'Image de couverture (1200×600px)',
             'thumbnail':         'Miniature (400×400px)',
-            'video_url':         'Vidéo de présentation',
+            'video_url':         'Lien vidéo (YouTube/Vimeo)',
+            'video_file':        'Fichier vidéo mp4 (100 Mo max)',
             'total_capacity':    'Capacité totale (0 = illimité)',
             'status':            'Statut',
         }

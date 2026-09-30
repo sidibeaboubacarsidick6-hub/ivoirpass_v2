@@ -282,6 +282,42 @@
                 {% endfor %}
               {% endif %}
             </div>
+
+            <div class="col-12">
+              <div class="d-flex align-items-center gap-3 text-muted small my-1">
+                <hr class="flex-grow-1 m-0" />
+                <span class="fw-bold text-uppercase">OU</span>
+                <hr class="flex-grow-1 m-0" />
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-semibold small">{{ form.video_file.label }}</label>
+              {{ form.video_file }}
+              <div class="text-muted small mt-1">
+                <i class="bi bi-info-circle me-1 text-green"></i>
+                Fichier mp4 uniquement, 100 Mo max.
+                <strong>Prioritaire sur le lien ci-dessus</strong> si renseigné.
+              </div>
+              {% if event.video_file %}
+                <div class="mt-2 d-flex align-items-center gap-2">
+                  <span class="badge bg-success-subtle text-success small">
+                    <i class="bi bi-check-circle me-1"></i>Vidéo actuelle
+                  </span>
+                  <a href="{{ event.video_file.url }}" target="_blank" rel="noopener"
+                     class="small text-decoration-none">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Ouvrir
+                  </a>
+                </div>
+              {% endif %}
+              {% if form.video_file.errors %}
+                {% for error in form.video_file.errors %}
+                <div class="text-danger small mt-1">
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
           </div>
         </div>
 

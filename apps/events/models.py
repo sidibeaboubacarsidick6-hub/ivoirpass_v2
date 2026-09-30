@@ -4,10 +4,15 @@ IvoirPass V2 — Modèles des événements
 import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, FileExtensionValidator
 from django.utils.text import slugify
 from django.utils import timezone
 from django.conf import settings
+
+# Réutilisation du validateur de taille déjà utilisé dans la boutique
+# (évite la duplication et garde une seule source de vérité pour les
+# limites de fichiers). Voir apps/store/validators.py.
+from apps.store.validators import validate_file_size
 
 
 class Category(models.Model):
@@ -243,9 +248,26 @@ class Event(models.Model):
         help_text="Taille recommandée : 400×400px"
     )
     video_url = models.URLField(
-        _('URL vidéo de présentation'),
+        _('URL vidéo (YouTube/Vimeo)'),
         blank=True,
-        help_text="YouTube ou Vimeo"
+        help_text=(
+            "Lien YouTube ou Vimeo. OU uploadez un fichier mp4 ci-dessous. "
+            "Si les deux sont renseignés, le fichier uploadé est prioritaire."
+        )
+    )
+    video_file = models.FileField(
+        _('fichier vidéo (mp4)'),
+        upload_to='events/videos/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text=(
+            "Fichier vidéo mp4, 100 Mo maximum. OU renseignez un lien "
+            "YouTube/Vimeo ci-dessus."
+        ),
+        validators=[
+            FileExtensionValidator(['mp4']),
+            validate_file_size(100),
+        ],
     )
 
     # ============================================
@@ -393,6 +415,50 @@ class Event(models.Model):
         if self.total_capacity == 0:
             return 0
         return round((self.tickets_sold / self.total_capacity) * 100, 1)
+
+    @property
+    def video_embed_url(self):
+        """
+        URL exploitable pour afficher la vidéo de présentation.
+
+        - Si un fichier mp4 est uploadé → URL du fichier (balise <video>).
+        - Sinon si video_url pointe vers YouTube/Vimeo → URL embed
+          (balise <iframe>).
+        - Sinon → l'URL brute (le template fera un lien simple).
+        - Si aucune vidéo → None.
+
+        Le fichier uploadé est prioritaire sur le lien externe.
+        """
+        import re
+
+        # 1) Fichier uploadé prioritaire
+        if self.video_file:
+            try:
+                return self.video_file.url
+            except ValueError:
+                # Fichier référencé en base mais absent du storage
+                return None
+
+        # 2) Lien externe YouTube / Vimeo
+        url = (self.video_url or '').strip()
+        if not url:
+            return None
+
+        # YouTube : youtu.be/ID, youtube.com/watch?v=ID, /embed/ID, /shorts/ID
+        yt = re.search(
+            r'(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/))([A-Za-z0-9_-]{6,})',
+            url,
+        )
+        if yt:
+            return f'https://www.youtube.com/embed/{yt.group(1)}'
+
+        # Vimeo : vimeo.com/ID, vimeo.com/video/ID
+        vm = re.search(r'vimeo\.com/(?:video/)?(\d+)', url)
+        if vm:
+            return f'https://player.vimeo.com/video/{vm.group(1)}'
+
+        # 3) Fallback : URL brute
+        return url
 
     def get_absolute_url(self):
         from django.urls import reverse
