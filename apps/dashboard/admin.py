@@ -1,11 +1,14 @@
 """
 IvoirPass V2 — Administration du dashboard et wallet
 """
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django.utils import timezone
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import render
 from django.db.models import Sum
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, AuditLog, ReversalOTP, Dispute
@@ -86,6 +89,24 @@ class WalletTransactionInline(admin.TabularInline):
 # ============================================
 # ORGANIZER WALLET
 # ============================================
+class UnfreezeWalletsForm(forms.Form):
+    """Formulaire intermédiaire pour l'action bulk de dégel des wallets."""
+    reason = forms.CharField(
+        label="Raison du dégel",
+        required=True,
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'class': 'vLargeTextField',
+            'placeholder': (
+                "Ex : remboursements traités manuellement, "
+                "régularisation comptable effectuée, etc."
+            ),
+        }),
+        help_text=(
+            "Obligatoire. Sera tracée dans l'AuditLog et dans le wallet "
+            "pour référence future."
+        ),
+    )
 
 @admin.register(OrganizerWallet)
 class OrganizerWalletAdmin(admin.ModelAdmin):
@@ -105,6 +126,7 @@ class OrganizerWalletAdmin(admin.ModelAdmin):
         'total_balance', 'created_at', 'updated_at',
     )
     inlines = [WalletTransactionInline]
+    actions = ['unfreeze_wallets']
 
     fieldsets = (
         ('Organisateur', {
@@ -140,6 +162,108 @@ class OrganizerWalletAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Un wallet est créé automatiquement au premier crédit
         return False
+    
+        # ============================================
+    # 🔓 ACTION BULK : dégeler les wallets (Vague 3.1 bonus)
+    # ============================================
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                'unfreeze/',
+                self.admin_site.admin_view(self.unfreeze_wallets_view),
+                name='dashboard_organizerwallet_unfreeze',
+            ),
+        ]
+        return custom + urls
+
+    @admin.action(description="🔓 Dégeler les wallets sélectionnés")
+    def unfreeze_wallets(self, request, queryset):
+        """Redirige vers le formulaire intermédiaire pour saisir la raison."""
+        frozen_qs = queryset.filter(is_frozen=True)
+        if not frozen_qs.exists():
+            self.message_user(
+                request,
+                "Aucun wallet gelé dans la sélection.",
+                level=messages.WARNING,
+            )
+            return None
+
+        ids = ','.join(str(pk) for pk in frozen_qs.values_list('pk', flat=True))
+        url = reverse('admin:dashboard_organizerwallet_unfreeze')
+        return HttpResponseRedirect(f'{url}?ids={ids}')
+
+    def unfreeze_wallets_view(self, request):
+        """Vue intermédiaire : confirme le dégel avec une raison obligatoire."""
+        from .models import AuditLog
+        from .services import log_action
+
+        ids_raw = request.GET.get('ids', '') or request.POST.get('ids', '')
+        ids = [int(pk) for pk in ids_raw.split(',') if pk.strip().isdigit()]
+        wallets = OrganizerWallet.objects.filter(pk__in=ids, is_frozen=True)
+
+        if not wallets.exists():
+            self.message_user(
+                request,
+                "Aucun wallet gelé dans la sélection.",
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(
+                reverse('admin:dashboard_organizerwallet_changelist')
+            )
+
+        if request.method == 'POST':
+            form = UnfreezeWalletsForm(request.POST)
+            if form.is_valid():
+                reason = form.cleaned_data['reason'].strip()
+                unfrozen_count = 0
+
+                for wallet in wallets:
+                    old_reason = wallet.frozen_reason
+                    wallet.is_frozen = False
+                    wallet.frozen_reason = ''
+                    wallet.save(update_fields=['is_frozen', 'frozen_reason'])
+                    unfrozen_count += 1
+
+                    log_action(
+                        action=AuditLog.Action.WALLET_UNFROZEN,
+                        description=(
+                            f"Wallet dégelé pour {wallet.organizer.get_full_name() or wallet.organizer.email}. "
+                            f"Raison : {reason}"
+                        ),
+                        user=request.user,
+                        obj=wallet,
+                        metadata={
+                            'reason': reason,
+                            'old_frozen_reason': old_reason,
+                        },
+                        ip_address=request.META.get('REMOTE_ADDR'),
+                    )
+
+                self.message_user(
+                    request,
+                    f"{unfrozen_count} wallet(s) dégelé(s) avec succès.",
+                )
+                return HttpResponseRedirect(
+                    reverse('admin:dashboard_organizerwallet_changelist')
+                )
+        else:
+            form = UnfreezeWalletsForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title':   "Dégeler les wallets",
+            'wallets': wallets,
+            'form':    form,
+            'ids':     ids_raw,
+            'opts':    self.model._meta,
+        }
+        return TemplateResponse(
+            request,
+            'admin/dashboard/organizerwallet/unfreeze.html',
+            context,
+        )
 
 
 # ============================================

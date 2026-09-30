@@ -643,6 +643,8 @@ class AuditLog(models.Model):
         FREE_TICKETS_GENERATED      = 'free_tickets_generated',      _('Codes gratuits générés')
         FREE_TICKET_CLAIMED         = 'free_ticket_claimed',         _('Billet gratuit réclamé')
         FREE_TICKETS_QUOTA_CHANGED  = 'free_tickets_quota_changed',  _('Quota codes gratuits modifié')
+        # --- Wallet (Vague 3.1 bonus) ---
+        WALLET_UNFROZEN             = 'wallet_unfrozen',             _('Wallet dégelé')
         # --- Emails ---
         EMAIL_SENT = 'email_sent', _('Email envoyé')
         EMAIL_FAILED = 'email_failed', _('Email échoué')

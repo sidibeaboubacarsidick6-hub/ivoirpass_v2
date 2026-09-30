@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="ids" value="{{ ids }}">
+
+  <p>
+    Vous êtes sur le point de <strong>dégeler</strong>
+    <strong>{{ wallets.count }}</strong> wallet(s).
+    Ces organisateurs pourront à nouveau demander des reversements.
+  </p>
+
+  <table style="width:100%; margin: 16px 0; border-collapse: collapse;">
+    <thead>
+      <tr style="background:#f6f6f6;">
+        <th style="text-align:left; padding:8px;">Organisateur</th>
+        <th style="text-align:left; padding:8px;">Solde disponible</th>
+        <th style="text-align:left; padding:8px;">Raison du gel actuel</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for w in wallets %}
+      <tr style="border-top:1px solid #eee;">
+        <td style="padding:8px;">
+          {{ w.organizer.get_full_name|default:w.organizer.email }}
+          <br><small style="color:#888;">{{ w.organizer.email }}</small>
+        </td>
+        <td style="padding:8px;">{{ w.balance_available|floatformat:0 }} FCFA</td>
+        <td style="padding:8px; font-size:0.85em; color:#666;">
+          {{ w.frozen_reason|default:"—" }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <fieldset class="module aligned">
+    {{ form.as_p }}
+  </fieldset>
+
+  <div class="submit-row" style="margin-top:20px;">
+    <input type="submit" value="Confirmer le dégel" class="default">
+    <a href="{% url 'admin:dashboard_organizerwallet_changelist' %}"
+       class="button cancel-link" style="margin-left:12px;">Annuler</a>
+  </div>
+</form>
+{% endblock %}
