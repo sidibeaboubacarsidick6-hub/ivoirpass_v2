@@ -194,6 +194,41 @@ class MultiDayStep2Tests(TestCase):
             self.event.event_days.filter(name='Bonus').exists()
         )
 
+    def test_post_action_back_redirige_vers_etape_1(self):
+        """POST avec action=back redirige vers Étape 1 après sauvegarde."""
+        self.event.generate_event_days()
+        days = list(self.event.event_days.order_by('date'))
+        data = {
+            'event_days-TOTAL_FORMS': '3',
+            'event_days-INITIAL_FORMS': '3',
+            'event_days-MIN_NUM_FORMS': '0',
+            'event_days-MAX_NUM_FORMS': '1000',
+            'event_days-0-id': str(days[0].pk),
+            'event_days-0-date': days[0].date.strftime('%Y-%m-%d'),
+            'event_days-0-name': 'Soirée d\'ouverture',
+            'event_days-0-doors_open': '',
+            'event_days-1-id': str(days[1].pk),
+            'event_days-1-date': days[1].date.strftime('%Y-%m-%d'),
+            'event_days-1-name': '',
+            'event_days-1-doors_open': '',
+            'event_days-2-id': str(days[2].pk),
+            'event_days-2-date': days[2].date.strftime('%Y-%m-%d'),
+            'event_days-2-name': '',
+            'event_days-2-doors_open': '',
+            'action': 'back',
+        }
+        resp = self.client.post(
+            reverse('events:multi_day_step_2', args=[self.event.pk]),
+            data,
+        )
+        # Redirection vers étape 1
+        self.assertRedirects(
+            resp, reverse('events:multi_day_step_1')
+        )
+        # Le nom a bien été sauvegardé
+        days[0].refresh_from_db()
+        self.assertEqual(days[0].name, 'Soirée d\'ouverture')
+
 class MultiDayStep3Tests(TestCase):
     def setUp(self):
         self.org = _make_organizer()

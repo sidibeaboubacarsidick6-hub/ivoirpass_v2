@@ -913,6 +913,13 @@ def multi_day_step_2(request, event_id):
         formset = EventDayFormSet(request.POST, instance=event)
         if formset.is_valid():
             formset.save()
+
+            # 🆕 Si l'utilisateur a cliqué « Retour à l'Étape 1 »
+            action = request.POST.get('action', 'next')
+            if action == 'back':
+                messages.success(request, "Jours enregistrés.")
+                return redirect('events:multi_day_step_1')
+
             messages.success(
                 request,
                 f"{event.event_days.count()} jour(s) enregistré(s). "
