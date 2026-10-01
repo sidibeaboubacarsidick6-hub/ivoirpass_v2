@@ -225,7 +225,16 @@
           </h6>
 
           <div class="mb-3">
-            <label class="form-label fw-semibold small">{{ form.price.label }}</label>
+            <label class="form-label fw-semibold small"
+                   x-text="type === 'bundle'
+                       ? 'Prix bundle (numérique et physique) *'
+                       : (type === 'digital'
+                           ? 'Prix version numérique (FCFA) *'
+                           : (type === 'physical'
+                               ? 'Prix version physique (FCFA) *'
+                               : 'Prix (FCFA) *'))">
+              {{ form.price.label }}
+            </label>
             {{ form.price }}
           </div>
 
