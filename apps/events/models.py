@@ -414,6 +414,19 @@ class Event(models.Model):
 
         super().save(*args, **kwargs)
 
+    def delete(self, *args, **kwargs):
+        """
+        Vague 4 : bug — Django's collector ne ramasse pas les EventDay
+        liés lors de la suppression de l'Event (interaction FK
+        DEFERRABLE + M2M restaurée manuellement).
+
+        On les supprime manuellement avant le super().delete().
+        """
+        # Supprime d'abord les EventDay (les M2M through + ScanLog.event_day
+        # passent en CASCADE / SET_NULL automatiquement côté DB).
+        self.event_days.all().delete()
+        return super().delete(*args, **kwargs)
+
     def generate_event_days(self):
         """
         Génère les EventDays manquants depuis start_date / end_date.

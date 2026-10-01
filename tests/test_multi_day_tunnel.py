@@ -310,3 +310,37 @@ class MultiDayStep3Tests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.event.refresh_from_db()
         self.assertEqual(self.event.status, Event.Status.PUBLISHED)
+
+class EventDeleteCascadeTests(TestCase):
+    def setUp(self):
+        self.org = _make_organizer()
+        self.category = Category.objects.create(
+            name='Test', slug='test-delete-cascade',
+        )
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Event à supprimer',
+            slug='event-a-supprimer',
+            description='d',
+            short_description='0700000000',
+            category=self.category,
+            organizer=self.org,
+            start_date=now + timezone.timedelta(days=30),
+            end_date=now + timezone.timedelta(days=32),
+            status=Event.Status.DRAFT,
+            is_multi_day=True,
+        )
+        self.event.generate_event_days()
+
+    def test_suppression_event_supprime_aussi_les_jours(self):
+        """Supprimer un event supprime ses EventDays sans erreur FK."""
+        from apps.events.models import EventDay
+        self.assertEqual(EventDay.objects.filter(event=self.event).count(), 3)
+
+        event_pk = self.event.pk
+        self.event.delete()
+
+        # Event supprimé
+        self.assertFalse(Event.objects.filter(pk=event_pk).exists())
+        # EventDays supprimés
+        self.assertEqual(EventDay.objects.filter(event_id=event_pk).count(), 0)
