@@ -123,6 +123,8 @@ def validate_qr(request):
     result = None
     message = ''
     ticket_info = None
+    event_day = None
+    is_guest_ticket = False   # 🆕 évite un NameError si le QR est trop court
 
     parts = qr_data.split(':')
     if len(parts) < 4:
@@ -136,7 +138,7 @@ def validate_qr(request):
             # été acheté sans compte (GuestTicket) — il faut chercher dans
             # les deux, sinon tout billet "invité" est signalé introuvable
             # alors qu'il est parfaitement valide.
-            is_guest_ticket = False
+            # (is_guest_ticket est déjà déclaré à False en haut de la fonction)
             try:
                 ticket = Ticket.objects.select_for_update().select_related(
                     'order_item__ticket_type__event', 'order_item__order__buyer'
@@ -156,38 +158,88 @@ def validate_qr(request):
                 elif ticket.event.id != event.id:
                     result, message, color = ScanLog.Result.WRONG_EVENT, f"Billet pour : {ticket.event.title}", 'orange'
                 elif ticket.ticket_type.valid_date and ticket.ticket_type.valid_date != timezone.now().date():
+                    # Compatibilité legacy : ancien champ valid_date (sur TicketType)
                     result, message, color = ScanLog.Result.WRONG_EVENT, (
                         f"Ce billet n'est valable que le "
                         f"{ticket.ticket_type.valid_date.strftime('%d/%m/%Y')}."
                     ), 'orange'
-                elif ticket.status == 'void':
-                    result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé.", 'red'
-                elif ticket.status == 'used':
-                    result, message, color = ScanLog.Result.ALREADY_USED, f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}.", 'red'
                 else:
-                    result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
-                    if is_guest_ticket:
-                        ticket.mark_as_used()  # GuestTicket n'a pas de champ scanned_by (pas de compte)
-                        buyer_name = f"{ticket.order_item.order.first_name} {ticket.order_item.order.last_name}"
-                        buyer_email = ticket.order_item.order.email
+                    # 🎯 Vague 4 : logique multi-jours unifiée
+                    today = timezone.now().date()
+                    ok, reason, event_day = ticket.can_be_scanned_on(today)
+
+                    if not ok:
+                        # Détermine le type d'erreur selon le message
+                        if "annulé" in reason.lower():
+                            result, message, color = ScanLog.Result.TICKET_VOID, reason, 'red'
+                        elif "pas valide aujourd'hui" in reason.lower():
+                            result, message, color = ScanLog.Result.WRONG_EVENT, reason, 'orange'
+                        else:
+                            result, message, color = ScanLog.Result.ALREADY_USED, reason, 'red'
                     else:
-                        ticket.mark_as_used(scanned_by=request.user)
-                        buyer_name = ticket.buyer.get_full_name()
-                        buyer_email = ticket.buyer.email
-                    ticket_info = {
-                        'ticket_number': ticket.ticket_number,
-                        'ticket_type':   ticket.ticket_type.name,
-                        'buyer_name':    buyer_name,
-                        'buyer_email':   buyer_email,
-                        'event_title':   ticket.event.title,
-                    }
+                        # Vérif supplémentaire : déjà scanné CE JOUR pour multi-jours
+                        existing_today = None
+                        if event_day:  # c'est un billet multi-jours
+                            qs = ScanLog.objects.filter(
+                                session__event=event,
+                                event_day=event_day,
+                                result=ScanLog.Result.VALID,
+                            )
+                            if is_guest_ticket:
+                                qs = qs.filter(guest_ticket=ticket)
+                            else:
+                                qs = qs.filter(ticket=ticket)
+                            existing_today = qs.order_by('-scanned_at').first()
+
+                        if existing_today:
+                            result, message, color = ScanLog.Result.ALREADY_USED, (
+                                f"Déjà scanné aujourd'hui à "
+                                f"{existing_today.scanned_at.strftime('%H:%M')}."
+                            ), 'red'
+                        else:
+                            # ✅ Scan valide
+                            result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
+
+                            # Pour un billet multi-jours, on ne passe PAS en USED :
+                            # il doit rester VALID pour les jours suivants.
+                            if event_day:
+                                # Multi-jours : ne rien changer au status,
+                                # juste enregistrer la date du premier scan
+                                if not ticket.scanned_at:
+                                    ticket.scanned_at = timezone.now()
+                                    ticket.save(update_fields=['scanned_at'])
+                            else:
+                                # Billet legacy : comportement actuel
+                                if is_guest_ticket:
+                                    ticket.mark_as_used()
+                                else:
+                                    ticket.mark_as_used(scanned_by=request.user)
+
+                            if is_guest_ticket:
+                                buyer_name = f"{ticket.order_item.order.first_name} {ticket.order_item.order.last_name}"
+                                buyer_email = ticket.order_item.order.email
+                            else:
+                                buyer_name = ticket.buyer.get_full_name()
+                                buyer_email = ticket.buyer.email
+
+                            ticket_info = {
+                                'ticket_number': ticket.ticket_number,
+                                'ticket_type':   ticket.ticket_type.name,
+                                'buyer_name':    buyer_name,
+                                'buyer_email':   buyer_email,
+                                'event_title':   ticket.event.title,
+                                'event_day':     event_day.display_name if event_day else None,
+                            }
 
     # ScanLog.ticket ne référence que le modèle Ticket (comptes normaux) —
     # pour un GuestTicket, on ne lie pas cette ligne à un ticket précis,
     # mais le scan est bien validé/enregistré dans les compteurs de session.
+    # 🎯 Vague 4 : enregistre le guest_ticket + l'event_day
     ScanLog.objects.create(
         session=session,
         ticket=(ticket if ticket and not is_guest_ticket else None),
+        guest_ticket=(ticket if ticket and is_guest_ticket else None),
+        event_day=event_day if 'event_day' in dir() and result == ScanLog.Result.VALID else None,
         qr_data_received=qr_data[:500],
         result=result,
     )

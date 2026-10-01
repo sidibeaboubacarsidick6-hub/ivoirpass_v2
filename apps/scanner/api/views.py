@@ -99,6 +99,7 @@ def _process_scan(agent, event, session, qr_data, client_uuid=None):
     result = None
     message = ''
     color = 'red'
+    current_event_day = None   # 🎯 Vague 4 : jour concerné (multi-jours)
 
     if len(parts) < 4:
         result, message, color = ScanLog.Result.INVALID_QR, "QR Code invalide", 'red'
@@ -140,25 +141,58 @@ def _process_scan(agent, event, session, qr_data, client_uuid=None):
                             f"Ce billet est pour : {ticket.event.title}",
                             'orange',
                         )
-                    elif ticket.status == 'void':
-                        result, message, color = ScanLog.Result.TICKET_VOID, "Billet annulé", 'red'
-                    elif ticket.status == 'used':
-                        result, message, color = (
-                            ScanLog.Result.ALREADY_USED,
-                            f"Déjà utilisé le {ticket.scanned_at.strftime('%d/%m/%Y à %H:%M')}",
-                            'red',
-                        )
                     else:
-                        result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
-                        if is_guest_ticket:
-                            ticket.mark_as_used()
-                        else:
-                            ticket.mark_as_used(scanned_by=agent)
+                        # 🎯 Vague 4 : logique multi-jours unifiée
+                        today = timezone.now().date()
+                        ok, reason, day = ticket.can_be_scanned_on(today)
 
-    # Enregistrement du log
+                        if not ok:
+                            if "annulé" in reason.lower():
+                                result, message, color = ScanLog.Result.TICKET_VOID, reason, 'red'
+                            elif "pas valide aujourd'hui" in reason.lower():
+                                result, message, color = ScanLog.Result.WRONG_EVENT, reason, 'orange'
+                            else:
+                                result, message, color = ScanLog.Result.ALREADY_USED, reason, 'red'
+                        else:
+                            # Vérif : déjà scanné CE JOUR (multi-jours)
+                            existing_today = None
+                            if day:
+                                qs = ScanLog.objects.filter(
+                                    event_day=day,
+                                    result=ScanLog.Result.VALID,
+                                )
+                                if is_guest_ticket:
+                                    qs = qs.filter(guest_ticket=ticket)
+                                else:
+                                    qs = qs.filter(ticket=ticket)
+                                existing_today = qs.order_by('-scanned_at').first()
+
+                            if existing_today:
+                                result, message, color = ScanLog.Result.ALREADY_USED, (
+                                    f"Déjà scanné aujourd'hui à "
+                                    f"{existing_today.scanned_at.strftime('%H:%M')}"
+                                ), 'red'
+                            else:
+                                result, message, color = ScanLog.Result.VALID, "Accès autorisé ✅", 'green'
+                                current_event_day = day
+
+                                # Multi-jours : ne pas passer en USED
+                                if day:
+                                    if not ticket.scanned_at:
+                                        ticket.scanned_at = timezone.now()
+                                        ticket.save(update_fields=['scanned_at'])
+                                else:
+                                    if is_guest_ticket:
+                                        ticket.mark_as_used()
+                                    else:
+                                        ticket.mark_as_used(scanned_by=agent)
+
+    # Enregistrement du log (Vague 4 : + guest_ticket + event_day)
     ScanLog.objects.create(
         session=session,
         ticket=(ticket if ticket and not is_guest_ticket else None),
+        guest_ticket=(ticket if ticket and is_guest_ticket else None),
+        event_day=current_event_day,
         qr_data_received=qr_data[:500],
         result=result,
         client_uuid=client_uuid,
@@ -198,6 +232,7 @@ def _process_scan(agent, event, session, qr_data, client_uuid=None):
             'ticket_type': ticket.order_item.ticket_type.name,
             'buyer_name': buyer_name,
             'event_title': ticket.event.title,
+            'event_day': current_event_day.display_name if current_event_day else None,
         }
 
     return response_data

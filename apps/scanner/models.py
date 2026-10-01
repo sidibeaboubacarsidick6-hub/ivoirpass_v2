@@ -82,6 +82,18 @@ class ScanLog(models.Model):
         related_name='scan_logs',
         verbose_name=_('ticket')
     )
+    guest_ticket = models.ForeignKey(
+        'tickets.GuestTicket',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='scan_logs',
+        verbose_name=_('ticket invité'),
+        help_text=(
+            "Rempli uniquement pour les GuestTicket (achat sans compte). "
+            "Vague 4 — permet de tracer 'déjà scanné ce jour' sur les "
+            "billets multi-jours invités."
+        ),
+    )
     event_day = models.ForeignKey(
         'events.EventDay',
         on_delete=models.SET_NULL,

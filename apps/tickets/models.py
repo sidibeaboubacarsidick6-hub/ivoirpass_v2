@@ -345,6 +345,45 @@ class Ticket(models.Model):
         self.scanned_by = scanned_by
         self.save()
 
+    def can_be_scanned_on(self, target_date):
+        """
+        Vague 4 : ce billet peut-il être scanné à cette date ?
+
+        Retourne (ok: bool, reason: str, event_day: EventDay|None)
+
+        - Billet legacy (pas d'event_days) → ok si status != USED/VOID.
+          event_day=None (pas de contrainte de jour).
+        - Billet multi-jours → ok si target_date correspond à un EventDay
+          du ticket_type. event_day=EventDay trouvé.
+          Le check 'déjà scanné ce jour' est fait par le scanner (dépend
+          de ScanLog, import circulaire).
+        """
+        # Vérifs communes
+        if self.status == 'void':
+            return (False, "Billet annulé.", None)
+
+        event_days = self.ticket_type.event_days.all()
+
+        # Billet legacy (comportement actuel)
+        if not event_days.exists():
+            if self.status == 'used':
+                date_str = self.scanned_at.strftime('%d/%m/%Y à %H:%M') if self.scanned_at else '?'
+                return (False, f"Déjà utilisé le {date_str}.", None)
+            return (True, "", None)
+
+        # Billet multi-jours : le jour cible doit être couvert
+        event_day = event_days.filter(date=target_date).first()
+        if not event_day:
+            days = event_days.order_by('order', 'date')
+            days_str = ', '.join(d.display_name for d in days)
+            return (
+                False,
+                f"Ce billet n'est pas valide aujourd'hui. "
+                f"Jours valides : {days_str}.",
+                None,
+            )
+        return (True, "", event_day)
+
     @property
     def event(self):
         return self.order_item.ticket_type.event
@@ -677,6 +716,31 @@ class GuestTicket(models.Model):
         self.status = self.Status.USED
         self.scanned_at = timezone.now()
         self.save()
+
+    def can_be_scanned_on(self, target_date):
+        """Vague 4 : voir Ticket.can_be_scanned_on()."""
+        if self.status == 'void':
+            return (False, "Billet annulé.", None)
+
+        event_days = self.ticket_type.event_days.all()
+
+        if not event_days.exists():
+            if self.status == 'used':
+                date_str = self.scanned_at.strftime('%d/%m/%Y à %H:%M') if self.scanned_at else '?'
+                return (False, f"Déjà utilisé le {date_str}.", None)
+            return (True, "", None)
+
+        event_day = event_days.filter(date=target_date).first()
+        if not event_day:
+            days = event_days.order_by('order', 'date')
+            days_str = ', '.join(d.display_name for d in days)
+            return (
+                False,
+                f"Ce billet n'est pas valide aujourd'hui. "
+                f"Jours valides : {days_str}.",
+                None,
+            )
+        return (True, "", event_day)
 
     @property
     def event(self):
