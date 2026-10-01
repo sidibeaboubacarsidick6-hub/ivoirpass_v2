@@ -1,8 +1,251 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Billets — {{ event.title }}{% endblock %}
+
 {% block content %}
 <div class="container py-5">
-  <h1>Étape 3 — Billets</h1>
-  <p>À implémenter (V4-T3).</p>
-  <p>Event #{{ event.pk }} : {{ event.title }}</p>
+
+  <!-- Fil d'Ariane -->
+  <div class="d-flex justify-content-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>1. Infos</span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>2. Jours</span>
+      <span class="text-muted small">—</span>
+      <span class="badge bg-success">3. Billets</span>
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'events:multi_day_step_2' event.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-ticket-perforated me-2 text-orange"></i>
+        Billets et packs
+      </h4>
+      <p class="text-muted small mb-0">
+        Étape 3 sur 3 — {{ event.title }}
+      </p>
+    </div>
+  </div>
+
+  <!-- Rappel des jours -->
+  <div class="alert alert-light border small mb-4">
+    <i class="bi bi-info-circle text-green me-1"></i>
+    <strong>Vos jours :</strong>
+    {% for d in days %}
+      <span class="badge bg-success-subtle text-success me-1">
+        {{ d.display_name }}
+      </span>
+    {% endfor %}
+    <br>
+    <span class="text-muted">
+      Créez vos billets / packs ci-dessous et cochez pour chaque billet
+      les jours auxquels il donne accès. <strong>Laissez vide pour un pass intégral.</strong>
+    </span>
+  </div>
+
+  <form method="POST" id="tickets-form">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <div class="ip-card p-4 mb-4">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+        <i class="bi bi-ticket-perforated me-2 text-green"></i>
+        Types de billets / packs
+      </h6>
+
+      <div id="ticket-formset">
+        {% for ticket_form in formset %}
+        <div class="ticket-form border rounded-3 p-3 mb-3 bg-light">
+          {{ ticket_form.id }}
+          {# order non affiché à l'utilisateur (valeur par défaut 0) #}
+          <div style="display:none;">
+            {{ ticket_form.order }}
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="fw-bold small text-green">
+              <i class="bi bi-ticket me-1"></i>
+              Billet / Pack {% if forloop.first %}principal{% else %}{{ forloop.counter }}{% endif %}
+            </span>
+            {% if ticket_form.instance.pk %}
+            <div class="form-check form-check-inline">
+              {{ ticket_form.DELETE }}
+              <label class="form-check-label text-danger small">Supprimer</label>
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="row g-2">
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold">Nom *</label>
+              {{ ticket_form.name }}
+              <div class="text-muted" style="font-size:0.72rem;">
+                Ex : Pass 3 jours, Vendredi soir, VIP
+              </div>
+              {% if ticket_form.name.errors %}
+                {% for error in ticket_form.name.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Prix (FCFA) *</label>
+              {{ ticket_form.price }}
+              {% if ticket_form.price.errors %}
+                {% for error in ticket_form.price.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold">Quantité</label>
+              {{ ticket_form.quantity }}
+              <div class="text-muted" style="font-size:0.72rem;">0 = illimité</div>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold">Max / commande</label>
+              {{ ticket_form.max_per_order }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Description</label>
+              {{ ticket_form.description }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-calendar-check me-1 text-green"></i>
+                Jours couverts par ce billet
+              </label>
+              <div class="text-muted mb-2" style="font-size:0.72rem;">
+                Laissez tout décoché pour un <strong>pass intégral</strong>
+                (valable tous les jours). Cochez 1 jour = billet 1 jour.
+                Cochez plusieurs jours = pass multi-jours.
+              </div>
+              <div class="d-flex flex-wrap gap-3">
+                {% for day in days %}
+                <div class="form-check">
+                  <input type="checkbox"
+                         name="event_days_{{ forloop.parentloop.counter0 }}"
+                         value="{{ day.pk }}"
+                         id="tt-day-{{ forloop.parentloop.counter0 }}-{{ day.pk }}"
+                         class="form-check-input"
+                         {% if day in ticket_form.instance.event_days.all %}checked{% endif %}>
+                  <label class="form-check-label small"
+                         for="tt-day-{{ forloop.parentloop.counter0 }}-{{ day.pk }}">
+                    <strong>{{ day.display_name }}</strong>
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="col-md-4 d-flex align-items-end mt-2">
+              <div class="form-check">
+                {{ ticket_form.is_visible }}
+                <label class="form-check-label small">Visible publiquement</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <button type="button" class="btn btn-outline-success btn-sm mt-2"
+              onclick="addTicketForm()">
+        <i class="bi bi-plus-lg me-1"></i>Ajouter un billet / pack
+      </button>
+    </div>
+
+    <!-- Boutons d'action -->
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+      <button type="submit" name="action" value="back" class="btn btn-outline-secondary">
+        ← Retour à l'Étape 2
+      </button>
+      <div class="d-flex gap-2">
+        <button type="submit" name="action" value="draft" class="btn btn-outline-success">
+          <i class="bi bi-save me-1"></i>Enregistrer en brouillon
+        </button>
+        <button type="submit" name="action" value="publish" class="btn btn-orange">
+          <i class="bi bi-send-check me-1"></i>Publier l'événement
+        </button>
+      </div>
+    </div>
+
+    <!-- Bloc erreurs -->
+    {% if formset.errors %}
+    <div class="alert alert-danger mt-3">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <strong>Erreurs :</strong>
+      <ul class="mb-0 small">
+        {% for form_errors in formset.errors %}
+          {% for field, errors in form_errors.items %}
+            {% for error in errors %}
+            <li>{{ field|title }} : {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addTicketForm() {
+  const container = document.getElementById('ticket-formset');
+  const totalForms = document.getElementById('id_ticket_types-TOTAL_FORMS');
+  if (!container || !totalForms) return;
+
+  const formCount = parseInt(totalForms.value, 10);
+  const firstForm = container.querySelector('.ticket-form');
+  if (!firstForm) return;
+
+  const newForm = firstForm.cloneNode(true);
+  newForm.innerHTML = newForm.innerHTML.replace(
+    /ticket_types-\d+/g,
+    `ticket_types-${formCount}`
+  );
+
+  // Reset des valeurs
+  newForm.querySelectorAll('input, textarea, select').forEach(el => {
+    if (el.type === 'hidden') {
+      // Ne pas toucher aux hidden (csrf, id, etc.)
+      return;
+    }
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      el.checked = false;
+    } else if (el.name && el.name.endsWith('-order')) {
+      // 🆕 order obligatoire → on remet 0
+      el.value = '0';
+    } else if (el.name && el.name.endsWith('-is_visible')) {
+      // Visible par défaut
+      el.checked = true;
+    } else {
+      el.value = '';
+    }
+  });
+
+  // Met à jour l'index des checkboxes de jours
+  newForm.querySelectorAll('input[name^="event_days_"]').forEach(cb => {
+    cb.name = `event_days_${formCount}`;
+  });
+
+  const deleteCheck = newForm.querySelector('[id*="DELETE"]');
+  if (deleteCheck) {
+    deleteCheck.closest('.form-check')?.remove();
+  }
+
+  container.appendChild(newForm);
+  totalForms.value = formCount + 1;
+}
+</script>
 {% endblock %}

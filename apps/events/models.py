@@ -676,12 +676,8 @@ class TicketType(models.Model):
     )
     order = models.PositiveIntegerField(
         _('ordre d\'affichage'),
-        default=0
-    )
-
-    order = models.PositiveIntegerField(
-        _('ordre d\'affichage'),
-        default=0
+        default=0,
+        blank=True,
     )
     # ── Vague 4 : jours couverts par ce type de ticket ──────────────
     # Vide = billet legacy (1 scan définitif). Non vide = 1 scan par

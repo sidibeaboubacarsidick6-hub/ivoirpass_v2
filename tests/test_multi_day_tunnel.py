@@ -193,3 +193,85 @@ class MultiDayStep2Tests(TestCase):
         self.assertTrue(
             self.event.event_days.filter(name='Bonus').exists()
         )
+
+class MultiDayStep3Tests(TestCase):
+    def setUp(self):
+        self.org = _make_organizer()
+        self.client.force_login(self.org)
+        self.category = Category.objects.create(
+            name='Test', slug='test-step3-multiday',
+        )
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Festival Étape 3',
+            slug='festival-etape-3',
+            description='d',
+            short_description='0700000000',
+            category=self.category,
+            organizer=self.org,
+            start_date=now + timezone.timedelta(days=30),
+            end_date=now + timezone.timedelta(days=32),
+            status=Event.Status.DRAFT,
+            is_multi_day=True,
+        )
+        # Pré-génère les jours
+        self.event.generate_event_days()
+        self.days = list(self.event.event_days.order_by('date'))
+
+    def test_get_affiche_formset(self):
+        resp = self.client.get(
+            reverse('events:multi_day_step_3', args=[self.event.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Billets et packs')
+
+    def test_post_ajoute_billet_avec_jours(self):
+        """POST ajoute un billet lié à 2 jours."""
+        data = {
+            'ticket_types-TOTAL_FORMS': '1',
+            'ticket_types-INITIAL_FORMS': '0',
+            'ticket_types-MIN_NUM_FORMS': '0',
+            'ticket_types-MAX_NUM_FORMS': '1000',
+            'ticket_types-0-name': 'Pass 2 jours',
+            'ticket_types-0-price': '15000',
+            'ticket_types-0-quantity': '0',
+            'ticket_types-0-max_per_order': '10',
+            'ticket_types-0-order': '0',
+            'ticket_types-0-description': '',
+            # M2M : 2 jours
+            'event_days_0': [str(self.days[0].pk), str(self.days[1].pk)],
+            'action': 'draft',
+        }
+        resp = self.client.post(
+            reverse('events:multi_day_step_3', args=[self.event.pk]),
+            data,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(self.event.ticket_types.count(), 1)
+        tt = self.event.ticket_types.first()
+        self.assertEqual(tt.name, 'Pass 2 jours')
+        self.assertEqual(tt.event_days.count(), 2)
+
+    def test_post_publie_evenement(self):
+        """POST avec action=publish publie l'événement."""
+        data = {
+            'ticket_types-TOTAL_FORMS': '1',
+            'ticket_types-INITIAL_FORMS': '0',
+            'ticket_types-MIN_NUM_FORMS': '0',
+            'ticket_types-MAX_NUM_FORMS': '1000',
+            'ticket_types-0-name': 'Gratuit',
+            'ticket_types-0-price': '100',   # min 100 FCFA
+            'ticket_types-0-quantity': '0',
+            'ticket_types-0-max_per_order': '10',
+            'ticket_types-0-order': '0',
+            'ticket_types-0-description': '',
+            'event_days_0': [str(self.days[0].pk)],
+            'action': 'publish',
+        }
+        resp = self.client.post(
+            reverse('events:multi_day_step_3', args=[self.event.pk]),
+            data,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, Event.Status.PUBLISHED)

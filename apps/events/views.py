@@ -930,8 +930,99 @@ def multi_day_step_2(request, event_id):
 
 @organizer_required
 def multi_day_step_3(request, event_id):
-    """Étape 3/3 — à implémenter en V4-T3."""
+    """
+    Étape 3/3 du tunnel multi-jours : billets et packs.
+
+    - GET : formset vide + rappel des jours
+    - POST : valide, sauve les billets + M2M jours, gère 3 actions :
+      'back'    → retour à l'étape 2 (après sauvegarde)
+      'draft'   → reste en brouillon
+      'publish' → publie l'événement (KYC requis si billets payants)
+    """
     event = get_object_or_404(Event, pk=event_id, organizer=request.user)
+
+    if not event.event_days.exists():
+        messages.warning(
+            request,
+            "Définissez d'abord les jours de votre événement."
+        )
+        return redirect('events:multi_day_step_2', event_id=event.pk)
+
+    days = list(event.event_days.order_by('order', 'date'))
+    formset = TicketTypeFormSet(instance=event)
+
+    if request.method == 'POST':
+        formset = TicketTypeFormSet(request.POST, instance=event)
+
+        if formset.is_valid():
+            # Vague 4 : force order=0 sur les forms dont la valeur est vide
+            # (le champ a blank=True, mais Django enverrait NULL en DB sinon).
+            for form in formset.forms:
+                if form.cleaned_data and not form.cleaned_data.get('DELETE'):
+                    if form.cleaned_data.get('order') in (None, ''):
+                        form.instance.order = 0
+
+            formset.save()
+
+            # M2M manuelle : associer les jours à chaque billet
+            for i, ticket_form in enumerate(formset.forms):
+                if ticket_form.cleaned_data.get('DELETE'):
+                    continue
+                if not ticket_form.instance.pk:
+                    continue
+                day_ids = request.POST.getlist(f'event_days_{i}')
+                ticket_form.instance.event_days.set(day_ids)
+
+            # Action demandée par l'utilisateur
+            action = request.POST.get('action', 'draft')
+
+            if action == 'back':
+                messages.success(request, "Billets enregistrés.")
+                return redirect('events:multi_day_step_2', event_id=event.pk)
+
+            # Met à jour le prix minimum
+            prices = event.ticket_types.values_list('price', flat=True)
+            if prices:
+                event.min_price = min(prices)
+
+            if action == 'publish':
+                # Vérif KYC si billets payants
+                has_paid = any(
+                    p > 0 for p in prices
+                ) if prices else False
+
+                if has_paid and not request.user.is_organizer_verified:
+                    event.save(update_fields=['min_price'])
+                    messages.error(
+                        request,
+                        "🔒 Pour publier un événement payant, complétez d'abord "
+                        "votre KYC dans votre profil organisateur.",
+                        extra_tags='danger kyc-persistent',
+                    )
+                    return redirect('events:multi_day_step_3', event_id=event.pk)
+
+                event.status = Event.Status.PUBLISHED
+                if not event.published_at:
+                    event.published_at = timezone.now()
+                event.save()
+                messages.success(
+                    request,
+                    f"🎉 Événement « {event.title} » publié !"
+                )
+            else:  # draft
+                event.save(update_fields=['min_price'])
+                messages.success(
+                    request,
+                    f"Événement enregistré en brouillon avec "
+                    f"{event.ticket_types.count()} billet(s)."
+                )
+
+            return redirect('events:my_events')
+        else:
+            messages.error(request, "Corrigez les erreurs ci-dessous.")
+
     return render(request, 'events/multi_day/step_3.html', {
         'event': event,
+        'formset': formset,
+        'days': days,
     })
