@@ -6,8 +6,8 @@
 {% block content %}
 <div class="container py-5">
   <div class="row justify-content-center">
-    <div class="col-lg-8">
-      
+    <div class="col-lg-9">
+
       <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
@@ -15,38 +15,348 @@
         </ol>
       </nav>
 
-      <h1 class="fw-bold mb-4">Politique de confidentialité</h1>
+      <h1 class="fw-bold mb-2">Politique de Confidentialité</h1>
+      <p class="text-muted small mb-3">
+        <i class="bi bi-calendar3 me-1"></i>Dernière mise à jour : Juillet 2026
+      </p>
       <div class="section-divider mb-4"></div>
-      
-      <p class="text-muted">Dernière mise à jour : {% now "d F Y" %}</p>
 
-      <div class="mt-4">
-        <h5 class="fw-bold mt-4">1. Collecte des données</h5>
-        <p class="text-muted">Nous collectons les informations que vous nous fournissez lors de la création de votre compte : nom, email, numéro de téléphone.</p>
+      <p class="text-muted">
+        La présente Politique de Confidentialité décrit la manière dont
+        <strong>MKS Soft Technologies</strong>, éditeur de la plateforme IvoirPass,
+        collecte, utilise, conserve et protège les données à caractère personnel de ses
+        Utilisateurs, conformément à la <strong>Loi n° 2013-450 du 19 juin 2013</strong>
+        relative à la protection des données à caractère personnel en Côte d'Ivoire.
+      </p>
 
-        <h5 class="fw-bold mt-4">2. Utilisation des données</h5>
-        <p class="text-muted">Vos données sont utilisées pour :<br>
-          - Créer et gérer votre compte<br>
-          - Traiter vos commandes<br>
-          - Vous envoyer des confirmations et notifications<br>
-          - Améliorer nos services
-        </p>
-
-        <h5 class="fw-bold mt-4">3. Protection des données</h5>
-        <p class="text-muted">Nous mettons en œuvre des mesures de sécurité pour protéger vos données personnelles contre tout accès non autorisé.</p>
-
-        <h5 class="fw-bold mt-4">4. Partage des données</h5>
-        <p class="text-muted">Vos données ne sont partagées qu'avec :<br>
-          - Les organisateurs pour la réservation de vos billets<br>
-          - Nos partenaires de paiement pour traiter vos transactions
-        </p>
-
-        <h5 class="fw-bold mt-4">5. Cookies</h5>
-        <p class="text-muted">Nous utilisons des cookies pour améliorer votre expérience sur notre site. Vous pouvez les désactiver dans les paramètres de votre navigateur.</p>
-
-        <h5 class="fw-bold mt-4">6. Vos droits</h5>
-        <p class="text-muted">Vous avez le droit d'accéder, modifier ou supprimer vos données personnelles. Contactez-nous pour toute demande.</p>
+      <!-- Article 1 -->
+      <h5 class="fw-bold mt-5 text-green">Article 1 – Responsable du traitement</h5>
+      <p class="text-muted">Le responsable du traitement des données collectées via la plateforme IvoirPass est :</p>
+      <div class="ip-card p-3 mb-3">
+        <p class="mb-1"><strong>MKS Soft Technologies</strong></p>
+        <p class="mb-1">Abidjan, Côte d'Ivoire</p>
+        <p class="mb-1">Email : <a href="mailto:infos@mks-soft-technologies.com">infos@mks-soft-technologies.com</a></p>
+        <p class="mb-0">Téléphone : (+225) 07 59 87 21 61 / 05 84 04 49 39</p>
       </div>
+      <p class="text-muted">
+        Conformément à la réglementation ivoirienne, MKS Soft Technologies a désigné un
+        Correspondant à la Protection des Données à Caractère Personnel auprès duquel
+        les Utilisateurs peuvent exercer leurs droits.<br>
+        <strong>Contact du Correspondant :</strong>
+        <a href="mailto:infos@mks-soft-technologies.com">infos@mks-soft-technologies.com</a>
+      </p>
+
+      <!-- Article 2 -->
+      <h5 class="fw-bold mt-5 text-green">Article 2 – Données collectées</h5>
+      <p class="text-muted">Dans le cadre de l'utilisation de la plateforme, MKS Soft Technologies collecte les catégories de données suivantes :</p>
+
+      <h6 class="fw-semibold mt-3">2.1 Données d'identification</h6>
+      <ul class="text-muted">
+        <li>Nom, prénoms</li>
+        <li>Date et lieu de naissance (pour les Organisateurs)</li>
+        <li>Numéro de téléphone</li>
+        <li>Adresse email</li>
+        <li>Photographie de profil (optionnelle)</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">2.2 Données de connexion et d'utilisation</h6>
+      <ul class="text-muted">
+        <li>Adresse IP</li>
+        <li>Données de navigation (pages consultées, durée de visite)</li>
+        <li>Type d'appareil et système d'exploitation</li>
+        <li>Identifiants de connexion</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">2.3 Données transactionnelles</h6>
+      <ul class="text-muted">
+        <li>Historique des achats (tickets, biens culturels)</li>
+        <li>Détails des paiements (montant, date, moyen de paiement utilisé)</li>
+        <li>Informations de livraison (adresse, numéro de suivi)</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">2.4 Données de localisation</h6>
+      <ul class="text-muted">
+        <li>Localisation géographique (avec consentement explicite, pour les événements à proximité)</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">2.5 Données KYC (Know Your Customer) pour les Organisateurs</h6>
+      <ul class="text-muted">
+        <li>Pièce d'identité (carte nationale, passeport)</li>
+        <li>Justificatif de domicile</li>
+        <li>Informations relatives à l'entreprise (RCCM, attestation fiscale)</li>
+      </ul>
+      <p class="text-muted">
+        Conformément à la réglementation BCEAO applicable aux établissements de paiement
+        et fintechs, MKS Soft Technologies met en œuvre des mesures de vigilance à
+        l'égard de la clientèle pour l'identification et la vérification de l'identité
+        des Organisateurs.
+      </p>
+
+      <!-- Article 3 -->
+      <h5 class="fw-bold mt-5 text-green">Article 3 – Finalités du traitement</h5>
+      <p class="text-muted">Les données collectées sont traitées pour les finalités suivantes :</p>
+
+      <h6 class="fw-semibold mt-3">3.1 Gestion des comptes et des services</h6>
+      <ul class="text-muted">
+        <li>Création et gestion des Comptes Utilisateurs</li>
+        <li>Traitement des commandes et des transactions</li>
+        <li>Génération et validation des tickets (QR codes)</li>
+        <li>Livraison des biens culturels physiques</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">3.2 Communication et notifications</h6>
+      <ul class="text-muted">
+        <li>Envoi de confirmations de commande</li>
+        <li>Notifications relatives aux événements (rappels, changements)</li>
+        <li>Informations sur les promotions et nouveautés (avec consentement préalable)</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">3.3 Sécurité et prévention de la fraude</h6>
+      <ul class="text-muted">
+        <li>Détection et prévention des transactions frauduleuses</li>
+        <li>Vérification de l'identité des Organisateurs (KYC)</li>
+        <li>Surveillance des connexions suspectes</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">3.4 Conformité légale et réglementaire</h6>
+      <ul class="text-muted">
+        <li>Respect des obligations en matière de lutte contre le blanchiment de capitaux et le financement du terrorisme (LBC/FT)</li>
+        <li>Réponse aux réquisitions des autorités judiciaires compétentes</li>
+        <li>Conservation des preuves en cas de litige</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">3.5 Amélioration des services</h6>
+      <ul class="text-muted">
+        <li>Analyse statistique de l'utilisation de la plateforme</li>
+        <li>Développement de nouvelles fonctionnalités</li>
+        <li>Formation du personnel et amélioration des procédures internes</li>
+      </ul>
+
+      <!-- Article 4 -->
+      <h5 class="fw-bold mt-5 text-green">Article 4 – Base légale du traitement</h5>
+      <p class="text-muted">Le traitement des données personnelles par MKS Soft Technologies repose sur :</p>
+      <ul class="text-muted">
+        <li><strong>L'exécution du contrat :</strong> traitement nécessaire à la fourniture des services de billetterie et de distribution culturelle ;</li>
+        <li><strong>Le consentement :</strong> pour l'envoi de communications marketing et la géolocalisation ;</li>
+        <li><strong>L'intérêt légitime :</strong> pour la prévention de la fraude et la sécurité de la plateforme ;</li>
+        <li><strong>L'obligation légale :</strong> pour le respect des obligations en matière de LBC/FT et de conservation des données.</li>
+      </ul>
+
+      <!-- Article 5 -->
+      <h5 class="fw-bold mt-5 text-green">Article 5 – Destinataires des données</h5>
+      <p class="text-muted">Les données à caractère personnel peuvent être communiquées aux destinataires suivants :</p>
+
+      <h6 class="fw-semibold mt-3">5.1 Destinataires internes</h6>
+      <ul class="text-muted">
+        <li>Services internes de MKS Soft Technologies concernés (support client, comptabilité, direction).</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">5.2 Prestataires techniques</h6>
+      <ul class="text-muted">
+        <li>Prestataires de services de paiement (CinetPay, FedaPay, Paydunya) pour le traitement des transactions ;</li>
+        <li>Prestataires d'hébergement et de stockage (AWS, OVH, Cloudflare) ;</li>
+        <li>Prestataires d'envoi d'emails et de SMS (SendGrid, Orange CI).</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">5.3 Organisateurs d'événements</h6>
+      <ul class="text-muted">
+        <li>Pour les besoins de gestion des événements et du contrôle d'accès, certaines données (nom, prénom, type de ticket) peuvent être communiquées à l'Organisateur concerné.</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">5.4 Autorités compétentes</h6>
+      <p class="text-muted">Conformément à la réglementation ivoirienne, les données peuvent être communiquées :</p>
+      <ul class="text-muted">
+        <li>Au Procureur de la République ;</li>
+        <li>Aux Officiers de Police Judiciaire munis d'une réquisition ;</li>
+        <li>Aux agents assermentés de l'Autorité de Protection (ARTCI) ;</li>
+        <li>Aux autorités et administrations publiques ivoiriennes dans le cadre de leurs missions.</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">5.5 Transfert de données à l'étranger</h6>
+      <p class="text-muted">
+        Certains prestataires techniques peuvent être situés hors de Côte d'Ivoire.
+        Conformément à l'article 7 de la Loi n° 2013-450, tout transfert de données à
+        destination d'un pays tiers est soumis à l'autorisation préalable de l'Autorité
+        de Protection (ARTCI).
+      </p>
+
+      <!-- Article 6 -->
+      <h5 class="fw-bold mt-5 text-green">Article 6 – Durée de conservation des données</h5>
+      <p class="text-muted">
+        Les données à caractère personnel sont conservées pour une durée conforme aux
+        exigences légales et réglementaires :
+      </p>
+
+      <div class="table-responsive mb-3">
+        <table class="table table-bordered table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Catégorie de données</th>
+              <th>Durée de conservation</th>
+            </tr>
+          </thead>
+          <tbody class="text-muted">
+            <tr>
+              <td>Données de compte utilisateur</td>
+              <td>Durée de la relation contractuelle + 5 ans</td>
+            </tr>
+            <tr>
+              <td>Données transactionnelles</td>
+              <td>5 ans (obligations comptables et fiscales)</td>
+            </tr>
+            <tr>
+              <td>Données KYC Organisateurs</td>
+              <td>5 ans après la fin de la relation d'affaires</td>
+            </tr>
+            <tr>
+              <td>Logs de connexion et d'accès</td>
+              <td>6 mois à 1 an</td>
+            </tr>
+            <tr>
+              <td>Données de prospection marketing</td>
+              <td>3 ans à compter du dernier contact, ou jusqu'au retrait du consentement</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted">
+        À l'expiration de ces délais, les données sont supprimées ou anonymisées de
+        manière sécurisée.
+      </p>
+
+      <!-- Article 7 -->
+      <h5 class="fw-bold mt-5 text-green">Article 7 – Droits des Utilisateurs</h5>
+      <p class="text-muted">
+        Conformément aux articles 9 et 29 à 34 de la Loi n° 2013-450, tout Utilisateur
+        dispose des droits suivants :
+      </p>
+      <ul class="text-muted">
+        <li><strong>Droit d'accès :</strong> obtenir une copie des données personnelles détenues ;</li>
+        <li><strong>Droit de rectification :</strong> corriger les données inexactes ou incomplètes ;</li>
+        <li><strong>Droit d'opposition :</strong> s'opposer au traitement de ses données pour des motifs légitimes ;</li>
+        <li><strong>Droit à l'effacement :</strong> demander la suppression de ses données (sous réserve des obligations légales de conservation) ;</li>
+        <li><strong>Droit à la portabilité :</strong> recevoir ses données dans un format structuré et lisible ;</li>
+        <li><strong>Droit de retrait du consentement :</strong> retirer à tout moment son consentement au traitement fondé sur celui-ci.</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">Exercice des droits</h6>
+      <p class="text-muted">
+        Les droits peuvent être exercés auprès du Correspondant à la Protection des
+        Données désigné par MKS Soft Technologies :
+      </p>
+      <ul class="text-muted">
+        <li><strong>Email :</strong> <a href="mailto:infos@mks-soft-technologies.com">infos@mks-soft-technologies.com</a></li>
+        <li><strong>Courrier :</strong> MKS Soft Technologies – À l'attention du Correspondant DCP – Abidjan, Côte d'Ivoire</li>
+      </ul>
+      <p class="text-muted">
+        MKS Soft Technologies s'engage à répondre à toute demande dans un délai maximal
+        de <strong>30 jours</strong> à compter de sa réception.
+      </p>
+      <p class="text-muted">
+        En cas de difficulté, l'Utilisateur peut introduire une réclamation auprès de
+        l'<strong>Autorité de Régulation des Télécommunications/TIC de Côte d'Ivoire
+        (ARTCI)</strong>, autorité de protection des données à caractère personnel.
+      </p>
+
+      <!-- Article 8 -->
+      <h5 class="fw-bold mt-5 text-green">Article 8 – Mesures de sécurité</h5>
+
+      <h6 class="fw-semibold mt-3">8.1 Mesures de sécurité logique</h6>
+      <ul class="text-muted">
+        <li>Chiffrement des données en transit (TLS 1.3) et au repos (AES-256) ;</li>
+        <li>Authentification à deux facteurs (2FA) pour les Organisateurs ;</li>
+        <li>Politique de mots de passe robustes (10 caractères minimum, majuscules, minuscules, chiffres, symboles) ;</li>
+        <li>Pare-feu et systèmes de détection d'intrusion ;</li>
+        <li>Journalisation des accès et des opérations sur les données sensibles.</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">8.2 Mesures de sécurité physique</h6>
+      <ul class="text-muted">
+        <li>Contrôle d'accès aux locaux et équipements (badges, serrures sécurisées) ;</li>
+        <li>Gardiennage des locaux ;</li>
+        <li>Politique de bureau propre (clean desk).</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">8.3 Mesures organisationnelles</h6>
+      <ul class="text-muted">
+        <li>Formation du personnel à la protection des données ;</li>
+        <li>Procédures internes de gestion des incidents de sécurité ;</li>
+        <li>Clause de confidentialité dans les contrats de travail ;</li>
+        <li>Sauvegardes quotidiennes avec rétention de 30 jours.</li>
+      </ul>
+
+      <h6 class="fw-semibold mt-3">8.4 Gestion des violations de données</h6>
+      <p class="text-muted">
+        En cas de violation de données à caractère personnel, MKS Soft Technologies
+        s'engage à :
+      </p>
+      <ul class="text-muted">
+        <li>Notifier l'incident à l'Autorité de Protection (ARTCI) dans les meilleurs délais ;</li>
+        <li>Informer les personnes concernées lorsque la violation présente un risque élevé pour leurs droits et libertés ;</li>
+        <li>Documenter l'incident et les mesures correctives prises.</li>
+      </ul>
+
+      <!-- Article 9 -->
+      <h5 class="fw-bold mt-5 text-green">Article 9 – Cookies et traceurs</h5>
+      <p class="text-muted">
+        La plateforme IvoirPass utilise des cookies et technologies similaires pour :
+      </p>
+      <ul class="text-muted">
+        <li>Assurer le bon fonctionnement du site (cookies techniques) ;</li>
+        <li>Mesurer l'audience et analyser l'utilisation de la plateforme (cookies analytiques) ;</li>
+        <li>Personnaliser le contenu et les recommandations (cookies fonctionnels).</li>
+      </ul>
+      <p class="text-muted">
+        L'Utilisateur peut configurer son navigateur pour refuser les cookies.
+        Toutefois, certains cookies techniques sont indispensables au fonctionnement
+        de la plateforme.
+      </p>
+
+      <!-- Article 10 -->
+      <h5 class="fw-bold mt-5 text-green">Article 10 – Modifications de la Politique de Confidentialité</h5>
+      <p class="text-muted">
+        MKS Soft Technologies se réserve le droit de modifier la présente Politique de
+        Confidentialité à tout moment, notamment pour tenir compte des évolutions
+        législatives ou réglementaires.
+      </p>
+      <p class="text-muted">
+        En cas de modification substantielle, les Utilisateurs seront informés par :
+      </p>
+      <ul class="text-muted">
+        <li>Notification sur la plateforme ;</li>
+        <li>Email à l'adresse enregistrée.</li>
+      </ul>
+      <p class="text-muted">
+        La version en vigueur est celle publiée sur le site
+        <a href="https://www.ivoirpass.com" target="_blank" rel="noopener">www.ivoirpass.com</a>
+        à la date de consultation.
+      </p>
+
+      <!-- Article 11 -->
+      <h5 class="fw-bold mt-5 text-green">Article 11 – Contact</h5>
+      <p class="text-muted">
+        Pour toute question relative à la présente Politique de Confidentialité ou à la
+        protection de vos données personnelles :
+      </p>
+      <div class="ip-card p-3 mb-3">
+        <p class="mb-1"><strong>MKS Soft Technologies</strong></p>
+        <p class="mb-1">Abidjan, Côte d'Ivoire</p>
+        <p class="mb-1">Email : <a href="mailto:infos@mks-soft-technologies.com">infos@mks-soft-technologies.com</a></p>
+        <p class="mb-3">Téléphone : (+225) 07 59 87 21 61 / 05 84 04 49 39</p>
+        <p class="mb-0">
+          <strong>Correspondant à la Protection des Données :</strong><br>
+          <a href="mailto:infos@mks-soft-technologies.com">infos@mks-soft-technologies.com</a>
+        </p>
+      </div>
+
+      <hr class="my-5">
+      <p class="text-muted small fst-italic mb-1">
+        Document confidentiel – MKS Soft Technologies – Juillet 2026
+      </p>
+      <p class="text-muted small fst-italic">
+        Cette politique est susceptible d'être mise à jour. Consultez régulièrement la
+        version en ligne.
+      </p>
 
     </div>
   </div>
