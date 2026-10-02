@@ -575,9 +575,10 @@ class ReversalOTP(models.Model):
 
     @classmethod
     def generate(cls, withdrawal):
-        import random
+        import secrets
         from django.utils import timezone
-        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        # secrets (CSPRNG) et non random : ce code valide une sortie d'argent
+        code = ''.join(secrets.choice('0123456789') for _ in range(6))
         expires_at = timezone.now() + timezone.timedelta(minutes=10)
         return cls.objects.create(
             withdrawal=withdrawal,
