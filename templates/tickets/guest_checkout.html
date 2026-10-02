@@ -84,6 +84,44 @@
                 {% if tt.description %}
                   <div class="text-muted small mb-1">{{ tt.description }}</div>
                 {% endif %}
+
+                {# 🗓️ Vague 4 : jours couverts par ce billet #}
+                {% with ticket_days=tt.event_days.all %}
+                  <div class="mb-2">
+                    {% if not ticket_days or ticket_days|length == event.event_days.count and event.event_days.count > 0 %}
+                      {# Aucun jour coché OU tous les jours → accès complet #}
+                      <div class="text-success fw-semibold" style="font-size:0.78rem;">
+                        <i class="bi bi-star-fill me-1"></i>
+                        <strong>Accès complet</strong> — valable tous les jours
+                      </div>
+                    {% elif ticket_days|length == 1 %}
+                      {# Billet 1 jour #}
+                      <div class="text-muted" style="font-size:0.72rem;">
+                        <i class="bi bi-calendar-check me-1"></i>
+                        Valable le jour :
+                        <span class="badge bg-success-subtle text-success ms-1"
+                              style="font-size:0.68rem;">
+                          {{ ticket_days.0.date_display }}
+                        </span>
+                      </div>
+                    {% else %}
+                      {# Pass partiel #}
+                      <div class="text-muted" style="font-size:0.72rem;">
+                        <i class="bi bi-calendar-check me-1"></i>
+                        Pass <strong>{{ ticket_days|length }} jours</strong>
+                      </div>
+                      <div class="d-flex flex-wrap gap-1 mt-1">
+                        {% for day in ticket_days %}
+                        <span class="badge bg-success-subtle text-success"
+                              style="font-size:0.68rem;">
+                          {{ day.date_display }}
+                        </span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endwith %}
+
                 {% if tt.remaining is not None %}
                   <div class="small">
                     {% if tt.is_sold_out %}
