@@ -61,6 +61,10 @@ def reconcile_pending_payments(self):
         created_at__lte=min_age,
     ).select_related('order', 'guest_order', 'product_order', 'guest_product_order')
 
+    # 🛡️ En preprod/prod, on ne doit JAMAIS toucher aux tokens test_
+    if settings.PAYDUNYA_MODE != 'test':
+        candidates = candidates.exclude(paydunya_token__startswith='test_')
+
     checked = recovered = marked_failed = anomalies = 0
     anomaly_details = []
 

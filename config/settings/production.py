@@ -135,3 +135,24 @@ ADMINS = [
 # RATE LIMITING
 # ============================================
 RATELIMIT_ENABLE = True
+
+
+
+# ============================================================
+# ⚠️ GARDE-FOU MODE TEST (2026-10-02)
+# ============================================================
+# Empêche le déploiement silencieux en production avec PAYDUNYA_MODE=test.
+# Sans ce garde-fou, n'importe qui pourrait obtenir des billets gratuits
+# en créant un faux token 'test_XXX' qui serait accepté sans vérification.
+# ============================================================
+if PAYDUNYA_MODE == 'test':
+    import warnings
+    import logging
+    _logger = logging.getLogger(__name__)
+    _msg = (
+        "🚨 PAYDUNYA_MODE=test activé en production/preprod ! "
+        "Les paiements sont SIMULÉS — AUCUN virement réel n'a lieu. "
+        "À corriger dans .env AVANT toute vente réelle."
+    )
+    warnings.warn(_msg, RuntimeWarning, stacklevel=2)
+    _logger.critical(_msg)

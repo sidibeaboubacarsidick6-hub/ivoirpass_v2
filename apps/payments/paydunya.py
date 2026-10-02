@@ -229,7 +229,10 @@ class PayDunyaService:
         # ✅ MODE TEST : Accepter les tokens "test_" UNIQUEMENT en mode test
         if token and token.startswith('test_'):
             if settings.PAYDUNYA_MODE == 'test':
-                logger.info(f"Mode TEST - Paiement accepté pour {token}")
+                logger.warning(
+                    f"⚠️ MODE TEST : paiement 'test_' accepté sans vérification "
+                    f"({token}). En production ce comportement est INTERDIT."
+                )
                 return {
                     'success': True,
                     'status': 'completed',
