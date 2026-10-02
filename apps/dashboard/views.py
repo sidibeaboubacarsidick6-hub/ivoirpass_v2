@@ -420,10 +420,44 @@ def wallet_view(request):
     transactions = wallet.transactions.order_by('-created_at')[:50]
     withdrawals  = wallet.withdrawal_requests.order_by('-created_at')[:10]
 
+    # 🆕 Réglage 2 : revenus nets par événement (crédité au wallet)
+    from django.db.models import Sum
+    from apps.events.models import Event
+    from apps.tickets.models import GuestOrder
+
+    events_revenue = []
+    events_qs = Event.objects.filter(
+        organizer=request.user,
+    ).order_by('-start_date')
+
+    for event in events_qs:
+        # Toutes les GuestOrder payées liées à cet événement
+        order_numbers = GuestOrder.objects.filter(
+            status=GuestOrder.Status.PAID,
+            guest_items__ticket_type__event=event,
+        ).values_list('order_number', flat=True).distinct()
+
+        # Accepte 'events' (post-split) ET 'legacy' (avant le split du wallet)
+        total = wallet.transactions.filter(
+            source__in=['events', 'legacy'],
+            type=WalletTransaction.Type.CREDIT,
+            reference__in=list(order_numbers),
+        ).aggregate(t=Sum('amount'))['t'] or 0
+
+        if total > 0:
+            events_revenue.append({
+                'event': event,
+                'total': total,
+            })
+
+    # Tri par montant décroissant
+    events_revenue.sort(key=lambda x: x['total'], reverse=True)
+
     return render(request, 'dashboard/wallet.html', {
-        'wallet':       wallet,
-        'transactions': transactions,
-        'withdrawals':  withdrawals,
+        'wallet':         wallet,
+        'transactions':   transactions,
+        'withdrawals':    withdrawals,
+        'events_revenue': events_revenue,
     })
 
 

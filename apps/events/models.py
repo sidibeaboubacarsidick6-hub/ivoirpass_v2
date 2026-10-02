@@ -617,10 +617,20 @@ class EventDay(models.Model):
 
     @property
     def display_name(self):
-        """Nom affiché : name personnalisé ou date formatée."""
+        """Nom affiché : name personnalisé ou date formatée en français."""
         if self.name:
             return self.name
-        return self.date.strftime('%A %d %B %Y').capitalize()
+        jours_fr = [
+            'Lundi', 'Mardi', 'Mercredi', 'Jeudi',
+            'Vendredi', 'Samedi', 'Dimanche',
+        ]
+        mois_fr = [
+            '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+            'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+        ]
+        jour = jours_fr[self.date.weekday()]
+        mois = mois_fr[self.date.month]
+        return f"{jour} {self.date.day} {mois} {self.date.year}"
 
 
 
