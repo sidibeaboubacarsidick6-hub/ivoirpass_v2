@@ -632,6 +632,21 @@ class EventDay(models.Model):
         mois = mois_fr[self.date.month]
         return f"{jour} {self.date.day} {mois} {self.date.year}"
 
+    @property
+    def date_display(self):
+        """Retourne TOUJOURS la date formatée en français (ignore le nom)."""
+        jours_fr = [
+            'Lundi', 'Mardi', 'Mercredi', 'Jeudi',
+            'Vendredi', 'Samedi', 'Dimanche',
+        ]
+        mois_fr = [
+            '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+            'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+        ]
+        jour = jours_fr[self.date.weekday()]
+        mois = mois_fr[self.date.month]
+        return f"{jour} {self.date.day} {mois} {self.date.year}"
+
 
 
 

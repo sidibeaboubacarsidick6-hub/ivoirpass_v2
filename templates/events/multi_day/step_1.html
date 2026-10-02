@@ -41,6 +41,9 @@
 
   <form method="POST" enctype="multipart/form-data">
     {% csrf_token %}
+    {% if event %}<input type="hidden" name="event_id" value="{{ event.pk }}">{% endif %}
+    {# 🗓️ Vague 4 : si on édite, on garde l'event_id #}
+    {% if event %}<input type="hidden" name="event_id" value="{{ event.pk }}">{% endif %}
     {# 🗓️ Vague 4 : l'événement est toujours créé en Brouillon à l'étape 1 #}
     <input type="hidden" name="status" value="draft">
     <div class="row g-4">
@@ -515,9 +518,10 @@
           <hr>
 
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-orange btn-lg">
-              <i class="bi bi-arrow-right-circle me-2"></i>Continuer → Jours
-            </button>
+          <button type="submit" class="btn btn-orange btn-lg">
+            <i class="bi bi-arrow-right-circle me-2"></i>
+            {% if event %}Enregistrer et continuer{% else %}Continuer → Jours{% endif %}
+          </button>
             <a href="{% url 'events:my_events' %}" class="btn btn-outline-secondary">
               Annuler
             </a>

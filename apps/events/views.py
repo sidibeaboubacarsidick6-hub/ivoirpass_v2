@@ -3,6 +3,7 @@ IvoirPass V2 — Vues des événements
 """
 from django.core.cache import cache
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
@@ -96,6 +97,7 @@ def event_detail(request, slug):
     return render(request, 'events/detail.html', {
         'event':          event,
         'ticket_types':   ticket_types,
+        'event_days':     event.event_days.order_by('order', 'date'),
         'similar_events': similar_events,
         # Le même modèle EventGalleryItem sert les photos (sans heure) et
         # le programme (avec heure) — on sépare ici juste pour l'affichage.
@@ -216,7 +218,7 @@ def event_create(request):
                 from django.conf import settings
                 from django.core.mail import EmailMultiAlternatives
                 from django.template.loader import render_to_string
-                from django.urls import reverse
+                from django.urls import path, reverse
                 from django.utils import timezone
 
                 organizer = request.user
@@ -821,75 +823,48 @@ def claim_free_ticket(request, slug):
 @organizer_required
 def multi_day_step_1(request):
     """
-    Étape 1/3 du tunnel multi-jours : informations de base.
+    Étape 1/3 du tunnel multi-jours.
 
-    Reprend le formulaire complet de création d'événement (EventForm +
-    FAQ + Galerie + Partenaires), SAUF les Types de tickets qui seront
-    configurés à l'Étape 3.
-
-    Crée un Event en brouillon avec `is_multi_day=True`.
+    - Création : sans event_id → crée un nouvel Event en brouillon
+    - Édition  : avec ?event_id=X → reprend l'Event existant
+      (utilisé quand l'utilisateur clique 'Retour' depuis l'étape 2)
     """
-    form            = EventForm()
-    faq_formset     = EventFAQFormSet()
-    gallery_formset = EventGalleryItemFormSet()
-    partner_formset = EventPartnerFormSet()
+    event_id = request.GET.get('event_id') or request.POST.get('event_id')
+    event = None
+    if event_id:
+        event = get_object_or_404(
+            Event, pk=event_id,
+            organizer=request.user,
+            is_multi_day=True,
+        )
 
     if request.method == 'POST':
-        form            = EventForm(request.POST, request.FILES)
-        faq_formset     = EventFAQFormSet(request.POST, instance=Event())
-        gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES, instance=Event())
-        partner_formset = EventPartnerFormSet(request.POST, request.FILES, instance=Event())
-
-        # Erreurs détaillées pour débug (affiche chaque champ invalide)
-        errors_found = []
-
-        if form.is_valid() and faq_formset.is_valid() and gallery_formset.is_valid() and partner_formset.is_valid():
-            event = form.save(commit=False)
-            event.organizer = request.user
-            event.status = Event.Status.DRAFT
-            event.is_multi_day = True
-            event.save()
-
-            # Sauvegarde des formsets annexes
-            faq_formset.instance = event
-            faq_formset.save()
-
-            gallery_formset.instance = event
-            gallery_formset.save()
-
-            partner_formset.instance = event
-            partner_formset.save()
-
-            messages.success(
-                request,
-                "Étape 1 terminée. Ajoutez maintenant vos jours."
-            )
-            return redirect('events:multi_day_step_2', event_id=event.pk)
-
-        # Construction d'un message d'erreur lisible
-        for field, errs in form.errors.items():
-            for e in errs:
-                errors_found.append(f"{field} : {e}")
-        for fs in (faq_formset, gallery_formset, partner_formset):
-            for f_errs in fs.errors:
-                for field, errs in f_errs.items():
-                    for e in errs:
-                        errors_found.append(f"{field} : {e}")
-
-        if errors_found:
-            messages.error(
-                request,
-                "Corrigez les erreurs suivantes : " + " · ".join(errors_found[:5]),
-                extra_tags='danger'
-            )
+        if event:
+            form = EventForm(request.POST, request.FILES, instance=event)
         else:
-            messages.error(request, "Veuillez corriger les erreurs.")
+            form = EventForm(request.POST, request.FILES)
+
+        if form.is_valid():
+            event_obj = form.save(commit=False)
+            event_obj.organizer = request.user
+            event_obj.status = Event.Status.DRAFT
+            event_obj.is_multi_day = True
+            event_obj.save()
+
+            # Auto-génère les EventDays uniquement à la 1ère création
+            if not event_obj.event_days.exists():
+                event_obj.generate_event_days()
+
+            messages.success(request, "Étape 1 terminée. Passez aux jours.")
+            return redirect('events:multi_day_step_2', event_id=event_obj.pk)
+        else:
+            messages.error(request, "Corrigez les erreurs ci-dessous.")
+    else:
+        form = EventForm(instance=event) if event else EventForm()
 
     return render(request, 'events/multi_day/step_1.html', {
-        'form':            form,
-        'faq_formset':     faq_formset,
-        'gallery_formset': gallery_formset,
-        'partner_formset': partner_formset,
+        'form':  form,
+        'event': event,
     })
 
 @organizer_required
@@ -918,7 +893,9 @@ def multi_day_step_2(request, event_id):
             action = request.POST.get('action', 'next')
             if action == 'back':
                 messages.success(request, "Jours enregistrés.")
-                return redirect('events:multi_day_step_1')
+                return redirect(
+                    f"{reverse('events:multi_day_step_1')}?event_id={event.pk}"
+                )
 
             messages.success(
                 request,

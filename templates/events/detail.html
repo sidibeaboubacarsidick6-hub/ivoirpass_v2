@@ -219,15 +219,78 @@
         </h5>
         <div class="row g-3">
           <div class="col-sm-6">
-            <div class="text-muted small mb-1">Date et heure</div>
+            <div class="text-muted small mb-1">
+              {% if event.start_date|date:"Y-m-d" == event.end_date|date:"Y-m-d" %}
+                Date et heure
+              {% else %}
+                Dates et heures
+              {% endif %}
+            </div>
             <div class="fw-semibold">
               <i class="bi bi-calendar3 text-orange me-1"></i>
-              {{ event.start_date|date:"d F Y" }}<br>
-              <span class="text-muted small">
-                {{ event.start_date|date:"H\hi" }} → {{ event.end_date|date:"H\hi" }}
-              </span>
+              {% if event.start_date|date:"Y-m-d" == event.end_date|date:"Y-m-d" %}
+                {# Même jour : une seule date #}
+                {{ event.start_date|date:"d F Y" }}<br>
+                <span class="text-muted small">
+                  {{ event.start_date|date:"H\hi" }} → {{ event.end_date|date:"H\hi" }}
+                </span>
+              {% else %}
+                {# Plusieurs jours : afficher début et fin #}
+                Du {{ event.start_date|date:"d" }}
+                {% if event.start_date|date:"F Y" == event.end_date|date:"F Y" %}
+                  {# Même mois et année #}
+                  au {{ event.end_date|date:"d F Y" }}
+                {% elif event.start_date|date:"Y" == event.end_date|date:"Y" %}
+                  {# Même année, mois différents #}
+                  {{ event.start_date|date:"F" }} au {{ event.end_date|date:"d F Y" }}
+                {% else %}
+                  {# Années différentes #}
+                  {{ event.start_date|date:"d F Y" }} au {{ event.end_date|date:"d F Y" }}
+                {% endif %}
+                <br>
+                <span class="text-muted small">
+                  Ouverture {{ event.start_date|date:"H\hi" }} — Fermeture {{ event.end_date|date:"H\hi" }}
+                </span>
+              {% endif %}
             </div>
           </div>
+
+          {# 🗓️ Vague 4 : détail des jours pour événements multi-jours #}
+          {% if event_days|length > 1 %}
+          <div class="col-12">
+            <div class="text-muted small mb-2">
+              <i class="bi bi-calendar-week text-orange me-1"></i>
+              <strong>Détail des jours</strong>
+            </div>
+            <div class="d-flex flex-column gap-2">
+              {% for day in event_days %}
+              <div class="d-flex justify-content-between align-items-center
+                          border rounded-3 px-3 py-2 bg-light">
+                <div>
+                  <div class="fw-semibold small">
+                    <i class="bi bi-calendar-event text-orange me-1"></i>
+                    {{ day.date_display }}
+                  </div>
+                  {% if day.name %}
+                  <div class="text-muted" style="font-size:0.78rem;">
+                    {{ day.name }}
+                  </div>
+                  {% endif %}
+                </div>
+                {% if day.doors_open %}
+                <div class="text-end">
+                  <div class="text-muted" style="font-size:0.72rem;">Ouverture</div>
+                  <div class="fw-bold small text-green">
+                    <i class="bi bi-door-open me-1"></i>{{ day.doors_open|time:"H\hi" }}
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
           {% if event.doors_open %}
           <div class="col-sm-6">
             <div class="text-muted small mb-1">Ouverture des portes</div>
@@ -444,6 +507,43 @@
             <div class="ticket-card-name">{{ ticket.name }}</div>
             <div class="ticket-card-price">{{ ticket.price|floatformat:0 }} FCFA</div>
           </div>
+
+          {# 🗓️ Vague 4 : jours couverts par ce billet #}
+          {% with ticket_days=ticket.event_days.all %}
+            <div class="mt-2 mb-2">
+              {% if not ticket_days or ticket_days|length == event.event_days.count %}
+                {# Aucun jour coché OU tous les jours → accès complet #}
+                <div class="text-success fw-semibold" style="font-size:0.78rem;">
+                  <i class="bi bi-star-fill me-1"></i>
+                  <strong>Accès complet</strong> — valable tous les jours
+                </div>
+              {% elif ticket_days|length == 1 %}
+                {# Billet 1 jour #}
+                <div class="text-muted" style="font-size:0.72rem;">
+                  <i class="bi bi-calendar-check me-1"></i>
+                  Valable le jour :
+                  <span class="badge bg-success-subtle text-success ms-1"
+                        style="font-size:0.68rem;">
+                    {{ ticket_days.0.date_display }}
+                  </span>
+                </div>
+              {% else %}
+                {# Pass partiel #}
+                <div class="text-muted" style="font-size:0.72rem;">
+                  <i class="bi bi-calendar-check me-1"></i>
+                  Pass <strong>{{ ticket_days|length }} jours</strong>
+                </div>
+                <div class="d-flex flex-wrap gap-1 mt-1">
+                  {% for day in ticket_days %}
+                  <span class="badge bg-success-subtle text-success"
+                        style="font-size:0.68rem;">
+                    {{ day.date_display }}
+                  </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endwith %}
 
           <!-- Métadonnées -->
           <div class="ticket-card-meta">
