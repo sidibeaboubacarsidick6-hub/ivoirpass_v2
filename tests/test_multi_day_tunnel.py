@@ -221,11 +221,11 @@ class MultiDayStep2Tests(TestCase):
             reverse('events:multi_day_step_2', args=[self.event.pk]),
             data,
         )
-        # Redirection vers étape 1
-        self.assertRedirects(
-            resp, reverse('events:multi_day_step_1')
+        # Redirection vers étape 1 AVEC event_id (pour préserver l'event)
+        expected_url = (
+            f"{reverse('events:multi_day_step_1')}?event_id={self.event.pk}"
         )
-        # Le nom a bien été sauvegardé
+        self.assertRedirects(resp, expected_url)
         days[0].refresh_from_db()
         self.assertEqual(days[0].name, 'Soirée d\'ouverture')
 
