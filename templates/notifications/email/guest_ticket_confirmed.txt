@@ -14,7 +14,8 @@ Total    : {{ order.total|floatformat:0 }} FCFA
 
 Vos billets :
 {% for ticket in tickets %}
-- {{ ticket.event.title }} | {{ ticket.ticket_type.name }} | {{ ticket.ticket_number }}
+- {{ ticket.event.title }} | {{ ticket.ticket_type.name }} | {{ ticket.ticket_number }}{% if ticket.days_display %}
+  🗓️ Jours valables : {{ ticket.days_display }}{% endif %}
 {% endfor %}
 
 Vos billets PDF sont joints à cet email.

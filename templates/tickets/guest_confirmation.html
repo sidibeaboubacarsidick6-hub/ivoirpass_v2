@@ -51,6 +51,15 @@
               <div class="text-muted small mb-1">Type de billet</div>
               <div class="fw-bold mb-2">{{ ticket.ticket_type.name }}</div>
 
+              {# 🎯 Vague 4 : jours valables (multi-jours) #}
+              {% if ticket.days_display %}
+              <div class="text-muted small mb-1">Jours valables</div>
+              <div class="fw-semibold small mb-3">
+                <i class="bi bi-calendar-check me-1" style="color:#1B7A3E;"></i>
+                {{ ticket.days_display }}
+              </div>
+              {% endif %}
+
               <div class="text-muted small mb-1">Acheteur</div>
               <div class="fw-semibold small mb-3">{{ order.buyer_name }}</div>
 

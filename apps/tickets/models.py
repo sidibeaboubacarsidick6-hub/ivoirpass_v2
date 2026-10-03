@@ -400,6 +400,20 @@ class Ticket(models.Model):
     def is_valid(self):
         return self.status == self.Status.VALID
 
+    @property
+    def days_display(self):
+        """Voir GuestTicket.days_display()."""
+        days = list(self.ticket_type.event_days.order_by('order', 'date'))
+        if not days:
+            return None
+        if len(days) == 1:
+            return days[0].date_display
+        total_days = self.event.event_days.count()
+        if total_days > 0 and len(days) == total_days:
+            return "Tous les jours"
+        dates = [d.date.strftime('%d/%m') for d in days]
+        return ', '.join(dates[:-1]) + ' et ' + dates[-1]
+
 
 # ================================================================
 # 🆕 MODÈLES POUR ACHAT SANS COMPTE (Guest)
@@ -757,6 +771,26 @@ class GuestTicket(models.Model):
     @property
     def buyer_email(self):
         return self.order_item.order.email
+
+    @property
+    def days_display(self):
+        """
+        Retourne une string des jours couverts par le billet.
+        - Billet legacy (pas d'event_days) → None
+        - 1 jour → "Mardi 15 décembre 2026"
+        - Tous les jours de l'event → "Tous les jours"
+        - N jours → "15/12, 16/12 et 17/12"
+        """
+        days = list(self.ticket_type.event_days.order_by('order', 'date'))
+        if not days:
+            return None
+        if len(days) == 1:
+            return days[0].date_display
+        total_days = self.event.event_days.count()
+        if total_days > 0 and len(days) == total_days:
+            return "Tous les jours"
+        dates = [d.date.strftime('%d/%m') for d in days]
+        return ', '.join(dates[:-1]) + ' et ' + dates[-1]
 
 class FreeTicketCode(models.Model):
     """

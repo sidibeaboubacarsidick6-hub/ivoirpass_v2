@@ -62,6 +62,14 @@
     </span>
   </div>
 
+  {# 🎯 Vague 4 : jours valables (multi-jours) #}
+  {% if item.ticket.days_display %}
+  <div style="font-size:12px; color:#1a1a2e; margin-bottom:12px;
+              background:#e8f5ee; padding:8px 12px; border-radius:8px;">
+    🗓️ <strong>Jours valables :</strong> {{ item.ticket.days_display }}
+  </div>
+  {% endif %}
+
   <!-- Bouton téléchargement -->
   <a href="{{ item.download_url }}"
      class="btn-cta"

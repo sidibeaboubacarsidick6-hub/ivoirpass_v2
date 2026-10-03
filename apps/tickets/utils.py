@@ -322,6 +322,12 @@ def generate_guest_ticket_pdf(ticket):
                col2_x, y)
     y -= 38
 
+    # 🎯 Vague 4 : jours valables (multi-jours uniquement)
+    days_str = ticket.days_display
+    if days_str:
+        info_block("Jours valables", days_str, col1_x, y)
+        y -= 38
+
     info_block("Acheteur", buyer_name, col1_x, y)
     info_block("Email",    buyer_email[:30], col2_x, y)
     y -= 50
