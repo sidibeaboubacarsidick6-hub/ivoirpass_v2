@@ -403,14 +403,21 @@ class Ticket(models.Model):
     @property
     def days_display(self):
         """Voir GuestTicket.days_display()."""
-        days = list(self.ticket_type.event_days.order_by('order', 'date'))
-        if not days:
+        if not self.event.is_multi_day:
             return None
+
+        days = list(self.ticket_type.event_days.order_by('order', 'date'))
+
+        if not days:
+            return "Tous les jours"
+
         if len(days) == 1:
             return days[0].date_display
+
         total_days = self.event.event_days.count()
-        if total_days > 0 and len(days) == total_days:
+        if len(days) == total_days:
             return "Tous les jours"
+
         dates = [d.date.strftime('%d/%m') for d in days]
         return ', '.join(dates[:-1]) + ' et ' + dates[-1]
 
@@ -776,14 +783,20 @@ class GuestTicket(models.Model):
     def days_display(self):
         """
         Retourne une string des jours couverts par le billet.
-        - Billet legacy (pas d'event_days) → None
+        - Event legacy (pas d'event_days) → None
+        - Event multi-jours sans jour coché → "Tous les jours"
         - 1 jour → "Mardi 15 décembre 2026"
-        - Tous les jours de l'event → "Tous les jours"
+        - Tous les jours → "Tous les jours"
         - N jours → "15/12, 16/12 et 17/12"
         """
-        days = list(self.ticket_type.event_days.order_by('order', 'date'))
-        if not days:
+        # Event legacy → rien à afficher
+        if not self.event.is_multi_day:
             return None
+
+        days = list(self.ticket_type.event_days.order_by('order', 'date'))
+
+        if not days:
+            return "Tous les jours"
         if len(days) == 1:
             return days[0].date_display
         total_days = self.event.event_days.count()

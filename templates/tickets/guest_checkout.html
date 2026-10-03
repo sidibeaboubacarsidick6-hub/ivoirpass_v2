@@ -86,9 +86,10 @@
                 {% endif %}
 
                 {# 🗓️ Vague 4 : jours couverts par ce billet #}
+                {% if event.is_multi_day %}
                 {% with ticket_days=tt.event_days.all %}
                   <div class="mb-2">
-                    {% if not ticket_days or ticket_days|length == event.event_days.count and event.event_days.count > 0 %}
+                    {% if not ticket_days or ticket_days|length == event.event_days.count %}
                       {# Aucun jour coché OU tous les jours → accès complet #}
                       <div class="text-success fw-semibold" style="font-size:0.78rem;">
                         <i class="bi bi-star-fill me-1"></i>
@@ -121,6 +122,7 @@
                     {% endif %}
                   </div>
                 {% endwith %}
+                {% endif %}
 
                 {% if tt.remaining is not None %}
                   <div class="small">

@@ -509,6 +509,7 @@
           </div>
 
           {# 🗓️ Vague 4 : jours couverts par ce billet #}
+          {% if event.is_multi_day %}
           {% with ticket_days=ticket.event_days.all %}
             <div class="mt-2 mb-2">
               {% if not ticket_days or ticket_days|length == event.event_days.count %}
@@ -544,6 +545,7 @@
               {% endif %}
             </div>
           {% endwith %}
+          {% endif %}
 
           <!-- Métadonnées -->
           <div class="ticket-card-meta">
