@@ -164,9 +164,10 @@
 
     <!-- Boutons d'action -->
     <div class="d-flex justify-content-between flex-wrap gap-2">
-      <button type="submit" name="action" value="back" class="btn btn-outline-secondary">
+      <a href="{% url 'events:multi_day_step_2' event.pk %}"
+         class="btn btn-outline-secondary">
         ← Retour à l'Étape 2
-      </button>
+      </a>
       <div class="d-flex gap-2">
         <button type="submit" name="action" value="draft" class="btn btn-outline-success">
           <i class="bi bi-save me-1"></i>Enregistrer en brouillon
@@ -217,17 +218,12 @@ function addTicketForm() {
 
   // Reset des valeurs
   newForm.querySelectorAll('input, textarea, select').forEach(el => {
-    if (el.type === 'hidden') {
-      // Ne pas toucher aux hidden (csrf, id, etc.)
-      return;
-    }
+    if (el.type === 'hidden') return;
     if (el.type === 'checkbox' || el.type === 'radio') {
       el.checked = false;
     } else if (el.name && el.name.endsWith('-order')) {
-      // 🆕 order obligatoire → on remet 0
       el.value = '0';
     } else if (el.name && el.name.endsWith('-is_visible')) {
-      // Visible par défaut
       el.checked = true;
     } else {
       el.value = '';
@@ -247,5 +243,44 @@ function addTicketForm() {
   container.appendChild(newForm);
   totalForms.value = formCount + 1;
 }
+
+// ── Anti-perte de modifications (hors de addTicketForm) ──
+(function () {
+  const form = document.querySelector('form');
+  if (!form) return;
+
+  let dirty = false;
+  let bypassWarning = false;
+
+  form.addEventListener('input',  () => { dirty = true; });
+  form.addEventListener('change', () => { dirty = true; });
+
+  document.querySelectorAll('a.btn-outline-secondary').forEach(link => {
+    link.addEventListener('click', function (e) {
+      if (!dirty) return;
+      const ok = confirm(
+        "Vous avez des modifications non enregistrées. " +
+        "Cliquez sur OK pour continuer (elles seront perdues), " +
+        "ou Annuler pour rester et les enregistrer d'abord."
+      );
+      if (!ok) {
+        e.preventDefault();
+      } else {
+        bypassWarning = true;
+      }
+    });
+  });
+
+  window.addEventListener('beforeunload', function (e) {
+    if (!dirty || bypassWarning) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  form.addEventListener('submit', () => {
+    dirty = false;
+    bypassWarning = true;
+  });
+})();
 </script>
 {% endblock %}

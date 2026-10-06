@@ -3,7 +3,6 @@ IvoirPass V2 — Vues des événements
 """
 from django.core.cache import cache
 from django.shortcuts import render, get_object_or_404, redirect
-from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
@@ -889,14 +888,6 @@ def multi_day_step_2(request, event_id):
         if formset.is_valid():
             formset.save()
 
-            # 🆕 Si l'utilisateur a cliqué « Retour à l'Étape 1 »
-            action = request.POST.get('action', 'next')
-            if action == 'back':
-                messages.success(request, "Jours enregistrés.")
-                return redirect(
-                    f"{reverse('events:multi_day_step_1')}?event_id={event.pk}"
-                )
-
             messages.success(
                 request,
                 f"{event.event_days.count()} jour(s) enregistré(s). "
@@ -918,10 +909,12 @@ def multi_day_step_3(request, event_id):
     Étape 3/3 du tunnel multi-jours : billets et packs.
 
     - GET : formset vide + rappel des jours
-    - POST : valide, sauve les billets + M2M jours, gère 3 actions :
-      'back'    → retour à l'étape 2 (après sauvegarde)
+    - POST : valide, sauve les billets + M2M jours, gère 2 actions :
       'draft'   → reste en brouillon
       'publish' → publie l'événement (KYC requis si billets payants)
+
+    Le retour à l'étape 2 se fait via un simple lien GET (bouton du bas),
+    plus par POST → évite les blocages sur erreurs de validation du formset.
     """
     event = get_object_or_404(Event, pk=event_id, organizer=request.user)
 
@@ -960,9 +953,6 @@ def multi_day_step_3(request, event_id):
             # Action demandée par l'utilisateur
             action = request.POST.get('action', 'draft')
 
-            if action == 'back':
-                messages.success(request, "Billets enregistrés.")
-                return redirect('events:multi_day_step_2', event_id=event.pk)
 
             # Met à jour le prix minimum
             prices = event.ticket_types.values_list('price', flat=True)

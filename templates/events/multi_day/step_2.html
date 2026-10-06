@@ -118,9 +118,10 @@
     </div>
 
     <div class="d-flex justify-content-between">
-      <button type="submit" name="action" value="back" class="btn btn-outline-secondary">
+      <a href="{% url 'events:multi_day_step_1' %}?event_id={{ event.pk }}"
+         class="btn btn-outline-secondary">
         ← Retour à l'Étape 1
-      </button>
+      </a>
       <button type="submit" name="action" value="next" class="btn btn-orange">
         Continuer → Billets
       </button>
@@ -128,4 +129,49 @@
   </form>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const form = document.querySelector('form');
+  if (!form) return;
+
+  let dirty = false;
+  let bypassWarning = false;
+
+  form.addEventListener('input',  () => { dirty = true; });
+  form.addEventListener('change', () => { dirty = true; });
+
+  // Tous les liens de retour (flèche en haut + bouton du bas)
+  document.querySelectorAll('a.btn-outline-secondary').forEach(link => {
+    link.addEventListener('click', function (e) {
+      if (!dirty) return;
+      const ok = confirm(
+        "Vous avez des modifications non enregistrées. " +
+        "Cliquez sur OK pour continuer (elles seront perdues), " +
+        "ou Annuler pour rester et les enregistrer d'abord."
+      );
+      if (!ok) {
+        e.preventDefault();
+      } else {
+        bypassWarning = true;
+      }
+    });
+  });
+
+  // Filet de sécurité : fermeture / rafraîchissement de l'onglet
+  window.addEventListener('beforeunload', function (e) {
+    if (!dirty || bypassWarning) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  // À la soumission, plus de modifs en attente
+  form.addEventListener('submit', () => {
+    dirty = false;
+    bypassWarning = true;
+  });
+})();
+</script>
 {% endblock %}

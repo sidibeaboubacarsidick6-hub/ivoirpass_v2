@@ -24,6 +24,81 @@
     {% endfor %}
   {% endif %}
 
+  <!-- 🔗 Lien scanner à partager avec les agents -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+        <i class="bi bi-share me-2 text-green"></i>
+        Lien scanner pour vos agents
+      </h6>
+
+      <p class="text-muted small mb-3">
+        Envoyez ces informations à vos agents. Ils s'en serviront pour scanner
+        les billets de <strong>{{ event.title }}</strong>.
+      </p>
+
+      <!-- 1. Lien de la PWA scanner -->
+      <label class="form-label small fw-semibold">
+        1. Lien de l'application scanner
+      </label>
+      <div class="input-group input-group-sm mb-3">
+        <input type="text"
+               readonly
+               class="form-control"
+               id="scanner-url"
+               value="{{ request.scheme }}://{{ request.get_host }}/scanner/app/">
+        <button class="btn btn-outline-success"
+                type="button"
+                onclick="copyToClipboard('scanner-url', this)">
+          <i class="bi bi-clipboard"></i> Copier
+        </button>
+        <a href="https://wa.me/?text={{ 'Lien scanner IvoirPass : '|urlencode }}{{ request.scheme|urlencode }}%3A%2F%2F{{ request.get_host|urlencode }}%2Fscanner%2Fapp%2F%0A%0AID de l%27%C3%A9v%C3%A9nement : {{ event.id }}%0A%0AConnectez-vous avec les identifiants que je vous ai envoy%C3%A9s."
+           target="_blank"
+           rel="noopener"
+           class="btn btn-outline-success">
+          <i class="bi bi-whatsapp"></i> WhatsApp
+        </a>
+      </div>
+
+      <!-- 2. ID de l'événement -->
+      <label class="form-label small fw-semibold">
+        2. ID de l'événement (à saisir dans l'app)
+      </label>
+      <div class="input-group input-group-sm mb-3">
+        <input type="text"
+               readonly
+               class="form-control fw-bold text-success"
+               id="event-id"
+               value="{{ event.id }}">
+        <button class="btn btn-outline-success"
+                type="button"
+                onclick="copyToClipboard('event-id', this)">
+          <i class="bi bi-clipboard"></i> Copier
+        </button>
+      </div>
+
+      <!-- Instructions pour l'agent -->
+      <div class="alert alert-light border small mb-0">
+        <strong>
+          <i class="bi bi-info-circle text-green me-1"></i>
+          Instructions à transmettre à vos agents :
+        </strong>
+        <ol class="mb-0 mt-2 ps-3">
+          <li>Ouvrir le lien ci-dessus sur votre téléphone.</li>
+          <li>
+            Se connecter avec l'<strong>email</strong> et le
+            <strong>mot de passe</strong> que l'organisateur vous a créés.
+          </li>
+          <li>
+            Saisir l'<strong>ID de l'événement</strong> :
+            <code class="text-success fw-bold">{{ event.id }}</code>
+          </li>
+          <li>Commencer à scanner les billets.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
   <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
       <form method="post">
@@ -62,4 +137,38 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard(elementId, btn) {
+  const input = document.getElementById(elementId);
+  if (!input) return;
+
+  input.select();
+  input.setSelectionRange(0, 99999); // compat mobile
+
+  const done = () => {
+    const original = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i> Copié !';
+    btn.classList.add('btn-success');
+    btn.classList.remove('btn-outline-success');
+    setTimeout(() => {
+      btn.innerHTML = original;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-success');
+    }, 2000);
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(input.value).then(done).catch(() => {
+      document.execCommand('copy');
+      done();
+    });
+  } else {
+    document.execCommand('copy');
+    done();
+  }
+}
+</script>
 {% endblock %}
