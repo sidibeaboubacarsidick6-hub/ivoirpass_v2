@@ -194,8 +194,29 @@ class MultiDayStep2Tests(TestCase):
             self.event.event_days.filter(name='Bonus').exists()
         )
 
-    def test_post_action_back_redirige_vers_etape_1(self):
-        """POST avec action=back redirige vers Étape 1 après sauvegarde."""
+    def test_retour_vers_etape_1_en_get(self):
+        """
+        Le retour à l'Étape 1 se fait désormais via un lien GET
+        (bouton du bas + flèche en haut), plus via POST action=back.
+
+        Le GET recharge le formulaire pré-rempli avec l'événement existant
+        sans jamais provoquer d'erreur de validation.
+        """
+        self.event.generate_event_days()
+
+        url = reverse('events:multi_day_step_1') + f'?event_id={self.event.pk}'
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 200)
+        # Le formulaire est bien pré-rempli avec l'événement existant
+        self.assertEqual(resp.context['form'].instance.pk, self.event.pk)
+        self.assertEqual(resp.context['event'].pk, self.event.pk)
+
+    def test_post_sans_action_back_redirige_vers_etape_3(self):
+        """
+        Un POST classique sur l'Étape 2 (action=next) sauvegarde les jours
+        et redirige vers l'Étape 3.
+        """
         self.event.generate_event_days()
         days = list(self.event.event_days.order_by('date'))
         data = {
@@ -215,17 +236,16 @@ class MultiDayStep2Tests(TestCase):
             'event_days-2-date': days[2].date.strftime('%Y-%m-%d'),
             'event_days-2-name': '',
             'event_days-2-doors_open': '',
-            'action': 'back',
+            'action': 'next',
         }
         resp = self.client.post(
             reverse('events:multi_day_step_2', args=[self.event.pk]),
             data,
         )
-        # Redirection vers étape 1 AVEC event_id (pour préserver l'event)
-        expected_url = (
-            f"{reverse('events:multi_day_step_1')}?event_id={self.event.pk}"
+        self.assertRedirects(
+            resp,
+            reverse('events:multi_day_step_3', args=[self.event.pk]),
         )
-        self.assertRedirects(resp, expected_url)
         days[0].refresh_from_db()
         self.assertEqual(days[0].name, 'Soirée d\'ouverture')
 
