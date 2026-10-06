@@ -12,52 +12,110 @@
       <i class="bi bi-wallet2 me-2 text-green"></i>Mon Wallet
     </h4>
   </div>
-  <!-- 🆕 Réglage 2 : revenus par événement -->
-  {% if events_revenue %}
-  <div class="ip-card p-4 mb-4">
-    <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
-      <i class="bi bi-graph-up-arrow me-2 text-green"></i>
-      Revenus nets par événement
-    </h6>
+<!-- 🆕 Réglage 2 : revenus par événement + par produit (deux colonnes) -->
+{% if events_revenue or store_revenue %}
+<div class="row g-4 mb-4">
 
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Événement</th>
-            <th>Date</th>
-            <th class="text-end">Revenus nets</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in events_revenue %}
-          <tr>
-            <td>
-              <a href="{{ item.event.get_absolute_url }}"
-                 target="_blank"
-                 class="text-decoration-none fw-semibold">
-                {{ item.event.title }}
-              </a>
-            </td>
-            <td class="text-muted small">
-              {{ item.event.start_date|date:"d/m/Y" }}
-            </td>
-            <td class="text-end fw-bold text-green">
-              {{ item.total|floatformat:0 }} FCFA
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <!-- Colonne Événements -->
+  <div class="col-lg-6">
+    <div class="ip-card p-4 h-100">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+        <i class="bi bi-graph-up-arrow me-2 text-green"></i>
+        Revenus nets par événement
+      </h6>
 
-    <div class="text-muted small mt-2">
-      <i class="bi bi-info-circle me-1"></i>
-      Montants nets (commission IvoirPass déduite) déjà crédités dans votre
-      portefeuille Événements.
+      {% if events_revenue %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Événement</th>
+              <th>Date</th>
+              <th class="text-end">Revenus nets</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in events_revenue %}
+            <tr>
+              <td>
+                <a href="{{ item.event.get_absolute_url }}"
+                   target="_blank"
+                   class="text-decoration-none fw-semibold">
+                  {{ item.event.title }}
+                </a>
+              </td>
+              <td class="text-muted small">
+                {{ item.event.start_date|date:"d/m/Y" }}
+              </td>
+              <td class="text-end fw-bold text-green">
+                {{ item.total|floatformat:0 }} FCFA
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted small mb-0">
+        Aucun revenu d'événement pour le moment.
+      </p>
+      {% endif %}
+
+      <div class="text-muted small mt-2">
+        <i class="bi bi-info-circle me-1"></i>
+        Nets (commission déduite) crédités dans votre portefeuille Événements.
+      </div>
     </div>
   </div>
-  {% endif %}
+
+  <!-- Colonne Boutique -->
+  <div class="col-lg-6">
+    <div class="ip-card p-4 h-100">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+        <i class="bi bi-bag me-2 text-orange"></i>
+        Revenus nets par produit
+      </h6>
+
+      {% if store_revenue %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Produit</th>
+              <th>Créé le</th>
+              <th class="text-end">Revenus nets</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in store_revenue %}
+            <tr>
+              <td class="fw-semibold">{{ item.product.name }}</td>
+              <td class="text-muted small">
+                {{ item.product.created_at|date:"d/m/Y" }}
+              </td>
+              <td class="text-end fw-bold text-orange">
+                {{ item.total|floatformat:0 }} FCFA
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted small mb-0">
+        Aucun revenu de boutique pour le moment.
+      </p>
+      {% endif %}
+
+      <div class="text-muted small mt-2">
+        <i class="bi bi-info-circle me-1"></i>
+        Nets (commission déduite) crédités dans votre portefeuille Boutique.
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
 
   <!-- Solde général (Vague 3.1) -->
 
