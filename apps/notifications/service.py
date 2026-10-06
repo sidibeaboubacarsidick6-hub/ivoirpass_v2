@@ -243,10 +243,34 @@ class NotificationService:
         email.attach_alternative(html_message, "text/html")
         try:
             email.send()
-            return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Erreur envoi email boutique {order.order_number}: {e}")
             return False
 
+        # 📱 SMS de confirmation boutique (uniquement si téléphone fourni)
+        if getattr(order.buyer, 'phone_number', None):
+            try:
+                from apps.notifications.sms import send_sms
+                if order.product.is_digital:
+                    sms_body = (
+                        f"IvoirPass : paiement de {int(order.total)} FCFA confirmé. "
+                        f"Commande {order.order_number}. "
+                        f"Vos téléchargements vous ont été envoyés par email."
+                    )
+                else:
+                    sms_body = (
+                        f"IvoirPass : paiement de {int(order.total)} FCFA confirmé. "
+                        f"Commande {order.order_number}. Votre commande est en "
+                        f"préparation."
+                    )
+                send_sms(order.buyer.phone_number, sms_body)
+            except Exception as e:
+                logger.error(
+                    f"Erreur envoi SMS confirmation boutique "
+                    f"{order.order_number}: {e}"
+                )
+
+        return True
     @classmethod
     def guest_store_order_confirmed(cls, order):
         from apps.store.models import GuestDownloadLink
@@ -314,10 +338,40 @@ class NotificationService:
         email.attach_alternative(html_message, "text/html")
         try:
             email.send()
-            return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Erreur envoi email boutique guest {order.order_number}: {e}")
             return False
 
+        # 📱 SMS de confirmation boutique (uniquement si téléphone fourni)
+        if getattr(order, 'phone', None):
+            try:
+                from apps.notifications.sms import send_sms
+                if is_download_only:
+                    sms_body = (
+                        f"IvoirPass : paiement de {int(order.total)} FCFA confirmé. "
+                        f"Commande {order.order_number}. "
+                        f"Vos téléchargements vous ont été envoyés par email."
+                    )
+                elif is_bundle_both:
+                    sms_body = (
+                        f"IvoirPass : paiement de {int(order.total)} FCFA confirmé. "
+                        f"Commande {order.order_number}. Livraison en préparation, "
+                        f"téléchargements envoyés par email."
+                    )
+                else:  # delivery seul
+                    sms_body = (
+                        f"IvoirPass : paiement de {int(order.total)} FCFA confirmé. "
+                        f"Commande {order.order_number}. Votre colis sera livré "
+                        f"à l'adresse indiquée."
+                    )
+                send_sms(order.phone, sms_body)
+            except Exception as e:
+                logger.error(
+                    f"Erreur envoi SMS confirmation boutique invité "
+                    f"{order.order_number}: {e}"
+                )
+
+        return True
     @classmethod
     def withdrawal_received(cls, withdrawal_request):
         wallet = withdrawal_request.wallet
@@ -373,13 +427,20 @@ class NotificationService:
             return False
 
     @classmethod
-    def event_cancelled_buyer(cls, buyer_email, buyer_name, event):
+    def event_cancelled_buyer(cls, buyer_email, buyer_name, event, buyer_phone=None):
         """
-        Chantier A (2026-09-27) — Email informatif envoyé à un acheteur
-        après annulation d'un événement.
+        Chantier A (2026-09-27) — Email + SMS informatifs envoyés à un
+        acheteur après annulation d'un événement.
 
         IvoirPass n'est PAS responsable du remboursement — c'est
         l'organisateur qui gère directement.
+
+        Args:
+            buyer_email : email de l'acheteur
+            buyer_name  : nom de l'acheteur
+            event       : objet Event annulé
+            buyer_phone : numéro de téléphone (optionnel) — si fourni,
+                          un SMS est aussi envoyé
         """
         if not buyer_email:
             return False
@@ -396,6 +457,7 @@ class NotificationService:
             'year': timezone.now().year,
         }
 
+        # --- EMAIL ---
         try:
             html_message = render_to_string(
                 'notifications/email/event_cancelled_buyer.html', context,
@@ -414,11 +476,31 @@ class NotificationService:
         )
         email.attach_alternative(html_message, "text/html")
 
+        email_sent = False
         try:
             email.send()
-            return True
-        except Exception:
-            return False
+            email_sent = True
+        except Exception as e:
+            logger.error(
+                f"Erreur envoi email annulation événement à {buyer_email}: {e}"
+            )
+
+        # --- SMS (uniquement si téléphone fourni) ---
+        if buyer_phone:
+            try:
+                from apps.notifications.sms import send_sms
+                sms_body = (
+                    f"IvoirPass : l'événement « {event.title[:40]} » est annulé. "
+                    f"Contactez l'organisateur pour le remboursement. "
+                    f"Détails par email."
+                )
+                send_sms(buyer_phone, sms_body)
+            except Exception as e:
+                logger.error(
+                    f"Erreur envoi SMS annulation événement à {buyer_phone}: {e}"
+                )
+
+        return email_sent
 
     @classmethod
     def event_cancelled_admin_alert(

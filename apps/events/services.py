@@ -38,8 +38,8 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
       - Si au moins 1 commande PAID existait : wallet gelé
         (is_frozen=True + frozen_reason) — aucune demande de
         reversement ne sera acceptée tant qu'un admin n'a pas dégelé
-      - Email informatif envoyé à chaque acheteur (sans numéro
-        organisateur, sans promesse de remboursement auto)
+      - Email + SMS informatifs envoyés à chaque acheteur (si
+        numéro de téléphone disponible)
       - Email d'alerte envoyé à tous les admins
 
     Args:
@@ -73,7 +73,8 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
     guest_orders_seen = set()
     tickets_voided = 0
     orders_affected = 0
-    buyer_emails = []  # [(email, buyer_name)] — pour envoi groupé
+    # [(email, buyer_name, buyer_phone)] — pour envoi groupé (email + SMS)
+    buyer_emails = []
 
     for ticket in guest_tickets:
         ticket.status = GuestTicket.Status.VOID
@@ -90,7 +91,9 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
             order.save(update_fields=['status', 'updated_at'])
             orders_affected += 1
 
-        buyer_emails.append((order.email, order.buyer_name))
+        buyer_emails.append(
+            (order.email, order.buyer_name, order.phone or None)
+        )
 
     # ── 2. Tickets + Orders "avec compte" (legacy, mais on traite) ──
     account_tickets = Ticket.objects.filter(
@@ -116,7 +119,11 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
 
         if order.buyer and order.buyer.email:
             buyer_emails.append(
-                (order.buyer.email, order.buyer.get_full_name())
+                (
+                    order.buyer.email,
+                    order.buyer.get_full_name(),
+                    getattr(order.buyer, 'phone_number', None) or None,
+                )
             )
 
     # ── 3. Gel du wallet si au moins 1 commande PAID a existé ───────
@@ -135,12 +142,12 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
         wallet.save(update_fields=['is_frozen', 'frozen_reason'])
         wallet_frozen = True
 
-    # ── 4. Emails acheteurs ────────────────────────────────────────
-    # Best-effort : un échec sur un email ne doit pas bloquer les autres.
+    # ── 4. Emails + SMS acheteurs ──────────────────────────────────
+    # Best-effort : un échec sur un envoi ne doit pas bloquer les autres.
     import logging
     _logger = logging.getLogger(__name__)
 
-    for email, buyer_name in buyer_emails:
+    for email, buyer_name, buyer_phone in buyer_emails:
         if not email:
             continue
         try:
@@ -148,10 +155,11 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
                 buyer_email=email,
                 buyer_name=buyer_name,
                 event=event,
+                buyer_phone=buyer_phone,
             )
         except Exception:
             _logger.exception(
-                f"[cancel_event] Échec email acheteur {email} — event {event.id}"
+                f"[cancel_event] Échec notification acheteur {email} — event {event.id}"
             )
 
     # ── 5. Alerte admins ───────────────────────────────────────────
