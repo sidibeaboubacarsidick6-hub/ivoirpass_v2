@@ -38,8 +38,8 @@ class EventFreeTicketsFieldsTests(TestCase):
         self.org = _make_organizer()
         self.event = _make_event(self.org)
 
-    def test_quota_par_defaut_20(self):
-        self.assertEqual(self.event.free_tickets_quota, 20)
+    def test_quota_par_defaut_10(self):
+        self.assertEqual(self.event.free_tickets_quota, 10)
 
     def test_compteur_par_defaut_0(self):
         self.assertEqual(self.event.free_tickets_generated, 0)

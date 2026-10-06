@@ -297,7 +297,7 @@ class Event(models.Model):
     # ============================================
     free_tickets_quota = models.PositiveIntegerField(
         _('quota billets gratuits'),
-        default=20,
+        default=10,
         help_text=(
             "Nombre maximum de codes gratuits que l'organisateur peut "
             "générer pour cet événement. Au-delà, une validation admin "
