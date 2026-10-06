@@ -145,6 +145,7 @@ class ScannerConcurrencyTests(TransactionTestCase):
         self.agent2 = CustomUser.objects.create_user(email='agent2@test.com', password='Pass123!', role='scanner')
         self.buyer = CustomUser.objects.create_user(email='buyer-concurrent@test.com', password='Pass123!')
         self.event, self.ticket = _setup_event_and_ticket(self.organizer, self.buyer, suffix='-conc')
+        self.event.scanner_agents.add(self.agent1, self.agent2)
 
     def test_deux_agents_scannent_le_meme_billet_simultanement(self):
         from django.db import connection
