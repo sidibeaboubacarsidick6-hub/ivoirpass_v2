@@ -99,7 +99,10 @@ def _credit_from_ticket_order(instance, items_related_name='items'):
             )
 
 
-@receiver(post_save, sender=Order)
+# ✅ dispatch_uid : empêche un double enregistrement du receiver si le
+# module venait à être importé deux fois (imports circulaires, rechargement
+# de module en dev). Sans impact fonctionnel — juste une protection.
+@receiver(post_save, sender=Order, dispatch_uid='credit_wallet_from_order')
 def credit_organizer_wallet_from_order(sender, instance, **kwargs):
     """Crédite le wallet pour les commandes tickets AVEC compte."""
     if instance.status != Order.Status.PAID:
@@ -107,7 +110,7 @@ def credit_organizer_wallet_from_order(sender, instance, **kwargs):
     _credit_from_ticket_order(instance, items_related_name='items')
 
 
-@receiver(post_save, sender=GuestOrder)
+@receiver(post_save, sender=GuestOrder, dispatch_uid='credit_wallet_from_guest_order')
 def credit_organizer_wallet_from_guest_order(sender, instance, **kwargs):
     """
     Crédite le wallet pour les commandes tickets SANS compte.

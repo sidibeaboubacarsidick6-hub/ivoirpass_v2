@@ -1050,14 +1050,13 @@ class GuestProductOrder(models.Model):
                 if not updated:
                     logger.error(f"Stock insuffisant pour guest {self.order_number}")
                     raise ValueError("Stock insuffisant")
-            else:
-                # Numérique seul : pas de stock à décrémenter, mais on
-                # compte quand même la vente dans sold_count.
-                Product.objects.filter(pk=self.product.pk).update(
-                    sold_count=F('sold_count') + self.quantity
-                )
 
-                # ✅ Notifie le vendeur qu'il doit préparer une livraison
+                # ✅ FIX 2026-10-06 : la notification vendeur était dans la
+                # branche numérique (else) → un vendeur ne recevait JAMAIS
+                # de notification pour une commande physique à expédier.
+                # Elle est maintenant dans la branche physique, là où elle
+                # a du sens : c'est uniquement quand il y a un colis à
+                # préparer que le vendeur doit être alerté.
                 try:
                     from apps.notifications.service import NotificationService
                     NotificationService.notify_seller_new_order(self, is_guest=True)
@@ -1069,6 +1068,12 @@ class GuestProductOrder(models.Model):
                     logger.error(
                         f"Erreur notification vendeur pour commande guest {self.order_number}: {e}"
                     )
+            else:
+                # Numérique seul : pas de stock à décrémenter, mais on
+                # compte quand même la vente dans sold_count.
+                Product.objects.filter(pk=self.product.pk).update(
+                    sold_count=F('sold_count') + self.quantity
+                )
         return True
 
     def _credit_seller_wallet(self):

@@ -92,6 +92,12 @@ def payment_return(request, order_number):
     """
     Retour après paiement PayDunya.
     Vérifie le paiement et confirme la commande.
+
+    ⚠️ Confirmation STRICTE : on ne confirme QUE si le statut PayDunya
+    est explicitement 'completed'. Un response_code='00' avec un statut
+    'pending' signifie que l'opérateur n'a pas encore décaissé côté client
+    — dans ce cas on affiche la page "en cours" et on laisse le webhook
+    PayDunya (ou la tâche de réconciliation) confirmer plus tard.
     """
     # ✅ Récupère la commande sans exiger l'authentification
     order = get_object_or_404(Order, order_number=order_number)
@@ -127,12 +133,12 @@ def payment_return(request, order_number):
 
     logger.info(f"[RETOUR BILLETS] Status={status}")
 
-    # 🔥 Confirmer si status = completed OU response_code = 00
-    is_completed = (
-        status == 'completed' 
-        or result.get('data', {}).get('response_code') == '00'
-        or result.get('success') == True
-    )
+    # ✅ Confirmation STRICTE : uniquement si PayDunya dit explicitement
+    # 'completed'. On ne se fie plus à response_code='00' ni à
+    # result['success'] (qui signifie juste "l'appel API a répondu" — pas
+    # "le client a payé"). Le webhook PayDunya prendra le relais si le
+    # paiement est encore en attente côté opérateur.
+    is_completed = (status == 'completed')
 
     if is_completed and order.status == Order.Status.PENDING:
         # ✅ Confirmer la commande

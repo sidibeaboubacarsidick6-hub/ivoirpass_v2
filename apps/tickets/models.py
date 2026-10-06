@@ -465,6 +465,16 @@ class GuestOrder(models.Model):
 
     # Montants
     subtotal   = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    commission = models.DecimalField(
+        _('commission IvoirPass'),
+        max_digits=12, decimal_places=0, default=0,
+        help_text=(
+            "Commission prélevée par IvoirPass sur cette commande, "
+            "figée au moment du paiement pour la traçabilité comptable. "
+            "N'est PAS utilisée pour créditer le wallet (le signal "
+            "dashboard/signals.py recalcule à la volée)."
+        ),
+    )
     total      = models.DecimalField(max_digits=12, decimal_places=0, default=0)
 
     # Statut
@@ -555,6 +565,12 @@ class GuestOrder(models.Model):
         (voir is_payment_cancelled) — c'est ce contrôle qui manquait et
         permettait à une commande annulée de redevenir payée toute seule.
 
+        ✅ Fige la commission prélevée par IvoirPass sur cette commande
+        (champ `commission`) au moment de la confirmation, pour la
+        traçabilité comptable. Le crédit wallet continue d'être calculé
+        par le signal dashboard/signals.py — le champ `commission` n'est
+        PAS utilisé pour ce calcul, donc aucun risque de double prélèvement.
+
         Returns:
             bool: True si cet appel a confirmé la commande, False si elle
                   était déjà payée par un appel concurrent, ou si son
@@ -581,6 +597,17 @@ class GuestOrder(models.Model):
             self.payment_method = payment_method
             self.payment_reference = payment_reference
             self.paid_at = timezone.now()
+
+            # ✅ Fige la commission prélevée sur cette commande (traçabilité
+            # comptable uniquement — n'influence pas le crédit wallet qui
+            # est fait par le signal dashboard/signals.py).
+            from decimal import Decimal
+            total_commission = Decimal('0')
+            for item in self.guest_items.select_related('ticket_type__event'):
+                rate = Decimal(str(item.ticket_type.event.commission_rate)) / Decimal('100')
+                total_commission += Decimal(str(item.subtotal)) * rate
+            self.commission = int(round(total_commission))
+
             self.save()
             for item in self.guest_items.all():
                 item.generate_tickets()
