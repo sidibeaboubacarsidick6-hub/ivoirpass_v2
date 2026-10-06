@@ -160,42 +160,101 @@ def _retry_or_fail_payout(task, withdrawal_id, error):
     return 'failed'
 
 
+# Plafond de relance pour les reversements bloqués en "pending" chez PayDunya.
+# Au-delà, on arrête de relancer la vérification pour ne pas saturer la queue
+# Celery, et on laisse un humain prendre le relais. Le webhook PayDunya reste
+# actif et peut confirmer le reversement à tout moment.
+MAX_PENDING_HOURS = 6
+
+
 @shared_task
 def check_payout_status(withdrawal_id):
     from .models import WithdrawalRequest, AuditLog
     from .services import log_action
     from apps.payments.paydunya import PayDunyaService
+
     try:
         withdrawal = WithdrawalRequest.objects.select_related('wallet').get(pk=withdrawal_id)
     except WithdrawalRequest.DoesNotExist:
         return 'not_found'
-    if withdrawal.status in [WithdrawalRequest.Status.COMPLETED, WithdrawalRequest.Status.CANCELLED, WithdrawalRequest.Status.REJECTED]:
+
+    if withdrawal.status in [
+        WithdrawalRequest.Status.COMPLETED,
+        WithdrawalRequest.Status.CANCELLED,
+        WithdrawalRequest.Status.REJECTED,
+    ]:
         return withdrawal.status
+
+    # 🛡️ Garde-fou : si la demande est en attente depuis trop longtemps
+    # (opérateur MTN/Moov qui traîne, ou PayDunya bloqué), on arrête de
+    # relancer et on signale le cas pour traitement humain.
+    age = timezone.now() - withdrawal.created_at
+    if age > timedelta(hours=MAX_PENDING_HOURS):
+        logger.warning(
+            "Reversement %s en attente depuis %.1fh — arrêt des relances, "
+            "intervention manuelle requise.",
+            withdrawal.reference,
+            age.total_seconds() / 3600,
+        )
+        log_action(
+            action=AuditLog.Action.PAYOUT_PROVIDER_PENDING,
+            description=(
+                f"Reversement {withdrawal.reference} bloqué en attente depuis "
+                f"plus de {MAX_PENDING_HOURS}h — vérification manuelle requise."
+            ),
+            obj=withdrawal,
+            metadata={
+                'amount': str(withdrawal.amount),
+                'provider_status': withdrawal.provider_status,
+                'age_hours': round(age.total_seconds() / 3600, 1),
+            },
+        )
+        return 'stale'
+
     if not withdrawal.provider_token:
         process_payout.delay(withdrawal.pk)
         return 'requeued'
+
     result = PayDunyaService.check_disbursement_status(withdrawal.provider_token)
     status = (result.get('status') or '').lower()
+
     if status == 'success':
         finalize_payout_from_provider(withdrawal.pk, result)
         return 'completed'
+
     if status == 'pending':
         withdrawal.provider_status = 'pending'
         withdrawal.save(update_fields=['provider_status'])
         check_payout_status.apply_async(args=[withdrawal.pk], countdown=180)
         return 'pending'
+
     if status == 'created':
         process_payout.delay(withdrawal.pk)
         return 'created'
+
     withdrawal.provider_status = 'failed'
     withdrawal.last_error = result.get('error') or result.get('response_text') or 'Payout échoué'
     withdrawal.retry_count += 1
     withdrawal.save(update_fields=['provider_status', 'last_error', 'retry_count'])
-    log_action(AuditLog.Action.PAYOUT_FAILED, f"Reversement {withdrawal.reference} échoué après vérification", obj=withdrawal, metadata={'amount': str(withdrawal.amount), 'error': withdrawal.last_error})
+    log_action(
+        AuditLog.Action.PAYOUT_FAILED,
+        f"Reversement {withdrawal.reference} échoué après vérification",
+        obj=withdrawal,
+        metadata={'amount': str(withdrawal.amount), 'error': withdrawal.last_error},
+    )
     if withdrawal.retry_count <= 3:
-        process_payout.apply_async(args=[withdrawal.pk], countdown=min(300, 60 * (2 ** (withdrawal.retry_count - 1))))
+        process_payout.apply_async(
+            args=[withdrawal.pk],
+            countdown=min(300, 60 * (2 ** (withdrawal.retry_count - 1))),
+        )
         return 'retrying'
-    withdrawal.wallet.release_reserved(withdrawal.amount, source=withdrawal.source, description=f"Libération après échec payout {withdrawal.reference}", reference=withdrawal.reference)
+
+    withdrawal.wallet.release_reserved(
+        withdrawal.amount,
+        source=withdrawal.source,
+        description=f"Libération après échec payout {withdrawal.reference}",
+        reference=withdrawal.reference,
+    )
     withdrawal.status = WithdrawalRequest.Status.FAILED
     withdrawal.save(update_fields=['status'])
     return 'failed'
