@@ -253,7 +253,7 @@ def payment_webhook(request):
                 else:
                     custom_data = custom_data_str
                 order_number = custom_data.get('order_number', '')
-            except:
+            except (json.JSONDecodeError, AttributeError, TypeError):
                 order_number = ''
             
             if not order_number and 'data' in raw_data:

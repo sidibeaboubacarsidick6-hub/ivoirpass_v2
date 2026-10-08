@@ -92,8 +92,10 @@ def generate_ticket_pdf(ticket):
         if os.path.exists(font_path):
             pdfmetrics.registerFont(TTFont('DejaVu', font_path))
             p.setFont('DejaVu', 12)
-    except:
-        pass
+    except Exception as exc:
+        # Fallback sur la police par défaut ReportLab (Helvetica).
+        # On ne casse jamais la génération du PDF pour un problème de police.
+        logger.debug("Fallback police par défaut (DejaVu indisponible) : %s", exc)
 
     # ============================================
     # DESIGN DU BILLET
