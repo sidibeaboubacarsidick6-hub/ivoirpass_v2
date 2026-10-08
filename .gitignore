@@ -57,3 +57,10 @@ patch_billets_par_jour.zip
 # Fichiers de sauvegarde (ne doivent jamais être versionnés)
 *.bak
 
+
+# Sauvegardes, medias et fichiers locaux
+backups/
+*.sql
+media/
+logs/
+IVOIRPASS*_STATE.md
