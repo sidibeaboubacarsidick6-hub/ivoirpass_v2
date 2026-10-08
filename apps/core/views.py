@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.http import HttpResponse
 
 
 def how_it_works(request):
@@ -29,3 +30,9 @@ def cgu(request):
 def privacy_policy(request):
     """Politique de confidentialité"""
     return render(request, 'pages/privacy_policy.html')
+
+
+
+def robots_txt(request):
+    """Robots.txt dynamique — le Sitemap URL s'adapte au domaine courant."""
+    return render(request, 'robots.txt', content_type='text/plain')

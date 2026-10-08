@@ -10,4 +10,5 @@ urlpatterns = [
     path('signaler-un-probleme/', views.report_problem, name='report_problem'),
     path('conditions-utilisation/', views.cgu, name='cgu'),
     path('politique-confidentialite/', views.privacy_policy, name='privacy_policy'),
+    path('robots.txt', views.robots_txt, name='robots_txt'),
 ]

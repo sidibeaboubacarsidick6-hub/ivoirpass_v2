@@ -4,4 +4,4 @@ Disallow: /paiements/
 Disallow: /dashboard/
 Disallow: /api/
 
-Sitemap: https://prepod.ivoirpass.com/sitemap.xml
+Sitemap: {{ request.scheme }}://{{ request.get_host }}/sitemap.xml
