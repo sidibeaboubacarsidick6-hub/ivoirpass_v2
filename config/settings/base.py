@@ -473,21 +473,30 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.celery import CeleryIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
+    from sentry_sdk.scrubber import EventScrubber, DEFAULT_DENYLIST, DEFAULT_PII_DENYLIST
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[
             DjangoIntegration(),
-            CeleryIntegration(),
+            CeleryIntegration(monitor_beat_tasks=True),
             LoggingIntegration(level=None, event_level='ERROR'),
         ],
         environment=config('SENTRY_ENVIRONMENT', default='development'),
-        # Garde une trace de 100% des erreurs, mais échantillonne les
-        # traces de performance pour ne pas surcharger le quota gratuit.
+        release=config('SENTRY_RELEASE', default=None),
+        # 100 % des erreurs, 10 % des traces de performance (quota gratuit).
         traces_sample_rate=0.1,
-        # Volontairement False (contrairement à l'exemple par défaut de
-        # Sentry qui suggère True) : on évite d'envoyer des données
-        # personnelles des utilisateurs (IP, emails, etc.) à un service
-        # tiers par précaution, même si Sentry est fiable.
+        # Pas de données personnelles (IP, emails) envoyées à Sentry.
         send_default_pii=False,
+        # Pas de valeurs de variables locales dans les traces d'erreur
+        # (jetons de paiement, OTP, téléphones...).
+        include_local_variables=False,
+        event_scrubber=EventScrubber(
+            denylist=DEFAULT_DENYLIST + [
+                'phone', 'telephone', 'otp', 'payment_token', 'token',
+                'iban', 'kyc', 'id_number', 'document',
+            ],
+            pii_denylist=DEFAULT_PII_DENYLIST,
+            recursive=True,
+        ),
     )
