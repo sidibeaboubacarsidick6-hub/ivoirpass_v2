@@ -64,3 +64,11 @@ backups/
 media/
 logs/
 IVOIRPASS*_STATE.md
+# Fichiers de backup et notes de projet
+*.bak
+*.bak2
+*.bak3
+*_STATE.md
+PROJECT_STATE.md
+fix_forms.py
+INSTALL_*.sh
