@@ -301,6 +301,10 @@ IVOIRPASS = {
 # Clé primaire par défaut
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Django 6.0 : URLField assume https par défaut (au lieu de http).
+# On adopte le comportement futur dès maintenant pour éviter
+# la surprise à la montée de version.
+FORMS_URLFIELD_ASSUME_HTTPS = True
 
 
 
@@ -500,3 +504,4 @@ if SENTRY_DSN:
             recursive=True,
         ),
     )
+    
