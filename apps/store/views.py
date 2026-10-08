@@ -540,6 +540,7 @@ def store_webhook(request):
 
         logger.info(f"Store webhook: order={order_number}, status={status}, token={token}")
 
+        result = {}
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
@@ -553,6 +554,32 @@ def store_webhook(request):
                         order_number=order_number,
                         status=ProductOrder.Status.PENDING
                     )
+
+                    # 🔒 VÉRIFICATION MONTANT + BINDING TOKEN (ajout sécurité 2026-10-08)
+                    from apps.payments.verification import verify_payment_amount_and_binding
+                    verif = verify_payment_amount_and_binding(result, order, token)
+                    if not verif['ok']:
+                        logger.critical(
+                            "Webhook boutique PayDunya rejeté (commande %s, token %s) : %s — attendu=%s, reçu=%s",
+                            order.order_number, token, verif['reason'],
+                            verif.get('expected'), verif.get('received'),
+                        )
+                        log_action(
+                            action=AuditLog.Action.PAYMENT_FAILED,
+                            description=(
+                                f"Webhook boutique PayDunya rejeté pour la commande {order.order_number} : "
+                                f"{verif['reason']} (attendu={verif.get('expected')}, "
+                                f"reçu={verif.get('received')})"
+                            ),
+                            model_name='Payment', object_id=order.order_number,
+                            metadata={
+                                'reason': verif['reason'],
+                                'expected': str(verif.get('expected')),
+                                'received': str(verif.get('received')),
+                            },
+                            ip_address=get_client_ip(request),
+                        )
+                        return HttpResponse('VERIFICATION_FAILED', status=400)
 
                     order.status = ProductOrder.Status.PAID
                     order.payment_method = 'paydunya'
@@ -898,6 +925,7 @@ def guest_store_webhook(request):
         token        = invoice_data.get('invoiceToken', '')
         order_number = custom_data.get('guest_store_order_number', '')
 
+        result = {}
         if token and status == 'completed':
             result = PayDunyaService.verify_payment(token)
             if result.get('status') != 'completed':
@@ -910,6 +938,33 @@ def guest_store_webhook(request):
                     order_number=order_number,
                     status=GuestProductOrder.Status.PENDING
                 )
+
+                # 🔒 VÉRIFICATION MONTANT + BINDING TOKEN (ajout sécurité 2026-10-08)
+                from apps.payments.verification import verify_payment_amount_and_binding
+                verif = verify_payment_amount_and_binding(result, order, token)
+                if not verif['ok']:
+                    logger.critical(
+                        "Webhook boutique invité PayDunya rejeté (commande %s, token %s) : %s — attendu=%s, reçu=%s",
+                        order.order_number, token, verif['reason'],
+                        verif.get('expected'), verif.get('received'),
+                    )
+                    log_action(
+                        action=AuditLog.Action.PAYMENT_FAILED,
+                        description=(
+                            f"Webhook boutique invité PayDunya rejeté pour la commande {order.order_number} : "
+                            f"{verif['reason']} (attendu={verif.get('expected')}, "
+                            f"reçu={verif.get('received')})"
+                        ),
+                        model_name='Payment', object_id=order.order_number,
+                        metadata={
+                            'reason': verif['reason'],
+                            'expected': str(verif.get('expected')),
+                            'received': str(verif.get('received')),
+                        },
+                        ip_address=get_client_ip(request),
+                    )
+                    return HttpResponse('VERIFICATION_FAILED', status=400)
+
                 newly_confirmed, stock_conflict = _confirm_guest_product_order_safely(
                     order, token, data, source='webhook'
                 )

@@ -266,6 +266,7 @@ def payment_webhook(request):
         logger.info(f"Order_number extrait: {order_number}")
 
         # Vérification serveur-à-serveur via l'API PayDunya
+        result = {}
         if token:
             result = PayDunyaService.verify_payment(token)
             api_status = result.get('status', '')
@@ -321,6 +322,32 @@ def payment_webhook(request):
         logger.info(f"Status: {status}")
         
         if status == 'completed' and order.status == Order.Status.PENDING:
+            # 🔒 VÉRIFICATION MONTANT + BINDING TOKEN (ajout sécurité 2026-10-08)
+            from apps.payments.verification import verify_payment_amount_and_binding
+            verif = verify_payment_amount_and_binding(result, order, token)
+            if not verif['ok']:
+                logger.critical(
+                    "Webhook PayDunya rejeté (commande %s, token %s) : %s — attendu=%s, reçu=%s",
+                    order.order_number, token, verif['reason'],
+                    verif.get('expected'), verif.get('received'),
+                )
+                log_action(
+                    action=AuditLog.Action.PAYMENT_FAILED,
+                    description=(
+                        f"Webhook PayDunya rejeté pour la commande {order.order_number} : "
+                        f"{verif['reason']} (attendu={verif.get('expected')}, "
+                        f"reçu={verif.get('received')})"
+                    ),
+                    model_name='Payment', object_id=order.order_number,
+                    metadata={
+                        'reason': verif['reason'],
+                        'expected': str(verif.get('expected')),
+                        'received': str(verif.get('received')),
+                    },
+                    ip_address=get_client_ip(request),
+                )
+                return HttpResponse('VERIFICATION_FAILED', status=400)
+
             _confirm_order(order, token, raw_data)
             logger.info(f"Webhook: commande {order_number} confirmée")
         

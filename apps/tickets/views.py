@@ -320,9 +320,12 @@ from django.views.decorators.http import require_POST
 @require_POST
 def guest_webhook(request):
     import json
+    import logging
     from django.http import HttpResponse
     from .models import GuestOrder
     from apps.payments.paydunya import PayDunyaService
+
+    logger = logging.getLogger(__name__)
 
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not PayDunyaService.verify_webhook_signature(request):
@@ -343,6 +346,7 @@ def guest_webhook(request):
         order_number = custom_data.get('guest_order_number', '')
 
         # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR
+        verify_result = {}
         if status == 'completed' and token:
             verify_result = PayDunyaService.verify_payment(token)
             if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
@@ -360,6 +364,33 @@ def guest_webhook(request):
                 order = GuestOrder.objects.get(
                     order_number=order_number, status=GuestOrder.Status.PENDING,
                 )
+
+                # 🔒 VÉRIFICATION MONTANT + BINDING TOKEN (ajout sécurité 2026-10-08)
+                from apps.payments.verification import verify_payment_amount_and_binding
+                verif = verify_payment_amount_and_binding(verify_result, order, token)
+                if not verif['ok']:
+                    logger.critical(
+                        "Webhook invité PayDunya rejeté (commande %s, token %s) : %s — attendu=%s, reçu=%s",
+                        order.order_number, token, verif['reason'],
+                        verif.get('expected'), verif.get('received'),
+                    )
+                    log_action(
+                        action=AuditLog.Action.PAYMENT_FAILED,
+                        description=(
+                            f"Webhook invité PayDunya rejeté pour la commande {order.order_number} : "
+                            f"{verif['reason']} (attendu={verif.get('expected')}, "
+                            f"reçu={verif.get('received')})"
+                        ),
+                        model_name='Payment', object_id=order.order_number,
+                        metadata={
+                            'reason': verif['reason'],
+                            'expected': str(verif.get('expected')),
+                            'received': str(verif.get('received')),
+                        },
+                        ip_address=get_client_ip(request),
+                    )
+                    return HttpResponse('VERIFICATION_FAILED', status=400)
+
                 newly_confirmed = order.mark_as_paid(
                     payment_method='paydunya', payment_reference=token,
                 )
