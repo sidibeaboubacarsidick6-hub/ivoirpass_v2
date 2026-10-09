@@ -1,0 +1,26 @@
+Rapport hebdomadaire IvoirPass
+==============================
+
+Bonjour,
+
+Voici le rapport hebdomadaire de la plateforme IvoirPass.
+
+Période   : {{ week_str }}
+Fichier   : {{ zip_name }}
+Envoyé à  : {{ recipients_count }} destinataire(s)
+
+Contenu du fichier Excel :
+  1. Résumé                 — Chiffres clés semaine + 30 jours
+  2. Transactions           — Commandes payées de la semaine
+  3. Reversements           — Demandes de retrait de la semaine
+  4. Nouveaux utilisateurs  — Inscriptions de la semaine
+
+🔒 SÉCURITÉ
+Le fichier est protégé par un mot de passe ZIP. Demandez-le à un
+administrateur IvoirPass par un canal sécurisé (SMS, WhatsApp, en
+personne). Ne le communiquez jamais par email.
+
+Pour toute question : {{ support_email }}
+
+--
+Ce rapport est généré automatiquement chaque lundi à 08:30 (heure d'Abidjan).

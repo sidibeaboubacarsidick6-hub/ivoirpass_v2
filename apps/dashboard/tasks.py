@@ -401,3 +401,88 @@ def generate_bceao_report(self):
         )
 
     return report
+
+
+
+
+# ============================================================
+# RAPPORT HEBDOMADAIRE — Envoi automatique chaque lundi 08:30
+# ============================================================
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def send_weekly_report(self):
+    """
+    Envoie le rapport hebdomadaire (Excel multi-onglets, chiffré en ZIP)
+    aux destinataires définis dans WEEKLY_REPORT_RECIPIENTS.
+
+    Planifié par Celery Beat : chaque lundi à 08:30 (Africa/Abidjan).
+
+    Le fichier Excel est protégé par un mot de passe ZIP
+    (WEEKLY_REPORT_ZIP_PASSWORD) communiqué hors email aux destinataires.
+    """
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.loader import render_to_string
+    from .reports import build_weekly_report_zip
+
+    # ── 1. Destinataires ────────────────────────────────────────────
+    recipients_str = getattr(settings, 'WEEKLY_REPORT_RECIPIENTS', '')
+    recipients = [e.strip() for e in recipients_str.split(',') if e.strip()]
+
+    if not recipients:
+        logger.warning(
+            "WEEKLY_REPORT_RECIPIENTS vide dans .env — "
+            "rapport hebdomadaire non envoyé."
+        )
+        return "Aucun destinataire configuré."
+
+    # ── 2. Génération du ZIP chiffré ────────────────────────────────
+    try:
+        zip_bytes, zip_name, week_range = build_weekly_report_zip()
+    except Exception as exc:
+        logger.exception("Échec génération du rapport hebdomadaire")
+        raise self.retry(exc=exc)
+
+    week_str = (
+        f"{week_range[0].strftime('%d/%m/%Y')} → "
+        f"{week_range[1].strftime('%d/%m/%Y')}"
+    )
+
+    # ── 3. Rendu des templates ──────────────────────────────────────
+    context = {
+        'week_str':        week_str,
+        'platform_name':   'IvoirPass',
+        'platform_url':    getattr(settings, 'PAYDUNYA_BASE_URL', 'https://ivoirpass.com'),
+        'support_email':   getattr(settings, 'SUPPORT_EMAIL', 'support@ivoirpass.com'),
+        'recipients_count': len(recipients),
+        'zip_name':        zip_name,
+    }
+
+    subject = f"[IvoirPass] Rapport hebdomadaire — {week_str}"
+
+    try:
+        html_body = render_to_string('notifications/email/weekly_report.html', context)
+        text_body = render_to_string('notifications/email/weekly_report.txt',  context)
+    except Exception as exc:
+        logger.exception("Templates weekly_report introuvables")
+        raise self.retry(exc=exc)
+
+    # ── 4. Construction et envoi de l'email ─────────────────────────
+    email = EmailMultiAlternatives(
+        subject    = subject,
+        body       = text_body,
+        from_email = settings.DEFAULT_FROM_EMAIL,
+        to         = recipients,
+    )
+    email.attach_alternative(html_body, 'text/html')
+    email.attach(zip_name, zip_bytes, 'application/zip')
+
+    try:
+        email.send(fail_silently=False)
+        logger.info(
+            "Rapport hebdomadaire envoyé à %d destinataire(s) : %s",
+            len(recipients), recipients,
+        )
+        return f"Rapport envoyé — {week_range[0].strftime('%d/%m/%Y')}"
+    except Exception as exc:
+        logger.exception("Échec envoi du rapport hebdomadaire")
+        raise self.retry(exc=exc)

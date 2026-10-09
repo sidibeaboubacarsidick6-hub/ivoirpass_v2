@@ -1,0 +1,73 @@
+{% extends 'notifications/email/base_email.html' %}
+{% block email_content %}
+
+<h1 class="email-title">📊 Rapport hebdomadaire IvoirPass</h1>
+
+<p class="email-text">
+  Bonjour,
+</p>
+
+<p class="email-text">
+  Voici le rapport hebdomadaire de la plateforme IvoirPass.
+  Vous trouverez en pièce jointe un fichier Excel contenant
+  le détail des ventes, reversements et inscriptions de la période.
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Période</span>
+    <span class="info-value">{{ week_str }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Fichier joint</span>
+    <span class="info-value">{{ zip_name }}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Destinataires</span>
+    <span class="info-value">{{ recipients_count }}</span>
+  </div>
+</div>
+
+<h2 style="color:#1B7A3E; font-size:18px; margin-top:28px;">📁 Contenu du fichier</h2>
+
+<p class="email-text">
+  Le fichier Excel contient <strong>4 onglets</strong> :
+</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">1. Résumé</span>
+    <span class="info-value">Chiffres clés semaine + 30 jours</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">2. Transactions</span>
+    <span class="info-value">Commandes payées de la semaine</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">3. Reversements</span>
+    <span class="info-value">Demandes de retrait de la semaine</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">4. Nouveaux utilisateurs</span>
+    <span class="info-value">Inscriptions de la semaine</span>
+  </div>
+</div>
+
+<div class="info-box" style="background:#FFF3CD; border-left:4px solid #F47920;">
+  <p class="email-text" style="margin:0; font-size:13px;">
+    🔒 <strong>Sécurité :</strong> le fichier est protégé par un mot de passe ZIP.
+    Demandez-le à un administrateur IvoirPass par un canal sécurisé
+    (SMS, WhatsApp, en personne). Ne le communiquez jamais par email.
+  </p>
+</div>
+
+<p class="email-text" style="color:#6c757d; font-size:13px; margin-top:28px;">
+  Pour toute question, contactez-nous à
+  <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+</p>
+
+<p class="email-text" style="color:#6c757d; font-size:12px;">
+  Ce rapport est généré automatiquement chaque lundi à 08:30 (heure d'Abidjan).
+</p>
+
+{% endblock %}

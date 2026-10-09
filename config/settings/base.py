@@ -360,6 +360,13 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.core.tasks.backup_database',
         'schedule': crontab(hour=3, minute=0),  # 3h du matin, faible trafic
     },
+    'send-weekly-report': {
+        # Rapport hebdomadaire (Excel multi-onglets, ZIP chiffré)
+        # envoyé chaque lundi à 08:30 (Africa/Abidjan) aux destinataires
+        # définis dans WEEKLY_REPORT_RECIPIENTS.
+        'task': 'apps.dashboard.tasks.send_weekly_report',
+        'schedule': crontab(day_of_week=1, hour=8, minute=30),
+    },
 }
 
 # Nombre de jours de rétention des sauvegardes automatiques avant
@@ -402,6 +409,17 @@ PAYDUNYA_API_BASE = (
 # NOTIFICATIONS
 # ============================================
 SMS_ENABLED = config('SMS_ENABLED', default=False, cast=bool)
+
+# ============================================
+# RAPPORT HEBDOMADAIRE PAR EMAIL
+# ============================================
+# Liste d'emails séparés par des virgules. Ex :
+#   WEEKLY_REPORT_RECIPIENTS=dir@example.com,fin@example.com
+WEEKLY_REPORT_RECIPIENTS = config('WEEKLY_REPORT_RECIPIENTS', default='')
+
+# Mot de passe du ZIP chiffré envoyé en pièce jointe.
+# ⚠️ À communiquer aux destinataires HORS EMAIL (SMS, WhatsApp, etc.)
+WEEKLY_REPORT_ZIP_PASSWORD = config('WEEKLY_REPORT_ZIP_PASSWORD', default='')
 
 # Orange SMS CI
 ORANGE_SMS_CLIENT_ID     = config('ORANGE_SMS_CLIENT_ID',     default='')
