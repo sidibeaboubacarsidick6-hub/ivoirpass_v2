@@ -55,7 +55,7 @@ patch_billets_par_jour.zip
 
 
 # Fichiers de sauvegarde (ne doivent jamais être versionnés)
-*.bak
+*.bak*
 
 
 # Sauvegardes, medias et fichiers locaux

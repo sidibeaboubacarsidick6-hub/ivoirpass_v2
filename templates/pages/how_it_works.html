@@ -6,8 +6,8 @@
 {% block content %}
 <div class="container py-5">
   <div class="row justify-content-center">
-    <div class="col-lg-8">
-      
+    <div class="col-lg-10">
+
       <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
@@ -15,90 +15,317 @@
         </ol>
       </nav>
 
-      <h1 class="fw-bold mb-4">Comment ça marche ?</h1>
+      <h1 class="fw-bold mb-3">Comment ça marche ?</h1>
       <div class="section-divider mb-4"></div>
-      
+
       <p class="text-muted lead mb-5">
-        Découvrez en 5 étapes simples comment réserver vos billets sur IvoirPass.
+        Guide complet IvoirPass — pour les organisateurs et les acheteurs.
       </p>
 
-      <div class="position-relative">
-        <!-- Étape 1 -->
-        <div class="d-flex mb-4">
-          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
-            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
-              <i class="bi bi-search"></i>
-            </div>
-            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #1B7A3E, transparent); margin:8px auto 0;"></div>
-          </div>
-          <div>
-            <h5 class="fw-bold mb-1">Étape 1 : Trouvez votre événement</h5>
-            <p class="text-muted">Parcourez notre catalogue d'événements culturels et sportifs en Côte d'Ivoire.</p>
-          </div>
-        </div>
-
-        <!-- Étape 2 -->
-        <div class="d-flex mb-4">
-          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
-            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#F47920;">
-              <i class="bi bi-ticket-perforated"></i>
-            </div>
-            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #F47920, transparent); margin:8px auto 0;"></div>
-          </div>
-          <div>
-            <h5 class="fw-bold mb-1">Étape 2 : Choisissez vos billets</h5>
-            <p class="text-muted">Sélectionnez le nombre de billets et la catégorie qui vous convient.</p>
+      <!-- Table des matières -->
+      <div class="row g-3 mb-5">
+        <div class="col-md-6">
+          <div class="p-4 h-100" style="background:#1B7A3E10; border-left:4px solid #1B7A3E; border-radius:12px;">
+            <h5 class="fw-bold mb-3" style="color:#1B7A3E;">
+              <i class="bi bi-person-badge me-2"></i>Pour les organisateurs
+            </h5>
+            <ol class="mb-0 ps-3 small">
+              <li><a href="#org-compte" class="text-decoration-none text-dark">Création de compte</a></li>
+              <li><a href="#org-kyc" class="text-decoration-none text-dark">Certification (KYC)</a></li>
+              <li><a href="#org-event" class="text-decoration-none text-dark">Publier un événement</a></li>
+              <li><a href="#org-scan" class="text-decoration-none text-dark">Contrôle d'accès (scan)</a></li>
+              <li><a href="#org-agent" class="text-decoration-none text-dark">Créer un agent scan</a></li>
+              <li><a href="#org-produit" class="text-decoration-none text-dark">Vendre un produit</a></li>
+              <li><a href="#org-reversement" class="text-decoration-none text-dark">Reversement</a></li>
+              <li><a href="#org-gratuits" class="text-decoration-none text-dark">Codes billets gratuits</a></li>
+            </ol>
           </div>
         </div>
-
-        <!-- Étape 3 -->
-        <div class="d-flex mb-4">
-          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
-            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
-              <i class="bi bi-credit-card"></i>
-            </div>
-            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #1B7A3E, transparent); margin:8px auto 0;"></div>
-          </div>
-          <div>
-            <h5 class="fw-bold mb-1">Étape 3 : Payez en toute sécurité</h5>
-            <p class="text-muted">Réglez par Wave, Orange Money ou MTN MoMo en quelques secondes.</p>
-          </div>
-        </div>
-
-        <!-- Étape 4 -->
-        <div class="d-flex mb-4">
-          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
-            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#F47920;">
-              <i class="bi bi-qr-code"></i>
-            </div>
-            <div style="width:2px; height:30px; background:linear-gradient(to bottom, #F47920, transparent); margin:8px auto 0;"></div>
-          </div>
-          <div>
-            <h5 class="fw-bold mb-1">Étape 4 : Recevez vos billets</h5>
-            <p class="text-muted">Recevez vos QR codes par email et SMS. Entrée garantie !</p>
-          </div>
-        </div>
-
-        <!-- Étape 5 -->
-        <div class="d-flex mb-4">
-          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
-            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.5rem; color:#1B7A3E;">
-              <i class="bi bi-check-circle"></i>
-            </div>
-          </div>
-          <div>
-            <h5 class="fw-bold mb-1">Étape 5 : Profitez de l'événement</h5>
-            <p class="text-muted">Présentez votre QR code à l'entrée et profitez du spectacle !</p>
+        <div class="col-md-6">
+          <div class="p-4 h-100" style="background:#F4792010; border-left:4px solid #F47920; border-radius:12px;">
+            <h5 class="fw-bold mb-3" style="color:#F47920;">
+              <i class="bi bi-cart me-2"></i>Pour les acheteurs
+            </h5>
+            <ol class="mb-0 ps-3 small">
+              <li><a href="#ach-billet" class="text-decoration-none text-dark">Acheter un ticket</a></li>
+              <li><a href="#ach-acces" class="text-decoration-none text-dark">Accès à l'événement</a></li>
+              <li><a href="#ach-produit" class="text-decoration-none text-dark">Acheter un produit</a></li>
+            </ol>
           </div>
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SECTION ORGANISATEURS                                -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <h2 class="fw-bold mb-4" style="color:#1B7A3E;">
+        <i class="bi bi-person-badge me-2"></i>Pour les organisateurs
+      </h2>
+      <div class="section-divider mb-4" style="background:linear-gradient(to right, #1B7A3E, transparent);"></div>
+
+      <!-- Étape 1 — Création de compte -->
+      <div id="org-compte" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-person-plus"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">1. Création de compte et connexion</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Sur la page d'accueil IvoirPass, allez dans <strong>« Espace organisateur »</strong>.</li>
+          <li>Connectez-vous avec votre e-mail et votre mot de passe. Si vous n'avez pas de compte, cliquez sur <strong>« Créer un espace organisateur »</strong>.</li>
+          <li>Renseignez vos informations, lisez et acceptez les conditions d'utilisation et la politique de confidentialité.</li>
+          <li>Cliquez sur <strong>« Créer mon espace organisateur »</strong>.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 2 — Certification KYC -->
+      <div id="org-kyc" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-patch-check"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">2. Certification de compte</h5>
+            <p class="text-muted small mb-0"><em>Obligatoire avant toute publication</em></p>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Connectez-vous à votre espace organisateur.</li>
+          <li>Allez dans <strong>« Mon profil »</strong>.</li>
+          <li>Allez ensuite dans <strong>« Organisation »</strong> puis dans <strong>« Compléter mon profil organisateur »</strong>.</li>
+          <li>Dans <strong>« Vérification KYC »</strong>, ajoutez votre pièce d'identité puis enregistrez.</li>
+          <li>Votre compte sera certifié par IvoirPass.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 3 — Publier un événement -->
+      <div id="org-event" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-calendar-plus"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">3. Publier un événement</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Créer un événement »</strong>.</li>
+          <li>Saisissez les informations de votre événement. Si votre événement dure plus d'un jour, utilisez le <strong>« Tunnel multi-jours »</strong> situé en haut de la page.</li>
+          <li>Enregistrez en <strong>« Brouillon »</strong> pour continuer plus tard, ou cliquez sur <strong>« Publier »</strong> pour le rendre visible dans la section <strong>« Événements »</strong>.</li>
+          <li>Le <strong>Dashboard</strong> de votre espace organisateur vous donne les détails sur les ventes, les revenus et les statistiques par événement.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 4 — Scanner QR -->
+      <div id="org-scan" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-qr-code-scan"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">4. Contrôle d'accès (scan)</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Scanner QR »</strong>.</li>
+          <li>Pour l'événement concerné, cliquez sur <strong>« Préparer le scan »</strong> puis sur <strong>« Démarrer »</strong> pour commencer à scanner.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 5 — Créer un agent scan -->
+      <div id="org-agent" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-person-vcard"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">5. Création d'un agent scan</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Mes événements »</strong>.</li>
+          <li>Pour l'événement concerné, cliquez sur l'icône du code QR puis sur <strong>« Créer un nouvel agent scanner »</strong>.</li>
+          <li>Renseignez les différents champs, puis cliquez sur <strong>« Créer l'agent »</strong>.</li>
+          <li>Une fois votre agent créé, cochez la case devant votre agent et cliquez sur <strong>« Enregistrer l'assignation »</strong> pour l'autoriser à scanner.</li>
+          <li>Communiquez à l'agent l'e-mail, le mot de passe utilisé pour sa création et l'ID de l'événement. À l'aide du lien de l'application scan, l'agent se connecte et peut scanner les tickets des événements auxquels il est assigné.</li>
+        </ul>
+        <div class="alert alert-info small" role="alert">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>À savoir :</strong> Un code QR valide un jour n'est scanné qu'une seule fois — les doublons sont détectés automatiquement. Il est possible de scanner lorsque l'appareil perd la connexion réseau : les scans sont enregistrés puis synchronisés dès le retour de la connexion.
+        </div>
+      </div>
+
+      <!-- Étape 6 — Vendre un produit -->
+      <div id="org-produit" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-shop"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">6. Vendre un produit</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Nouveau produit »</strong>.</li>
+          <li>Saisissez les informations de votre produit (le choix du type de produit modifie le reste des informations à renseigner).</li>
+          <li>Enregistrez en <strong>« Brouillon »</strong> pour continuer plus tard, ou cliquez sur <strong>« Publier »</strong> pour le rendre visible dans la <strong>« Boutique »</strong>.</li>
+          <li>Le <strong>Dashboard</strong> de votre espace organisateur vous donne les détails sur les ventes, les revenus et les statistiques par produit.</li>
+          <li>Pour les produits physiques, vous recevrez les commandes et le détail des livraisons par mail. Dans votre espace organisateur, allez dans <strong>« Livraison à faire »</strong>.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 7 — Reversement -->
+      <div id="org-reversement" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-cash-coin"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">7. Reversement</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Demander reversement »</strong>.</li>
+          <li>Choisissez le portefeuille source (événements ou produits).</li>
+          <li>Saisissez les détails du reversement (méthode de reversement, numéro Mobile Money, nom du bénéficiaire).</li>
+          <li>Vérifiez l'exactitude des informations.</li>
+          <li>Cliquez sur <strong>« Soumettre la demande »</strong>.</li>
+          <li>Saisissez le code à 6 chiffres qui vous a été envoyé par e-mail ou par SMS. Cliquez ensuite sur <strong>« Valider »</strong>. Vous recevrez votre reversement.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 8 — Codes billets gratuits -->
+      <div id="org-gratuits" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#1B7A3E20; border:2px solid #1B7A3E; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#1B7A3E;">
+              <i class="bi bi-gift"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">8. Codes de billets gratuits</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Dans votre espace organisateur, allez dans <strong>« Mes événements »</strong>.</li>
+          <li>Pour l'événement concerné, cliquez sur l'icône de cadeau.</li>
+          <li>Dans <strong>« Ajouter des bénéficiaires »</strong>, renseignez les différents champs en respectant le format indiqué, puis cliquez sur <strong>« Générer les codes »</strong>.</li>
+        </ul>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SECTION ACHETEURS                                    -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <h2 class="fw-bold mb-4 mt-5" style="color:#F47920;">
+        <i class="bi bi-cart me-2"></i>Pour les acheteurs
+      </h2>
+      <div class="section-divider mb-4" style="background:linear-gradient(to right, #F47920, transparent);"></div>
+
+      <!-- Étape 1 — Acheter un ticket -->
+      <div id="ach-billet" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#F47920;">
+              <i class="bi bi-ticket-perforated"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">1. Acheter un ticket d'événement</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Sur la page d'accueil IvoirPass, cliquez sur <strong>« Événements »</strong>.</li>
+          <li>Vous pouvez ensuite :
+            <ul>
+              <li>Dérouler la liste des événements en cherchant le vôtre.</li>
+              <li>Sélectionner la catégorie de votre événement dans <strong>« Filtres »</strong>.</li>
+              <li>Saisir le nom de l'événement ou un mot-clé dans la barre de recherche.</li>
+            </ul>
+          </li>
+          <li>Cliquez sur l'événement, puis dans la section <strong>« Billets »</strong>, sélectionnez <strong>« Acheter mes billets »</strong>.</li>
+          <li>Saisissez vos informations, choisissez vos billets, puis procédez au paiement.</li>
+          <li>Vous recevrez par mail vos tickets au format PDF avec code QR.</li>
+        </ul>
+      </div>
+
+      <!-- Étape 2 — Accès à l'événement -->
+      <div id="ach-acces" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#F47920;">
+              <i class="bi bi-qr-code"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">2. Accès à l'événement</h5>
+          </div>
+        </div>
+        <p class="text-muted">
+          Présentez votre code QR à l'entrée de l'événement pour qu'il soit scanné. Le code est scanné une seule fois pour les événements d'un jour : <strong>ne le partagez pas</strong>.
+        </p>
+      </div>
+
+      <!-- Étape 3 — Acheter un produit -->
+      <div id="ach-produit" class="mb-5">
+        <div class="d-flex mb-3">
+          <div class="flex-shrink-0 me-4 text-center" style="width:60px;">
+            <div style="width:60px; height:60px; border-radius:50%; background:#F4792020; border:2px solid #F47920; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:#F47920;">
+              <i class="bi bi-bag"></i>
+            </div>
+          </div>
+          <div>
+            <h5 class="fw-bold mb-1">3. Acheter un produit</h5>
+          </div>
+        </div>
+        <ul class="text-muted">
+          <li>Sur la page d'accueil IvoirPass, cliquez sur <strong>« Boutique »</strong>.</li>
+          <li>Vous pouvez ensuite :
+            <ul>
+              <li>Dérouler la liste des produits en cherchant le vôtre.</li>
+              <li>Sélectionner la catégorie de votre produit dans <strong>« Filtres »</strong>.</li>
+              <li>Saisir le nom du produit ou un mot-clé dans la barre de recherche.</li>
+            </ul>
+          </li>
+          <li>Cliquez sur le produit, puis cliquez sur <strong>« Acheter maintenant »</strong>.</li>
+          <li>Saisissez vos informations, choisissez le format souhaité, puis la quantité.</li>
+          <li>Vérifiez le montant total puis cliquez sur <strong>« Payer »</strong>.</li>
+          <li>Vous recevrez par mail le lien de téléchargement (produit numérique).</li>
+        </ul>
+        <div class="alert alert-info small" role="alert">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>À savoir :</strong> Pour les produits physiques, renseignez le champ supplémentaire <strong>« Adresse de livraison »</strong> — le vendeur vous contactera pour la livraison. Pour les produits numériques, le lien est personnel (3 téléchargements maximum, valable 48 h).
+        </div>
+      </div>
+
+      <!-- CTA final -->
       <div class="text-center mt-5 p-4" style="background:#f8f9fa; border-radius:12px;">
-        <h5 class="fw-bold mb-2">Prêt à réserver ?</h5>
-        <p class="text-muted mb-3">Des milliers d'événements vous attendent</p>
-        <a href="{% url 'events:list' %}" class="btn btn-orange px-5">
-          <i class="bi bi-calendar-event me-2"></i>Voir les événements
-        </a>
+        <h5 class="fw-bold mb-2">Prêt à commencer ?</h5>
+        <p class="text-muted mb-3">Explorez les événements ou lancez votre espace organisateur</p>
+        <div class="d-flex gap-2 justify-content-center flex-wrap">
+          <a href="{% url 'events:list' %}" class="btn btn-orange px-4">
+            <i class="bi bi-calendar-event me-2"></i>Voir les événements
+          </a>
+            <a href="{% url 'store:list' %}" class="btn btn-outline-secondary px-4">
+            <i class="bi bi-bag me-2"></i>Visiter la boutique
+          </a>
+        </div>
       </div>
 
     </div>
