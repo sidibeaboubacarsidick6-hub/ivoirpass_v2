@@ -2,7 +2,6 @@
 Test du rapport hebdomadaire (génération Excel + ZIP chiffré + envoi email).
 """
 import io
-import pyzipper
 from decimal import Decimal
 from datetime import timedelta
 
@@ -15,6 +14,8 @@ from django.utils import timezone
 from apps.dashboard.reports import build_weekly_report_xlsx, build_weekly_report_zip
 from apps.dashboard.tasks import send_weekly_report
 from apps.tickets.models import Order
+
+
 
 
 User = get_user_model()
@@ -49,38 +50,27 @@ class WeeklyReportTests(TestCase):
     # ------------------------------------------------------------------
     # 2. Génération ZIP chiffré
     # ------------------------------------------------------------------
-    @override_settings(WEEKLY_REPORT_ZIP_PASSWORD='motdepasse-test')
-    def test_build_zip_returns_encrypted_zip(self):
+    def test_build_zip_returns_zip(self):
         zip_bytes, zip_name, week_range = build_weekly_report_zip()
         self.assertIsInstance(zip_bytes, bytes)
         self.assertTrue(zip_name.endswith('.zip'))
 
-        # Le ZIP doit être lisible avec le mot de passe
+        import zipfile
         buffer = io.BytesIO(zip_bytes)
-        with pyzipper.AESZipFile(buffer, 'r') as zf:
-            zf.setpassword(b'motdepasse-test')
+        with zipfile.ZipFile(buffer, 'r') as zf:
             names = zf.namelist()
             self.assertEqual(len(names), 1)
             self.assertTrue(names[0].endswith('.xlsx'))
+            data = zf.read(names[0])
+            self.assertGreater(len(data), 1000)
 
     # ------------------------------------------------------------------
-    # 3. ZIP inaccessible sans mot de passe
-    # ------------------------------------------------------------------
-    @override_settings(WEEKLY_REPORT_ZIP_PASSWORD='motdepasse-test')
-    def test_zip_requires_password(self):
-        zip_bytes, _, _ = build_weekly_report_zip()
-        buffer = io.BytesIO(zip_bytes)
-        with pyzipper.AESZipFile(buffer, 'r') as zf:
-            with self.assertRaises(RuntimeError):
-                # Sans mot de passe, la lecture doit échouer
-                zf.read(zf.namelist()[0])
 
     # ------------------------------------------------------------------
     # 4. Envoi email avec pièce jointe
     # ------------------------------------------------------------------
     @override_settings(
         WEEKLY_REPORT_RECIPIENTS='dest1@example.com,dest2@example.com',
-        WEEKLY_REPORT_ZIP_PASSWORD='motdepasse-test',
     )
     def test_send_weekly_report_sends_email(self):
         mail.outbox = []

@@ -15,12 +15,6 @@ Contenu du fichier Excel :
   3. Reversements           — Demandes de retrait de la semaine
   4. Nouveaux utilisateurs  — Inscriptions de la semaine
 
-🔒 SÉCURITÉ
-Le fichier est protégé par un mot de passe ZIP. Demandez-le à un
-administrateur IvoirPass par un canal sécurisé (SMS, WhatsApp, en
-personne). Ne le communiquez jamais par email.
-
-Pour toute question : {{ support_email }}
 
 --
 Ce rapport est généré automatiquement chaque lundi à 08:30 (heure d'Abidjan).

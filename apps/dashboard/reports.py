@@ -15,7 +15,7 @@ import logging
 from datetime import timedelta
 from decimal import Decimal
 
-import pyzipper
+
 from django.conf import settings
 from django.db.models import Sum
 from django.utils import timezone
@@ -329,9 +329,11 @@ def build_weekly_report_xlsx():
 
 def build_weekly_report_zip():
     """
-    Génère le ZIP chiffré AES-256 contenant le rapport Excel.
+    Génère le ZIP contenant le rapport Excel.
     Retourne (bytes_zip, nom_fichier_zip, (week_start, week_end)).
     """
+    import zipfile
+
     xlsx_bytes, week_range = build_weekly_report_xlsx()
 
     xlsx_name = (
@@ -341,19 +343,8 @@ def build_weekly_report_zip():
     )
     zip_name = xlsx_name.replace('.xlsx', '.zip')
 
-    password = getattr(settings, 'WEEKLY_REPORT_ZIP_PASSWORD', '')
-    if not password:
-        raise ValueError("WEEKLY_REPORT_ZIP_PASSWORD non défini dans .env")
-
     buffer = io.BytesIO()
-    with pyzipper.AESZipFile(
-        buffer,
-        'w',
-        compression=pyzipper.ZIP_DEFLATED,
-        encryption=pyzipper.WZ_AES,
-    ) as zf:
-        zf.setpassword(password.encode('utf-8'))
-        zf.setencryption(pyzipper.WZ_AES, nbits=256)
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(xlsx_name, xlsx_bytes)
 
     buffer.seek(0)
