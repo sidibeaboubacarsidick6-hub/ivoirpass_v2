@@ -82,7 +82,8 @@ def verify_payment_amount_and_binding(verify_result, expected_order, token):
     Paramètres
     ----------
     verify_result : dict
-        Réponse de PayDunyaService.verify_payment(token).
+        Réponse du service de paiement actif (PayDunya ou CinetPay)
+        via get_payment_service().verify_payment(token).
         Exemple : {'success': True, 'status': 'completed', 'data': {...}}
     expected_order : Order | GuestOrder | ProductOrder | GuestProductOrder
         La commande Django à confirmer.

@@ -218,7 +218,7 @@ def guest_payment_initiate(request, access_token):
 def guest_payment_return(request, access_token):
     """Retour après paiement PayDunya — commande invité."""
     from .models import GuestOrder
-    from apps.payments.paydunya import PayDunyaService
+    from apps.payments.provider import get_payment_service
 
     order = get_object_or_404(GuestOrder, access_token=access_token)
 
@@ -229,7 +229,7 @@ def guest_payment_return(request, access_token):
     token = request.GET.get('token', '').strip() or order.payment_reference or ''
 
     if token:
-        result = PayDunyaService.verify_payment(token)
+        result = get_payment_service().verify_payment(token)
 
         if result.get('success') and result.get('status') == 'completed':
             if order.is_payment_cancelled():

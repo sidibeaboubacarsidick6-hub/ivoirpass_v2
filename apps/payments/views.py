@@ -15,7 +15,7 @@ from apps.tickets.models import Order
 from apps.dashboard.models import AuditLog
 from apps.dashboard.services import log_action, get_client_ip
 from .models import Payment
-from .paydunya import PayDunyaService
+from .provider import get_payment_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def initiate_payment(request, order_number):
     )
 
     # Appel à l'API PayDunya
-    result = PayDunyaService.create_invoice(order, request)
+    result = get_payment_service().create_invoice(order, request)
 
     if result['success']:
         # Sauvegarde le token PayDunya
@@ -123,7 +123,7 @@ def payment_return(request, order_number):
         return redirect('tickets:checkout')
 
     # 🔥 Vérification forcée auprès de PayDunya
-    result = PayDunyaService.verify_payment(token)
+    result = get_payment_service().verify_payment(token)
     status = result.get('status', '')
     
     if not status:
@@ -210,7 +210,7 @@ def payment_webhook(request):
     logger.debug("Webhook POST dict: %s", request.POST)
 
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
-    if not PayDunyaService.verify_webhook_signature(request):
+    if not get_payment_service().verify_webhook_signature(request):
         logger.error("Webhook rejeté : signature PayDunya invalide")
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
@@ -268,7 +268,7 @@ def payment_webhook(request):
         # Vérification serveur-à-serveur via l'API PayDunya
         result = {}
         if token:
-            result = PayDunyaService.verify_payment(token)
+            result = get_payment_service().verify_payment(token)
             api_status = result.get('status', '')
             if api_status != 'completed':
                 logger.warning(
@@ -438,7 +438,7 @@ def payment_status(request, order_number):
         from django.http import JsonResponse
         return JsonResponse({'status': 'unknown'})
 
-    result = PayDunyaService.verify_payment(token)
+    result = get_payment_service().verify_payment(token)
 
     from django.http import JsonResponse
     if result['success'] and result['status'] == 'completed':

@@ -517,8 +517,8 @@ def store_webhook(request):
         logger.warning("Store webhook: body vide")
         return HttpResponse('OK', status=200)
 
-    from apps.payments.paydunya import PayDunyaService
-    if not PayDunyaService.verify_webhook_signature(request):
+    from apps.payments.provider import get_payment_service
+    if not get_payment_service().verify_webhook_signature(request):
         logger.error("Store webhook rejeté : signature PayDunya invalide")
         return HttpResponse('FORBIDDEN', status=403)
 
@@ -542,7 +542,7 @@ def store_webhook(request):
 
         result = {}
         if token and status == 'completed':
-            result = PayDunyaService.verify_payment(token)
+            result = get_payment_service().verify_payment(token)
             if result.get('status') != 'completed':
                 logger.warning(f"Store webhook: paiement non confirmé par API - {token}")
                 return HttpResponse('OK', status=200)
@@ -845,7 +845,7 @@ def guest_store_payment_initiate(request, access_token):
 
 def guest_store_payment_return(request, access_token):
     """Retour paiement PayDunya — boutique invité."""
-    from apps.payments.paydunya import PayDunyaService
+    from apps.payments.provider import get_payment_service
 
     order = get_object_or_404(GuestProductOrder, access_token=access_token)
 
@@ -859,7 +859,7 @@ def guest_store_payment_return(request, access_token):
     )
 
     if token:
-        result = PayDunyaService.verify_payment(token)
+        result = get_payment_service().verify_payment(token)
         status = result.get('status', '') or result.get('data', {}).get('invoice', {}).get('status', '')
 
         if result.get('success') and status == 'completed':
@@ -906,8 +906,8 @@ def guest_store_webhook(request):
     if not request.body:
         return HttpResponse('EMPTY', status=200)
 
-    from apps.payments.paydunya import PayDunyaService
-    if not PayDunyaService.verify_webhook_signature(request):
+    from apps.payments.provider import get_payment_service
+    if not get_payment_service().verify_webhook_signature(request):
         logger.error("Guest store webhook rejeté : signature PayDunya invalide")
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
@@ -927,7 +927,7 @@ def guest_store_webhook(request):
 
         result = {}
         if token and status == 'completed':
-            result = PayDunyaService.verify_payment(token)
+            result = get_payment_service().verify_payment(token)
             if result.get('status') != 'completed':
                 logger.warning(f"Guest store webhook: paiement non confirmé par API - {token}")
                 return HttpResponse('OK', status=200)

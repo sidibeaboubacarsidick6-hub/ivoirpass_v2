@@ -115,7 +115,7 @@ class WebhookValidTests(TestCase):
     def _signature(self):
         return hashlib.sha512('test_master_key'.encode()).hexdigest()
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_webhook_completed_confirme_commande(self, mock_verify):
         """Webhook completed → commande PAID + tickets créés."""
         mock_verify.return_value = {
@@ -162,7 +162,7 @@ class WebhookValidTests(TestCase):
         payment.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.COMPLETED)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_webhook_pending_ne_confirme_pas(self, mock_verify):
         """Webhook pending → commande reste PENDING."""
         mock_verify.return_value = {
@@ -189,7 +189,7 @@ class WebhookValidTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PENDING)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_webhook_completed_deux_fois_ne_cree_pas_double_billet(self, mock_verify):
         """Webhook reçu 2 fois → 1 seule confirmation, 1 seul billet."""
         mock_verify.return_value = {
@@ -228,7 +228,7 @@ class WebhookValidTests(TestCase):
             1,
         )
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_webhook_ordre_inexistant_retourne_404(self, mock_verify):
         """order_number inexistant → 404."""
         mock_verify.return_value = {
@@ -312,7 +312,7 @@ class PaymentReturnTests(TestCase):
         # Doit rediriger (302), pas afficher une erreur
         self.assertEqual(response.status_code, 302)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_payment_return_completed_confirme(self, mock_verify):
         """Verify completed → confirmation."""
         mock_verify.return_value = {
@@ -331,7 +331,7 @@ class PaymentReturnTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PAID)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_payment_return_pending_affiche_page(self, mock_verify):
         """Verify pending → page d'attente."""
         mock_verify.return_value = {
@@ -349,7 +349,7 @@ class PaymentReturnTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PENDING)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_payment_return_token_manquant(self, mock_verify):
         """Pas de token → redirection checkout."""
         url = reverse(
@@ -383,7 +383,7 @@ class PaymentStatusPollingTests(TestCase):
         )
         self.client.force_login(self.buyer)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_payment_status_completed(self, mock_verify):
         """Verify completed → JSON status completed + redirect_url."""
         mock_verify.return_value = {
@@ -401,7 +401,7 @@ class PaymentStatusPollingTests(TestCase):
         self.assertEqual(data['status'], 'completed')
         self.assertIn('redirect_url', data)
 
-    @patch('apps.payments.views.PayDunyaService.verify_payment')
+    @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_payment_status_pending(self, mock_verify):
         """Verify pending → JSON status pending."""
         mock_verify.return_value = {
@@ -430,7 +430,7 @@ class InitiatePaymentTests(TestCase):
         )
         self.client.force_login(self.buyer)
 
-    @patch('apps.payments.views.PayDunyaService.create_invoice')
+    @patch('apps.payments.paydunya.PayDunyaService.create_invoice')
     def test_initiate_payment_success(self, mock_create):
         """Création facture OK → redirection PayDunya."""
         mock_create.return_value = {
@@ -453,7 +453,7 @@ class InitiatePaymentTests(TestCase):
         self.assertIsNotNone(payment)
         self.assertEqual(payment.paydunya_token, 'tok_new')
 
-    @patch('apps.payments.views.PayDunyaService.create_invoice')
+    @patch('apps.payments.paydunya.PayDunyaService.create_invoice')
     def test_initiate_payment_echec(self, mock_create):
         """Échec création facture → message erreur + redirection."""
         mock_create.return_value = {

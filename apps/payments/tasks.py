@@ -50,7 +50,7 @@ def reconcile_pending_payments(self):
     a réellement été confirmé côté opérateur, et rattrape la commande si oui.
     """
     from apps.payments.models import Payment
-    from apps.payments.paydunya import PayDunyaService
+    from apps.payments.provider import get_payment_service
 
     now = timezone.now()
     min_age = now - timedelta(minutes=RECONCILE_MIN_AGE_MINUTES)
@@ -82,7 +82,7 @@ def reconcile_pending_payments(self):
 
         checked += 1
         try:
-            result = PayDunyaService.verify_payment(token)
+            result = get_payment_service().verify_payment(token)
         except Exception as e:
             logger.warning(f"Réconciliation: erreur de vérification pour le token {token}: {e}")
             continue
