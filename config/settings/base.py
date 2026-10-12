@@ -386,6 +386,12 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # ============================================
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
+# ============================================
+# PROVIDER DE PAIEMENT ACTIF
+# ============================================
+# 'paydunya' (défaut) ou 'cinetpay'
+# Bascule possible à tout moment via .env, sans modification de code.
+PAYMENT_PROVIDER = config('PAYMENT_PROVIDER', default='paydunya')
 
 # ============================================
 # PAYDUNYA
