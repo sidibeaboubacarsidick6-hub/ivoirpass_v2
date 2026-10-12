@@ -218,3 +218,85 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
         'wallet_frozen': wallet_frozen,
         'cancelled_at': timezone.now(),
     }
+
+
+
+
+# ============================================================
+# CAS INHABITUEL N°2 — Impact d'une annulation (wallet vidé)
+# ============================================================
+def get_cancellation_impact(event):
+    """
+    Calcule l'impact financier d'une éventuelle annulation de l'événement.
+
+    Compare :
+      - le montant total des ventes PAYÉES pour cet événement
+      - le solde actuel du wallet de l'organisateur
+
+    Si le solde est inférieur aux ventes, cela signifie que l'organisateur
+    a probablement déjà retiré une partie (ou la totalité) de l'argent —
+    un remboursement client serait alors à la charge d'IvoirPass.
+
+    Args:
+        event: l'Event à analyser.
+
+    Returns:
+        dict {
+            'sales_count': int,           # commandes payées sur cet événement
+            'sales_total': Decimal,       # montant total des ventes
+            'wallet_available': Decimal,  # solde disponible actuel du wallet
+            'wallet_pending': Decimal,    # solde en attente de reversement
+            'shortfall': Decimal,         # manque (0 si solde >= ventes)
+            'needs_confirmation': bool,   # True si shortfall > 0
+        }
+    """
+    from decimal import Decimal
+    from django.db.models import Sum
+    from apps.dashboard.models import OrganizerWallet
+    from apps.tickets.models import Order, GuestOrder
+
+    zero = Decimal('0')
+
+    # ── 1. Ventes payées sur cet événement ─────────────────────────
+    guest_orders = GuestOrder.objects.filter(
+        guest_items__ticket_type__event=event,
+        status=GuestOrder.Status.PAID,
+    ).distinct()
+
+    account_orders = Order.objects.filter(
+        items__ticket_type__event=event,
+        status=Order.Status.PAID,
+    ).distinct()
+
+    sales_count = guest_orders.count() + account_orders.count()
+
+    guest_total = guest_orders.aggregate(t=Sum('total'))['t'] or zero
+    account_total = account_orders.aggregate(t=Sum('total'))['t'] or zero
+    sales_total = guest_total + account_total
+
+    # ── 2. Solde du wallet ─────────────────────────────────────────
+    wallet = OrganizerWallet.objects.filter(organizer=event.organizer).first()
+    if wallet:
+        wallet_available = (
+            (wallet.balance_events_available or zero)
+            + (wallet.balance_store_available or zero)
+        )
+        wallet_pending = (
+            (wallet.balance_events_pending or zero)
+            + (wallet.balance_store_pending or zero)
+        )
+    else:
+        wallet_available = zero
+        wallet_pending = zero
+
+    # ── 3. Écart ───────────────────────────────────────────────────
+    shortfall = max(zero, sales_total - wallet_available)
+
+    return {
+        'sales_count':        sales_count,
+        'sales_total':        sales_total,
+        'wallet_available':   wallet_available,
+        'wallet_pending':     wallet_pending,
+        'shortfall':          shortfall,
+        'needs_confirmation': shortfall > 0,
+    }
