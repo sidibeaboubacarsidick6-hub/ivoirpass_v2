@@ -361,6 +361,8 @@ class EventAdmin(admin.ModelAdmin):
           - Notifie l'organisateur par email.
         """
         from apps.notifications.service import NotificationService
+        from .services import cancel_event_organizer_liable
+
 
         pending = queryset.filter(status=Event.Status.CANCEL_PENDING)
 
@@ -432,6 +434,10 @@ class EventAdmin(admin.ModelAdmin):
                 approved += 1
 
             except Exception as exc:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "approve_cancellation : échec pour event %s", event.pk,
+                )
                 errors.append(f"« {event.title} » : {exc}")
 
         if approved:
