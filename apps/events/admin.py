@@ -267,25 +267,39 @@ class EventAdmin(admin.ModelAdmin):
         orders_affected = 0
         tickets_voided = 0
         wallets_frozen = 0
+        blocked = []
 
         for event in queryset:
-            result = cancel_event_organizer_liable(
-                event,
-                reason=f"Annulation admin par {request.user.email}",
-            )
+            try:
+                result = cancel_event_organizer_liable(
+                    event,
+                    reason=f"Annulation admin par {request.user.email}",
+                )
+            except ValueError as exc:
+                # Cas inhabituel n°1 : litige en cours → on bloque
+                blocked.append(f"{event.title} : {exc}")
+                continue
+
             cancelled += 1
             orders_affected += result['orders_affected']
             tickets_voided += result['tickets_voided']
             if result['wallet_frozen']:
                 wallets_frozen += 1
 
-        self.message_user(
-            request,
-            f"{cancelled} événement(s) annulé(s). "
-            f"{orders_affected} commande(s) impactée(s), "
-            f"{tickets_voided} billet(s) invalidé(s), "
-            f"{wallets_frozen} wallet(s) gelé(s)."
-        )
+        if cancelled:
+            self.message_user(
+                request,
+                f"{cancelled} événement(s) annulé(s). "
+                f"{orders_affected} commande(s) impactée(s), "
+                f"{tickets_voided} billet(s) invalidé(s), "
+                f"{wallets_frozen} wallet(s) gelé(s)."
+            )
+
+        if blocked:
+            messages.error(
+                request,
+                "Annulation bloquée pour : " + " | ".join(blocked),
+            )
 
     @admin.action(description="⭐ Mettre en avant")
     def feature_events(self, request, queryset):

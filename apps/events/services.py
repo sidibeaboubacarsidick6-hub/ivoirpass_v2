@@ -53,13 +53,49 @@ def cancel_event_organizer_liable(event, reason="Événement annulé par l'organ
             'wallet_frozen': bool,    # True si le wallet a été gelé
             'cancelled_at': datetime,
         }
+
+    Raises:
+        ValueError: si un litige est en cours sur une commande liée à
+                    cet événement (Cas inhabituel n°1 — procédures
+                    opérationnelles).
     """
-    from apps.dashboard.models import OrganizerWallet
+    # ⚠️ Tous les imports doivent être au début de la fonction.
+    # Si un import est placé plus bas, Python considère la variable
+    # comme locale à toute la fonction → UnboundLocalError.
+    from apps.dashboard.models import OrganizerWallet, Dispute
     from apps.notifications.service import NotificationService
     from apps.tickets.models import (
         Order, Ticket,
         GuestOrder, GuestTicket,
     )
+
+    # ── CAS INHABITUEL N°1 — Litiges en cours ──────────────────────
+    # On refuse l'annulation tant qu'un litige est ouvert sur une commande
+    # liée à cet événement. Cela évite qu'un litige en cours devienne
+    # impossible à trancher (voir procédures opérationnelles).
+    order_numbers = set()
+    for order_number in Order.objects.filter(
+        items__ticket_type__event=event
+    ).values_list('order_number', flat=True):
+        order_numbers.add(order_number)
+    for order_number in GuestOrder.objects.filter(
+        guest_items__ticket_type__event=event
+    ).values_list('order_number', flat=True):
+        order_numbers.add(order_number)
+
+    if order_numbers:
+        litiges_ouverts = list(Dispute.objects.filter(
+            order_number__in=order_numbers,
+            status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING],
+        ).values_list('reference', flat=True))
+
+        if litiges_ouverts:
+            references = ', '.join(litiges_ouverts)
+            raise ValueError(
+                f"Annulation impossible : litige(s) en cours sur cet événement "
+                f"({references}). Clôturez d'abord le(s) litige(s), puis "
+                f"réessayez. (Voir procédure opérationnelle Cas n°1.)"
+            )
 
     event.status = event.Status.CANCELLED
     event.save(update_fields=['status'])

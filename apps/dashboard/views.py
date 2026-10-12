@@ -30,6 +30,51 @@ from apps.tickets.models import (
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, ReversalOTP, AuditLog, Dispute
 
 
+# ============================================================
+# HELPER — Cas inhabituel n°6 : délai de contestation
+# ============================================================
+def _get_dispute_reference_date(order_number):
+    """
+    Retourne la date de référence pour calculer le délai de litige :
+      - Billetterie : end_date de l'événement
+      - Boutique    : paid_at (ou created_at) de la commande
+
+    Retourne None si la commande n'est pas trouvée — dans ce cas,
+    on laisse la contestation passer (pas de blocage sur un numéro
+    de commande invalide, qui sera filtré par le support).
+    """
+    from apps.tickets.models import Order, GuestOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
+
+    # Billetterie avec compte
+    order = Order.objects.filter(order_number=order_number).first()
+    if order:
+        first_item = order.items.first()
+        if first_item and first_item.ticket_type and first_item.ticket_type.event:
+            return first_item.ticket_type.event.end_date or order.paid_at or order.created_at
+        return order.paid_at or order.created_at
+
+    # Billetterie invité
+    guest_order = GuestOrder.objects.filter(order_number=order_number).first()
+    if guest_order:
+        first_item = guest_order.guest_items.first()
+        if first_item and first_item.ticket_type and first_item.ticket_type.event:
+            return first_item.ticket_type.event.end_date or guest_order.paid_at or guest_order.created_at
+        return guest_order.paid_at or guest_order.created_at
+
+    # Boutique avec compte
+    prod_order = ProductOrder.objects.filter(order_number=order_number).first()
+    if prod_order:
+        return prod_order.paid_at or prod_order.created_at
+
+    # Boutique invité
+    guest_prod = GuestProductOrder.objects.filter(order_number=order_number).first()
+    if guest_prod:
+        return guest_prod.paid_at or guest_prod.created_at
+
+    return None
+
+
 
 def organizer_required(view_func):
     @login_required
@@ -1184,6 +1229,22 @@ def export_sales_pdf(request):
 def submit_dispute(request):
     """Page publique pour soumettre un litige."""
     if request.method == 'POST':
+        order_number = request.POST.get('order_number', '').strip()
+
+        # Cas inhabituel n°6 : blocage des litiges ouverts plus de 30 jours
+        # après l'événement (ou l'achat pour la boutique).
+        DELAI_MAX_LITIGE_JOURS = 30
+        if order_number:
+            ref_date = _get_dispute_reference_date(order_number)
+            if ref_date and (timezone.now() - ref_date).days > DELAI_MAX_LITIGE_JOURS:
+                messages.error(
+                    request,
+                    f"Délai de contestation dépassé. Un litige ne peut être ouvert "
+                    f"que dans les {DELAI_MAX_LITIGE_JOURS} jours suivant l'événement "
+                    f"ou l'achat. Pour toute exception, contactez le support directement."
+                )
+                return render(request, 'pages/report_problem.html')
+
         dispute = Dispute.objects.create(
             type=request.POST.get('type', 'other'),
             reported_by=request.user if request.user.is_authenticated else None,
