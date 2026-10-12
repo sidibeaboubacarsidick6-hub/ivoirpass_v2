@@ -360,6 +360,17 @@ def event_delete(request, slug):
 
     if request.method == 'POST':
         if event.tickets_sold > 0:
+            # ── Cas inhabituel n°2 : vérifier l'impact avant d'annuler ──
+            # Si le wallet de l'organisateur est insuffisant pour couvrir
+            # les ventes de cet événement, on redirige vers une page de
+            # confirmation qui explique sa responsabilité financière.
+            from .services import get_cancellation_impact
+
+            impact = get_cancellation_impact(event)
+            if impact['needs_confirmation']:
+                return redirect('events:cancel_confirm', slug=event.slug)
+
+            # Sinon → annulation normale
             from .services import cancel_event_organizer_liable
 
             reason = request.POST.get(
@@ -386,6 +397,93 @@ def event_delete(request, slug):
             messages.success(request, f"Événement « {title} » supprimé.")
 
     return redirect('events:my_events')
+
+
+
+@organizer_required
+def event_cancel_confirm(request, slug):
+    """
+    Page de confirmation d'annulation — Cas inhabituel n°2.
+
+    Affichée quand un organisateur veut annuler un événement dont les
+    ventes ont déjà été retirées (wallet insuffisant pour couvrir les
+    remboursements clients).
+
+    Sur POST (avec checkbox cochée) : passe l'événement en
+    CANCEL_PENDING et notifie les admins. L'annulation effective
+    n'aura lieu qu'après validation par un admin.
+    """
+    from .services import get_cancellation_impact
+    from apps.notifications.tasks import notify_admins_async
+
+    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+
+    # Refus si l'événement n'a pas de ventes ou est déjà en attente
+    if event.tickets_sold == 0:
+        messages.info(request, "Cet événement n'a aucune vente, utilisez la suppression directe.")
+        return redirect('events:my_events')
+
+    if event.status == Event.Status.CANCEL_PENDING:
+        messages.info(request, "Une demande d'annulation est déjà en attente de validation.")
+        return redirect('events:my_events')
+
+    impact = get_cancellation_impact(event)
+
+    if request.method == 'POST':
+        # Vérifier que la case d'acceptation est cochée
+        accepted = request.POST.get('accept_responsibility') == 'on'
+        if not accepted:
+            messages.error(
+                request,
+                "Vous devez accepter la clause de responsabilité pour continuer."
+            )
+            return render(request, 'events/cancel_confirm.html', {
+                'event': event,
+                'impact': impact,
+            })
+
+        reason = request.POST.get('cancel_reason', '').strip() or (
+            "Annulation demandée par l'organisateur — wallet insuffisant."
+        )
+
+        # Passer en CANCEL_PENDING
+        event.status = Event.Status.CANCEL_PENDING
+        event.cancel_requested_at = timezone.now()
+        event.cancel_requested_by = request.user
+        event.cancel_request_reason = reason
+        event.save(update_fields=[
+            'status', 'cancel_requested_at',
+            'cancel_requested_by', 'cancel_request_reason',
+        ])
+
+        # Notifier les admins
+        notify_admins_async.delay(
+            notification_type='fraud_alert',
+            title=f"Demande d'annulation à valider : {event.title}",
+            message=(
+                f"L'organisateur {request.user.get_full_name() or request.user.email} "
+                f"demande l'annulation de l'événement « {event.title} ».\n\n"
+                f"Ventes : {impact['sales_count']} commande(s) pour "
+                f"{int(impact['sales_total'])} FCFA\n"
+                f"Solde wallet : {int(impact['wallet_available'])} FCFA\n"
+                f"Écart à rembourser : {int(impact['shortfall'])} FCFA\n\n"
+                f"Raison invoquée : {reason}\n\n"
+                f"À valider ou refuser dans l'admin Django."
+            ),
+            reference=f"event-{event.id}",
+        )
+
+        messages.warning(
+            request,
+            f"Votre demande d'annulation a été envoyée. Un administrateur "
+            f"IvoirPass va l'examiner. Vous serez notifié par email de sa décision."
+        )
+        return redirect('events:my_events')
+
+    return render(request, 'events/cancel_confirm.html', {
+        'event': event,
+        'impact': impact,
+    })
 
 @organizer_required
 def assign_scanner_agents(request, slug):

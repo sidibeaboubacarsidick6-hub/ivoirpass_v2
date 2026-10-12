@@ -273,7 +273,6 @@ def get_cancellation_impact(event):
     guest_total = guest_orders.aggregate(t=Sum('total'))['t'] or zero
     account_total = account_orders.aggregate(t=Sum('total'))['t'] or zero
     sales_total = guest_total + account_total
-
     # ── 2. Solde du wallet ─────────────────────────────────────────
     wallet = OrganizerWallet.objects.filter(organizer=event.organizer).first()
     if wallet:
@@ -292,11 +291,18 @@ def get_cancellation_impact(event):
     # ── 3. Écart ───────────────────────────────────────────────────
     shortfall = max(zero, sales_total - wallet_available)
 
+    # La confirmation n'est demandée que si un wallet existe ET qu'il est
+    # insuffisant. Si aucun wallet n'existe, c'est qu'aucun crédit n'a
+    # jamais été fait (cas anormal en production — le signal de crédit
+    # crée le wallet dès la première vente). On laisse alors passer
+    # l'annulation normale.
+    needs_confirmation = wallet is not None and shortfall > 0
+
     return {
         'sales_count':        sales_count,
         'sales_total':        sales_total,
         'wallet_available':   wallet_available,
         'wallet_pending':     wallet_pending,
         'shortfall':          shortfall,
-        'needs_confirmation': shortfall > 0,
+        'needs_confirmation': needs_confirmation,
     }

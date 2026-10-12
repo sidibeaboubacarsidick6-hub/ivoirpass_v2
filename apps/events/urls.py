@@ -17,6 +17,8 @@ urlpatterns = [
          views.multi_day_step_3, name='multi_day_step_3'),
     path('<slug:slug>/modifier/',  views.event_edit,   name='edit'),
     path('<slug:slug>/supprimer/', views.event_delete, name='delete'),
+    path('<slug:slug>/supprimer/', views.event_delete, name='delete'),
+    path('<slug:slug>/annuler-confirmer/', views.event_cancel_confirm, name='cancel_confirm'),
     path('<slug:slug>/agents-scanner/', views.assign_scanner_agents, name='assign_scanner_agents'),
     path('agents-scanner/nouveau/', views.create_scanner_agent, name='create_scanner_agent'),
 
