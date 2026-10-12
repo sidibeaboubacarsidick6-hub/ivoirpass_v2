@@ -78,16 +78,39 @@ class IncreaseFreeQuotaForm(forms.Form):
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = (
-        'title', 'organizer', 'category', 'status',
+        'title', 'organizer', 'category', 'status_badge',
         'start_date', 'venue_city', 'tickets_sold',
         'commission_rate', 'is_featured', 'cover_preview'
     )
+
+    @admin.display(description="Statut", ordering='status')
+    def status_badge(self, obj):
+        """Affiche un badge coloré selon le statut de l'événement."""
+        color = {
+            'draft': '#6c757d',
+            'published': '#1B7A3E',
+            'cancelled': '#dc3545',
+            'completed': '#0dcaf0',
+            'postponed': '#F47920',
+            'cancel_pending': '#ff6b35',
+        }.get(obj.status, '#6c757d')
+
+        icon = '🚨 ' if obj.status == 'cancel_pending' else ''
+
+        return format_html(
+            '<span style="background:{};color:white;padding:3px 10px;'
+            'border-radius:12px;font-size:0.78rem;font-weight:700;">'
+            '{}{}</span>',
+            color, icon, obj.get_status_display()
+        )
+
     list_filter = ('status', 'category', 'event_type', 'is_featured', 'venue_city')
     search_fields = ('title', 'organizer__email', 'venue_name', 'venue_city')
     prepopulated_fields = {'slug': ('title',)}
     readonly_fields = (
         'uuid', 'tickets_sold', 'created_at',
-        'updated_at', 'published_at', 'cover_preview'
+        'updated_at', 'published_at', 'cover_preview',
+        'cancel_requested_at', 'cancel_requested_by', 'cancel_request_reason',
     )
     date_hierarchy = 'start_date'
     inlines = [TicketTypeInline, EventGalleryItemInline, EventFAQInline, EventPartnerInline]
@@ -141,6 +164,19 @@ class EventAdmin(admin.ModelAdmin):
                 '⚠️ La commission est prélevée sur le reversement '
                 'de l\'organisateur, pas sur le prix affiché à l\'acheteur.'
             ),
+        }),
+        ('🚨 Annulation en attente de validation', {
+            'fields': (
+                'cancel_requested_at',
+                'cancel_requested_by',
+                'cancel_request_reason',
+            ),
+            'description': (
+                '⚠️ L\'organisateur a demandé l\'annulation de cet événement '
+                'car son wallet est insuffisant pour couvrir les remboursements. '
+                'Validez ou refusez la demande avec les actions en haut de la liste.'
+            ),
+            'classes': ('collapse',),
         }),
         ('Système', {
             'fields': ('created_at', 'updated_at'),
@@ -241,6 +277,7 @@ class EventAdmin(admin.ModelAdmin):
     actions = [
         'publish_events', 'cancel_events', 'feature_events',
         'increase_free_quota',
+        'approve_cancellation', 'refuse_cancellation',
     ]
 
     def cover_preview(self, obj):
@@ -306,6 +343,184 @@ class EventAdmin(admin.ModelAdmin):
         updated = queryset.update(is_featured=True)
         self.message_user(request, f"{updated} événement(s) mis en avant.")
 
+
+
+    # ============================================================
+    # CAS INHABITUEL N°2 — Validation / Refus des demandes d'annulation
+    # ============================================================
+
+    @admin.action(description="✅ Valider la demande d'annulation (Cas 2)")
+    def approve_cancellation(self, request, queryset):
+        """
+        Valide une ou plusieurs demandes d'annulation en attente.
+
+        Pour chaque événement en CANCEL_PENDING :
+          - Appelle cancel_event_organizer_liable() qui déclenche
+            l'annulation complète (billets void, commandes annulées,
+            wallet gelé, emails aux acheteurs).
+          - Notifie l'organisateur par email.
+        """
+        from apps.notifications.service import NotificationService
+
+        pending = queryset.filter(status=Event.Status.CANCEL_PENDING)
+
+        if not pending.exists():
+            self.message_user(
+                request,
+                "Aucun événement en attente d'annulation dans la sélection.",
+                level=messages.WARNING,
+            )
+            return
+
+        approved = 0
+        errors = []
+
+        for event in pending:
+            try:
+                result = cancel_event_organizer_liable(
+                    event,
+                    reason=(
+                        f"Annulation validée par admin ({request.user.email}) — "
+                        f"demande initiale : {event.cancel_request_reason or 'sans raison'}"
+                    ),
+                )
+
+                # Notifier l'organisateur
+                if event.organizer and event.organizer.email:
+                    try:
+                        NotificationService.send_email(
+                            subject=f"[IvoirPass] Annulation validée : {event.title}",
+                            message=(
+                                f"Bonjour {event.organizer.get_full_name() or event.organizer.email},\n\n"
+                                f"Votre demande d'annulation pour l'événement "
+                                f"« {event.title} » a été validée par un administrateur IvoirPass.\n\n"
+                                f"Effets :\n"
+                                f"- {result['orders_affected']} commande(s) annulée(s)\n"
+                                f"- {result['tickets_voided']} billet(s) invalidé(s)\n"
+                                f"- Wallet : {'gelé' if result['wallet_frozen'] else 'non impacté'}\n\n"
+                                f"Vous êtes responsable du remboursement des acheteurs. "
+                                f"Votre wallet reste gelé jusqu'à régularisation.\n\n"
+                                f"L'équipe IvoirPass"
+                            ),
+                            recipient_list=[event.organizer.email],
+                        )
+                    except Exception as exc:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "Échec notification organisateur %s : %s",
+                            event.organizer.email, exc,
+                        )
+
+                # Log audit
+                log_action(
+                    action=AuditLog.Action.UPDATE,
+                    description=(
+                        f"Annulation validée par admin pour « {event.title} » — "
+                        f"{result['orders_affected']} commande(s), "
+                        f"{result['tickets_voided']} billet(s) invalidé(s)."
+                    ),
+                    user=request.user,
+                    obj=event,
+                    metadata={
+                        'orders_affected': result['orders_affected'],
+                        'tickets_voided': result['tickets_voided'],
+                        'wallet_frozen': result['wallet_frozen'],
+                    },
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+
+                approved += 1
+
+            except Exception as exc:
+                errors.append(f"« {event.title} » : {exc}")
+
+        if approved:
+            self.message_user(
+                request,
+                f"{approved} demande(s) d'annulation validée(s) et appliquée(s).",
+            )
+        if errors:
+            messages.error(request, "Erreurs : " + " | ".join(errors))
+
+    @admin.action(description="🚫 Refuser la demande d'annulation (Cas 2)")
+    def refuse_cancellation(self, request, queryset):
+        """
+        Refuse une ou plusieurs demandes d'annulation.
+
+        Pour chaque événement en CANCEL_PENDING :
+          - Restaure le statut PUBLISHED
+          - Efface les 3 champs de demande
+          - Notifie l'organisateur par email
+        """
+        from apps.notifications.service import NotificationService
+        from django.utils import timezone
+
+        pending = queryset.filter(status=Event.Status.CANCEL_PENDING)
+
+        if not pending.exists():
+            self.message_user(
+                request,
+                "Aucun événement en attente d'annulation dans la sélection.",
+                level=messages.WARNING,
+            )
+            return
+
+        refused = 0
+
+        for event in pending:
+            old_reason = event.cancel_request_reason
+
+            event.status = Event.Status.PUBLISHED
+            event.cancel_requested_at = None
+            event.cancel_requested_by = None
+            event.cancel_request_reason = ''
+            event.save(update_fields=[
+                'status', 'cancel_requested_at',
+                'cancel_requested_by', 'cancel_request_reason',
+            ])
+
+            # Notifier l'organisateur
+            if event.organizer and event.organizer.email:
+                try:
+                    NotificationService.send_email(
+                        subject=f"[IvoirPass] Demande d'annulation refusée : {event.title}",
+                        message=(
+                            f"Bonjour {event.organizer.get_full_name() or event.organizer.email},\n\n"
+                            f"Votre demande d'annulation pour l'événement "
+                            f"« {event.title} » a été examinée et refusée.\n\n"
+                            f"Raison invoquée : {old_reason or 'non précisée'}\n\n"
+                            f"L'événement reste publié et actif. Si vous souhaitez "
+                            f"discuter de cette décision, contactez le support IvoirPass.\n\n"
+                            f"L'équipe IvoirPass"
+                        ),
+                        recipient_list=[event.organizer.email],
+                    )
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "Échec notification organisateur %s : %s",
+                        event.organizer.email, exc,
+                    )
+
+            log_action(
+                action=AuditLog.Action.UPDATE,
+                description=(
+                    f"Demande d'annulation refusée pour « {event.title} » — "
+                    f"raison initiale : {old_reason or 'non précisée'}."
+                ),
+                user=request.user,
+                obj=event,
+                metadata={'old_reason': old_reason},
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+
+            refused += 1
+
+        if refused:
+            self.message_user(
+                request,
+                f"{refused} demande(s) d'annulation refusée(s). Événement(s) remis en publié.",
+            )
 
 @admin.register(TicketType)
 class TicketTypeAdmin(admin.ModelAdmin):
