@@ -63,6 +63,8 @@ class Event(models.Model):
         CANCELLED = 'cancelled', _('Annulé')
         COMPLETED = 'completed', _('Terminé')
         POSTPONED = 'postponed', _('Reporté')
+        # Cas inhabituel n°2 : annulation avec wallet vidé → validation admin
+        CANCEL_PENDING = 'cancel_pending', _('Annulation en attente de validation')
 
     class EventType(models.TextChoices):
         PHYSICAL = 'physical', _('Présentiel')
@@ -477,6 +479,30 @@ class Event(models.Model):
     @property
     def is_past(self):
         return self.end_date < timezone.now()
+
+    # ============================================
+    # WORKFLOW D'ANNULATION (Cas inhabituel n°2)
+    # Utilisé quand un organisateur veut annuler un événement
+    # dont les ventes ont déjà été retirées. La demande est
+    # placée en attente, un admin doit valider ou refuser.
+    # ============================================
+    cancel_requested_at = models.DateTimeField(
+        _("demande d'annulation le"),
+        null=True, blank=True,
+        help_text="Date à laquelle l'organisateur a demandé l'annulation",
+    )
+    cancel_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='event_cancel_requests',
+        verbose_name=_('demandée par'),
+    )
+    cancel_request_reason = models.TextField(
+        _("raison de la demande d'annulation"),
+        blank=True,
+        help_text="Raison fournie par l'organisateur pour justifier la demande",
+    )
 
     @property
     def is_on_sale(self):
