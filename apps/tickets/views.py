@@ -323,12 +323,12 @@ def guest_webhook(request):
     import logging
     from django.http import HttpResponse
     from .models import GuestOrder
-    from apps.payments.paydunya import PayDunyaService
+    from apps.payments.provider import get_payment_service
 
     logger = logging.getLogger(__name__)
 
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
-    if not PayDunyaService.verify_webhook_signature(request):
+    if not get_payment_service().verify_webhook_signature(request):
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
             description="Webhook invité rejeté : signature PayDunya invalide",
@@ -348,7 +348,7 @@ def guest_webhook(request):
         # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR
         verify_result = {}
         if status == 'completed' and token:
-            verify_result = PayDunyaService.verify_payment(token)
+            verify_result = get_payment_service().verify_payment(token)
             if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
