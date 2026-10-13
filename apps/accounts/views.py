@@ -84,21 +84,21 @@ def profile_edit(request):
                 fresh_user = CustomUser.objects.get(pk=user.pk)
 
                 if fresh_user.kyc_identity_doc or fresh_user.kyc_proof_of_address or fresh_user.kyc_business_doc:
-                    from apps.notifications.models import AdminNotification
-                    AdminNotification.objects.create(
-                        type='fraud_alert',
-                        title='KYC en attente de verification',
+                    from apps.notifications.tasks import notify_admins_async
+                    notify_admins_async.delay(
+                        notification_type='fraud_alert',
+                        title='KYC en attente de vérification',
                         message=(
                             f"L'organisateur {fresh_user.get_full_name()} ({fresh_user.email}) "
                             f"a soumis ses documents KYC.\n\n"
-                            f"Piece d'identite : {'Oui' if fresh_user.kyc_identity_doc else 'Non'}\n"
+                            f"Pièce d'identité : {'Oui' if fresh_user.kyc_identity_doc else 'Non'}\n"
                             f"Justificatif domicile : {'Oui' if fresh_user.kyc_proof_of_address else 'Non'}\n"
                             f"Document pro : {'Oui' if fresh_user.kyc_business_doc else 'Non'}\n\n"
-                            f"Verifiez dans le back-office : /admin/accounts/customuser/{fresh_user.pk}/change/"
+                            f"Vérifiez dans le back-office : /admin/accounts/customuser/{fresh_user.pk}/change/"
                         ),
                         reference=f'kyc-{fresh_user.pk}',
                     )
-                    messages.success(request, "Votre demande de verification a ete envoyee.")
+                    messages.success(request, "Votre demande de vérification a été envoyée.")
                     return redirect('accounts:profile')
 
             messages.success(request, "Votre profil a ete mis a jour avec succes.")
