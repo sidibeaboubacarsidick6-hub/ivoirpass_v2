@@ -8,6 +8,42 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def _safe_json(response, endpoint=''):
+    """
+    Tente de parser response.json(). Retourne toujours un dict.
+
+    Si la réponse n'est PAS du JSON (cas typique : Cloudflare 403 HTML,
+    erreur 500 Symfony de PayDunya, page d'erreur nginx, timeout),
+    cette fonction retourne un dict avec un message d'erreur clair au
+    lieu de laisser Python lever une exception `Expecting value: line 1
+    column 1 (char 0)` qui remonte ensuite jusqu'à l'utilisateur.
+
+    Args:
+        response : la réponse requests.
+        endpoint : nom de l'endpoint appelé, pour les logs.
+
+    Returns:
+        dict avec au minimum 'response_code' et 'response_text'.
+    """
+    try:
+        return response.json()
+    except ValueError:
+        preview = (response.text or '')[:300].replace('\n', ' ').replace('\r', '')
+        logger.error(
+            "PayDunya : réponse non-JSON sur %s — HTTP %s — %s",
+            endpoint or 'inconnu',
+            getattr(response, 'status_code', '?'),
+            preview,
+        )
+        return {
+            'response_code': 'NON_JSON',
+            'response_text': (
+                f"Réponse PayDunya invalide "
+                f"(HTTP {getattr(response, 'status_code', '?')})"
+            ),
+        }
+
+
 class PayDunyaService:
     """Service pour interagir avec l'API PayDunya."""
 
@@ -35,8 +71,20 @@ class PayDunyaService:
 
     @classmethod
     def get_headers(cls):
+        """
+        Headers HTTP envoyés à l'API PayDunya.
+
+        ⚠️ Le User-Agent est OBLIGATOIRE : sans lui, Cloudflare (le
+        pare-feu de PayDunya) bloque les requêtes depuis les IPs
+        datacenter (VPS, cloud) avec un 403 "Attention Required!".
+
+        Le Accept: application/json aide aussi à garantir que PayDunya
+        renvoie du JSON et non une page HTML d'erreur.
+        """
         return {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'IvoirPass/1.0 (+https://ivoirpass.com)',
             'PAYDUNYA-MASTER-KEY': settings.PAYDUNYA_MASTER_KEY,
             'PAYDUNYA-PRIVATE-KEY': settings.PAYDUNYA_PRIVATE_KEY,
             'PAYDUNYA-TOKEN': settings.PAYDUNYA_TOKEN,
@@ -98,7 +146,7 @@ class PayDunyaService:
                 headers=cls.get_headers(),
                 timeout=30,
             )
-            data = response.json()
+            data = _safe_json(response, 'create_invoice')
 
             if data.get('response_code') == '00':
                 return {
@@ -154,7 +202,7 @@ class PayDunyaService:
                 headers=cls._disbursement_headers(),
                 timeout=30,
             )
-            data = response.json()
+            data = _safe_json(response, 'create_disbursement')
             if data.get('response_code') == '00' and data.get('disburse_token'):
                 return {'success': True, 'token': data['disburse_token'], 'status': 'created'}
             return {'success': False, 'error': data.get('response_text', 'Erreur PayDunya lors de la création du payout')}
@@ -171,7 +219,7 @@ class PayDunyaService:
                 headers=cls._disbursement_headers(),
                 timeout=30,
             )
-            data = response.json()
+            data = _safe_json(response, 'submit_disbursement')
             return {
                 'success': data.get('response_code') == '00',
                 'status': (data.get('status') or ('success' if data.get('response_code') == '00' and 'pending' not in str(data.get('response_text','')).lower() else 'pending')).lower(),
@@ -193,7 +241,7 @@ class PayDunyaService:
                 headers=cls._disbursement_headers(),
                 timeout=30,
             )
-            data = response.json()
+            data = _safe_json(response, 'check_disbursement_status')
             return {
                 'success': data.get('response_code') == '00',
                 'status': (data.get('status') or 'failed').lower(),
@@ -249,16 +297,16 @@ class PayDunyaService:
         try:
             url = f"{settings.PAYDUNYA_API_BASE}/checkout-invoice/confirm/{token}"
             headers = cls.get_headers()
-            
+
             response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
+            # ⚠️ On ne fait PAS raise_for_status() : Cloudflare peut renvoyer
+            # un 403 HTML, on veut logger la vraie réponse avant d'échouer.
+            data = _safe_json(response, 'verify_payment')
+
             if data.get('response_code') == '00':
                 invoice = data.get('data', {}).get('invoice', {})
                 status = invoice.get('status', '')
-                
+
                 return {
                     'success': True,
                     'status': status,
@@ -270,7 +318,7 @@ class PayDunyaService:
                     'status': 'failed',
                     'message': data.get('response_text', 'Erreur PayDunya'),
                 }
-                
+
         except Exception as e:
             logger.error(f"Erreur vérification PayDunya: {e}")
             return {
