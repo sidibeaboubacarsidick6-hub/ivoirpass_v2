@@ -102,6 +102,30 @@ class PayDunyaService:
             dict : {'success': bool, 'token': str, 'payment_url': str}
                    ou {'success': False, 'error': str} en cas d'échec.
         """
+        # ── Validation du montant minimum (contrainte PayDunya live) ──
+        # En mode live, PayDunya refuse les montants < 200 FCFA avec un
+        # message peu clair ("Invalid Total Amount"). On intercepte ici
+        # pour retourner une erreur explicite à l'utilisateur.
+        # En mode test, pas de contrainte (le sandbox accepte tout).
+        PAYDUNYA_MIN_AMOUNT_LIVE = 200
+        if settings.PAYDUNYA_MODE == 'live':
+            try:
+                total_int = int(order.total)
+            except (TypeError, ValueError):
+                return {
+                    'success': False,
+                    'error': "Montant de commande invalide.",
+                }
+            if total_int < PAYDUNYA_MIN_AMOUNT_LIVE:
+                return {
+                    'success': False,
+                    'error': (
+                        f"Le montant minimum de paiement est de "
+                        f"{PAYDUNYA_MIN_AMOUNT_LIVE} FCFA. "
+                        f"Votre commande fait {total_int} FCFA."
+                    ),
+                }
+
         base_url    = settings.PAYDUNYA_BASE_URL
         return_url  = f"{base_url}/paiements/retour/{order.order_number}/"
         cancel_url  = f"{base_url}/paiements/annulation/{order.order_number}/"

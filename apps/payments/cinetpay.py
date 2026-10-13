@@ -32,6 +32,35 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def _safe_json(response, endpoint=''):
+    """
+    Tente de parser response.json(). Retourne toujours un dict.
+
+    Si la réponse n'est PAS du JSON (cas typique : Cloudflare 403 HTML,
+    erreur 500 côté CinetPay, page d'erreur nginx, timeout), cette
+    fonction retourne un dict avec un message d'erreur clair au lieu
+    de laisser Python lever une exception 'Expecting value: line 1
+    column 1 (char 0)'.
+    """
+    try:
+        return response.json()
+    except ValueError:
+        preview = (response.text or '')[:300].replace('\n', ' ').replace('\r', '')
+        logger.error(
+            "CinetPay : réponse non-JSON sur %s — HTTP %s — %s",
+            endpoint or 'inconnu',
+            getattr(response, 'status_code', '?'),
+            preview,
+        )
+        return {
+            'code': 'NON_JSON',
+            'message': (
+                f"Réponse CinetPay invalide "
+                f"(HTTP {getattr(response, 'status_code', '?')})"
+            ),
+        }
+
+
 # ---------------------------------------------------------------------------
 # CONSTANTES
 # ---------------------------------------------------------------------------
@@ -69,6 +98,24 @@ class CinetPayService:
     @classmethod
     def _base_url(cls):
         return getattr(settings, 'CINETPAY_API_BASE', CINETPAY_API_BASE).rstrip('/')
+
+    @classmethod
+    def _api_headers(cls):
+        """
+        Headers HTTP envoyés à l'API CinetPay.
+
+        ⚠️ Le User-Agent est OBLIGATOIRE : sans lui, Cloudflare (pare-feu
+        utilisé par de nombreux agrégateurs, dont PayDunya — CinetPay
+        pourrait avoir la même politique) bloque les requêtes depuis
+        les IPs datacenter (VPS, cloud) avec un 403.
+
+        On garde 'Accept: application/json' pour garantir une réponse JSON.
+        """
+        return {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'IvoirPass/1.0 (+https://ivoirpass.com)',
+        }
 
     @classmethod
     def _webhook_secret(cls):
@@ -203,15 +250,13 @@ class CinetPayService:
             response = requests.post(
                 f"{cls._base_url()}/payment",
                 json=payload,
+                headers=cls._api_headers(),
                 timeout=30,
             )
-            data = response.json()
+            data = _safe_json(response, 'create_invoice')
         except requests.RequestException as exc:
             logger.error("CinetPay create_invoice : erreur réseau %s", exc)
             return {'success': False, 'error': str(exc)}
-        except ValueError as exc:
-            logger.error("CinetPay create_invoice : réponse non JSON %s", exc)
-            return {'success': False, 'error': 'Réponse CinetPay illisible.'}
 
         # TODO : confirmer le code de succès exact côté CinetPay v2
         # (probablement 'code' == '201' ou '00' — à valider avec un vrai call sandbox)
@@ -281,16 +326,15 @@ class CinetPayService:
             response = requests.post(
                 f"{cls._base_url()}/payment/check",
                 json=payload,
+                headers=cls._api_headers(),
                 timeout=30,
             )
-            response.raise_for_status()
-            data = response.json()
+            # ⚠️ On ne fait PAS raise_for_status() : Cloudflare peut renvoyer
+            # un 403 HTML, on veut logger la vraie réponse avant d'échouer.
+            data = _safe_json(response, 'verify_payment')
         except requests.RequestException as exc:
             logger.error("CinetPay verify_payment : erreur réseau %s", exc)
             return {'success': False, 'status': 'error', 'message': str(exc)}
-        except ValueError as exc:
-            logger.error("CinetPay verify_payment : réponse non JSON %s", exc)
-            return {'success': False, 'status': 'error', 'message': 'Réponse illisible.'}
 
         # Extraction du statut brut CinetPay
         raw_status = str(
