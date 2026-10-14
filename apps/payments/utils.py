@@ -23,16 +23,20 @@ def cancel_pending_payments_for_order(order):
     """
     from apps.payments.models import Payment
 
-    # Détecter le bon FK par attribut (pas par isinstance pour rester
-    # tolérant aux proxies / sous-classes)
-    if hasattr(order, 'guest_items'):
-        filters = {'guest_order': order}
-    elif hasattr(order, 'items') and not hasattr(order, 'product'):
+    # Détection fiable par isinstance() — les modèles ont des attributs
+    # communs (product, quantity...) qui rendent hasattr() ambigu.
+    # Imports locaux pour éviter tout import circulaire au chargement.
+    from apps.tickets.models import Order, GuestOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
+
+    if isinstance(order, Order):
         filters = {'order': order}
-    elif hasattr(order, 'guest_product_items'):
-        filters = {'guest_product_order': order}
-    elif hasattr(order, 'product') and hasattr(order, 'quantity'):
+    elif isinstance(order, GuestOrder):
+        filters = {'guest_order': order}
+    elif isinstance(order, ProductOrder):
         filters = {'product_order': order}
+    elif isinstance(order, GuestProductOrder):
+        filters = {'guest_product_order': order}
     else:
         logger.warning(
             "cancel_pending_payments_for_order : type de commande inconnu %s",

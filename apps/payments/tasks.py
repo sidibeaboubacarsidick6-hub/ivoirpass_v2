@@ -339,6 +339,120 @@ def release_expired_pending_orders(self):
     return summary
 
 
+
+@shared_task(bind=True)
+def release_expired_pending_product_orders(self):
+    """
+    Tâche périodique : annule les commandes boutique
+    (ProductOrder / GuestProductOrder) encore PENDING, selon deux règles :
+
+      1. Sans aucun token PayDunya (jamais redirigé vers PayDunya) →
+         annulation après ORDER_ABANDON_GRACE_MINUTES (30 min).
+
+      2. Avec un token PayDunya (redirection initiée mais pas de webhook
+         reçu) → annulation après ORDER_WITH_TOKEN_GRACE_HOURS (24h).
+
+    ⚠️ Pas de gestion de stock : en boutique, le stock n'est décrémenté
+    qu'à la confirmation du paiement (mark_as_paid). Une commande
+    abandonnée n'a jamais consommé de stock.
+
+    Annule aussi les Payment PENDING associés (bug 2026-10-14).
+    """
+    from apps.store.models import ProductOrder, GuestProductOrder
+    from apps.dashboard.models import AuditLog
+    from apps.dashboard.services import log_action
+
+    cutoff_short = timezone.now() - timedelta(minutes=ORDER_ABANDON_GRACE_MINUTES)
+    cutoff_long  = timezone.now() - timedelta(hours=ORDER_WITH_TOKEN_GRACE_HOURS)
+    released = 0
+
+    for model in (ProductOrder, GuestProductOrder):
+        # ── Cas 1 : PENDING sans token, vieux de plus de 30 min ─────
+        no_token_qs = model.objects.filter(
+            status=model.Status.PENDING,
+            created_at__lte=cutoff_short,
+        ).exclude(
+            payments__paydunya_token__gt=''
+        )
+
+        for order in no_token_qs:
+            if _cancel_product_order(
+                order, AuditLog, log_action,
+                reason=(
+                    f"abandonnée depuis plus de "
+                    f"{ORDER_ABANDON_GRACE_MINUTES} min sans paiement initié"
+                ),
+            ):
+                released += 1
+
+        # ── Cas 2 : PENDING avec token, vieux de plus de 24h ────────
+        abandoned_token_qs = model.objects.filter(
+            status=model.Status.PENDING,
+            created_at__lte=cutoff_long,
+        ).filter(
+            payments__paydunya_token__gt=''
+        ).distinct()
+
+        for order in abandoned_token_qs:
+            if _cancel_product_order(
+                order, AuditLog, log_action,
+                reason=(
+                    f"abandonnée depuis plus de "
+                    f"{ORDER_WITH_TOKEN_GRACE_HOURS}h "
+                    f"(paiement PayDunya non confirmé)"
+                ),
+            ):
+                released += 1
+
+    summary = (
+        f"Libération commandes boutique : {released} commande(s) "
+        f"expirée(s) annulée(s)."
+    )
+    logger.info(summary)
+    return summary
+
+
+def _cancel_product_order(order, AuditLog, log_action, reason):
+    """
+    Annule une commande boutique PENDING abandonnée (ProductOrder ou
+    GuestProductOrder) et annule les Payment PENDING associés.
+
+    Retourne True si cet appel a effectivement annulé la commande,
+    False si elle a déjà été traitée entre-temps (idempotent).
+    """
+    from django.db import transaction
+
+    with transaction.atomic():
+        locked = type(order).objects.select_for_update().get(pk=order.pk)
+        if locked.status != order.Status.PENDING:
+            # Déjà payée ou annulée entre-temps par un autre appel.
+            return False
+
+        # .update() évite de déclencher un éventuel signal post_save
+        # (aucun n'existe aujourd'hui pour la boutique, mais ceinture
+        # et bretelles pour l'avenir).
+        type(order).objects.filter(pk=order.pk).update(
+            status=order.Status.CANCELLED,
+        )
+
+    # Annuler les Payment PENDING associés (hors transaction pour ne
+    # pas verrouiller Payment pendant qu'on relâche le lock commande).
+    from apps.payments.utils import cancel_pending_payments_for_order
+    cancel_pending_payments_for_order(order)
+
+    log_action(
+        action=AuditLog.Action.ORDER_CANCELLED,
+        description=(
+            f"Commande boutique {order.order_number} annulée automatiquement "
+            f"({reason}) — Payment(s) PENDING associés annulés."
+        ),
+        model_name=type(order).__name__,
+        object_id=order.order_number,
+    )
+
+    return True
+
+
 def _release_order_stock(order, AuditLog, log_action, reason='abandonnée'):
     """
     Annule une commande PENDING abandonnée et restaure le stock des
