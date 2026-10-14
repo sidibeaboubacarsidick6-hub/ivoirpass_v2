@@ -257,47 +257,89 @@ def _send_anomaly_alert(anomaly_details):
 # Volontairement plus long que RECONCILE_MIN_AGE_MINUTES (15 min) pour ne
 # jamais entrer en conflit avec un paiement PayDunya encore en cours côté
 # opérateur au moment où cette tâche tourne.
+# Délai (minutes) avant d'annuler une commande PENDING sans token PayDunya
+# (utilisateur n'a jamais été redirigé vers PayDunya).
 ORDER_ABANDON_GRACE_MINUTES = 30
+
+# Délai (heures) avant d'annuler une commande PENDING AVEC un token PayDunya.
+# Couvre le cas d'un utilisateur qui a ouvert la page PayDunya puis
+# abandonné le paiement (pas assez d'argent, fermeture du navigateur, etc.).
+# 24h laisse le temps au webhook PayDunya d'arriver dans les cas légitimes
+# (validation Mobile Money différée, retry côté opérateur).
+ORDER_WITH_TOKEN_GRACE_HOURS = 24
 
 
 @shared_task(bind=True)
 def release_expired_pending_orders(self):
     """
     Tâche périodique : annule les commandes billetterie (Order / GuestOrder)
-    encore PENDING depuis plus de ORDER_ABANDON_GRACE_MINUTES ET sans aucun
-    paiement PayDunya initié (pas de Payment, ou Payment sans token — donc
-    jamais redirigé vers PayDunya), et restaure le stock correspondant.
+    encore PENDING, selon deux règles :
 
-    Ne touche JAMAIS une commande dont un Payment a un token PayDunya : ce
-    cas est du ressort de reconcile_pending_payments (le paiement peut être
-    réellement en cours ou confirmé côté PayDunya).
+      1. Sans aucun token PayDunya (jamais redirigé vers PayDunya) →
+         annulation après ORDER_ABANDON_GRACE_MINUTES (30 min).
+
+      2. Avec un token PayDunya (redirection initiée, mais pas de webhook
+         reçu) → annulation après ORDER_WITH_TOKEN_GRACE_HOURS (24h).
+         Couvre le cas d'un utilisateur qui a ouvert la page PayDunya
+         puis abandonné le paiement.
+
+    Ne touche JAMAIS une commande PENDING récente (< 24h) avec token :
+    le webhook PayDunya peut arriver en retard (validation Mobile Money
+    différée), c'est reconcile_pending_payments qui gère ce cas.
     """
-    from django.db import transaction
     from apps.tickets.models import Order, GuestOrder
-    from apps.events.models import TicketType
     from apps.dashboard.models import AuditLog
     from apps.dashboard.services import log_action
 
-    cutoff = timezone.now() - timedelta(minutes=ORDER_ABANDON_GRACE_MINUTES)
+    cutoff_short = timezone.now() - timedelta(minutes=ORDER_ABANDON_GRACE_MINUTES)
+    cutoff_long  = timezone.now() - timedelta(hours=ORDER_WITH_TOKEN_GRACE_HOURS)
     released = 0
 
     for model in (Order, GuestOrder):
-        stale_qs = model.objects.filter(
+        # ── Cas 1 : PENDING sans token, vieux de plus de 30 min ─────
+        no_token_qs = model.objects.filter(
             status=model.Status.PENDING,
-            created_at__lte=cutoff,
+            created_at__lte=cutoff_short,
         ).exclude(
             payments__paydunya_token__gt=''
         )
 
-        for order in stale_qs:
-            released += _release_order_stock(order, AuditLog, log_action)
+        for order in no_token_qs:
+            released += _release_order_stock(
+                order, AuditLog, log_action,
+                reason=(
+                    f"abandonnée depuis plus de "
+                    f"{ORDER_ABANDON_GRACE_MINUTES} min sans paiement initié"
+                ),
+            )
 
-    summary = f"Libération stock billetterie : {released} commande(s) expirée(s) annulée(s)."
+        # ── Cas 2 : PENDING avec token, vieux de plus de 24h ────────
+        abandoned_token_qs = model.objects.filter(
+            status=model.Status.PENDING,
+            created_at__lte=cutoff_long,
+        ).filter(
+            payments__paydunya_token__gt=''
+        ).distinct()
+
+        for order in abandoned_token_qs:
+            released += _release_order_stock(
+                order, AuditLog, log_action,
+                reason=(
+                    f"abandonnée depuis plus de "
+                    f"{ORDER_WITH_TOKEN_GRACE_HOURS}h "
+                    f"(paiement PayDunya non confirmé)"
+                ),
+            )
+
+    summary = (
+        f"Libération stock billetterie : {released} commande(s) "
+        f"expirée(s) annulée(s)."
+    )
     logger.info(summary)
     return summary
 
 
-def _release_order_stock(order, AuditLog, log_action):
+def _release_order_stock(order, AuditLog, log_action, reason='abandonnée'):
     """
     Annule une commande PENDING abandonnée et restaure le stock des
     TicketType concernés, verrouillés le temps de l'opération — même
@@ -342,8 +384,7 @@ def _release_order_stock(order, AuditLog, log_action):
         action=AuditLog.Action.ORDER_STOCK_RELEASED,
         description=(
             f"Commande {order.order_number} annulée automatiquement "
-            f"(abandonnée depuis plus de {ORDER_ABANDON_GRACE_MINUTES} min "
-            f"sans paiement initié) — stock restauré."
+            f"({reason}) — stock restauré."
         ),
         model_name=type(order).__name__, object_id=order.order_number,
         metadata={'items_count': len(items)},
