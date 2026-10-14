@@ -267,21 +267,37 @@
 }
 
 /* ── Mobile ──────────────────────────────────────────── */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+  /* Sur mobile : panneau flottant compact, pas plein écran */
   .chatbot-panel {
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    max-height: 100vh;
-    border-radius: 0;
+    right: 12px;
+    left: 12px;
+    bottom: 88px;
+    width: auto;
+    max-width: 420px;
+    height: 68vh;
+    max-height: 560px;
+    border-radius: 16px;
+    margin: 0 auto;
   }
-  .chatbot-panel--open { transform: translateY(0); }
+  .chatbot-panel--open {
+    transform: translateY(0);
+  }
+
   .chatbot-bubble {
-    bottom: 14px;
-    right: 14px;
-    width: 54px;
-    height: 54px;
-    font-size: 1.4rem;
+    bottom: 16px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    font-size: 1.45rem;
+  }
+
+  /* Messages un peu plus compacts sur mobile */
+  .chatbot-msg {
+    max-width: 90%;
+  }
+  .chatbot-msg__bubble {
+    font-size: 0.88rem;
+    padding: 9px 13px;
   }
 }
