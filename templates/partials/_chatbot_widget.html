@@ -1,0 +1,114 @@
+{% load static %}
+{% if CHATBOT_ENABLED %}
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- Widget Chatbot IvoirPass — Assistant IA                 -->
+<!-- Activé uniquement si CHATBOT_ENABLED=True dans .env    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div x-data="chatbotWidget()" x-cloak>
+
+  <!-- Bouton bulle flottant -->
+  <button
+    type="button"
+    class="chatbot-bubble"
+    @click="open = !open"
+    :class="{ 'chatbot-bubble--open': open }"
+    aria-label="Ouvrir l'assistant IvoirPass">
+    <i class="bi" :class="open ? 'bi-x-lg' : 'bi-chat-dots-fill'"></i>
+    <template x-if="!open && hasUnread">
+      <span class="chatbot-bubble__badge"></span>
+    </template>
+  </button>
+
+  <!-- Panneau du chat -->
+  <div
+    class="chatbot-panel"
+    :class="{ 'chatbot-panel--open': open }"
+    role="dialog"
+    aria-label="Assistant IvoirPass">
+
+    <!-- Header -->
+    <div class="chatbot-header">
+      <div class="d-flex align-items-center gap-2">
+        <div class="chatbot-header__avatar">
+          <i class="bi bi-robot"></i>
+        </div>
+        <div>
+          <div class="chatbot-header__title">Assistant IvoirPass</div>
+          <div class="chatbot-header__status">
+            <span class="chatbot-header__dot"></span>
+            En ligne
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-1">
+        <button type="button" class="chatbot-header__btn" @click="reset" title="Nouvelle conversation">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button type="button" class="chatbot-header__btn" @click="open = false" title="Fermer">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="chatbot-messages" x-ref="messages">
+
+      <!-- Message d'accueil -->
+      <template x-if="messages.length === 0">
+        <div class="chatbot-msg chatbot-msg--bot">
+          <div class="chatbot-msg__bubble">
+            Bonjour 👋 Je suis l'assistant virtuel IvoirPass.
+            Posez-moi une question sur la billetterie, la boutique ou vos commandes.
+          </div>
+        </div>
+      </template>
+
+      <!-- Boucle des messages -->
+      <template x-for="(msg, i) in messages" :key="i">
+        <div class="chatbot-msg" :class="msg.role === 'user' ? 'chatbot-msg--user' : 'chatbot-msg--bot'">
+          <div class="chatbot-msg__bubble" x-text="msg.content"></div>
+        </div>
+      </template>
+
+      <!-- Indicateur "en train d'écrire" -->
+      <template x-if="loading">
+        <div class="chatbot-msg chatbot-msg--bot">
+          <div class="chatbot-msg__bubble chatbot-msg__bubble--typing">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Bouton WhatsApp si 2 échecs -->
+      <template x-if="suggestWhatsapp && !loading">
+        <div class="chatbot-whatsapp">
+          <p class="chatbot-whatsapp__text">
+            Pour une réponse personnalisée, contactez notre support :
+          </p>
+          <a :href="whatsappUrl" target="_blank" rel="noopener"
+             class="chatbot-whatsapp__btn">
+            <i class="bi bi-whatsapp"></i>
+            Ouvrir WhatsApp
+          </a>
+        </div>
+      </template>
+
+    </div>
+
+    <!-- Input -->
+    <form class="chatbot-input" @submit.prevent="send">
+      <textarea
+        x-model="draft"
+        @keydown.enter.prevent="send"
+        placeholder="Écrivez votre question…"
+        rows="1"
+        maxlength="500"
+        :disabled="loading"></textarea>
+      <button type="submit" class="chatbot-input__send" :disabled="loading || !draft.trim()">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endif %}

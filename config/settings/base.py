@@ -107,6 +107,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Context processor du chatbot IvoirPass
+                'apps.chatbot.context_processors.chatbot',
             ],
         },
     },
@@ -445,7 +447,7 @@ CHATBOT_ENABLED = config('CHATBOT_ENABLED', default=False, cast=bool)
 CHATBOT_WHATSAPP_NUMBER = config('CHATBOT_WHATSAPP_NUMBER', default='2250702063876')
 
 # Rate limiting
-CHATBOT_RATE_LIMIT_PER_HOUR = 15
+CHATBOT_RATE_LIMIT_PER_HOUR = 30
 CHATBOT_MAX_MESSAGES_PER_SESSION = 30
 CHATBOT_HISTORY_TTL_SECONDS = 900  # 15 min de contexte
 
