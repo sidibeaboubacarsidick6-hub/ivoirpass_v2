@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mes adresses{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-9 col-xl-8">
+
+      <!-- En-tête -->
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{% url 'accounts:profile' %}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+          <h4 class="fw-bold mb-0">
+            <i class="bi bi-geo-alt me-2 text-green"></i>Mes adresses
+          </h4>
+          <p class="text-muted small mb-0">
+            Gérez vos adresses de livraison
+          </p>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <!-- Liste des adresses existantes -->
+      {% if addresses %}
+        <div class="mb-4">
+          <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+            <i class="bi bi-list-ul me-2 text-green"></i>
+            Adresses enregistrées ({{ addresses|length }})
+          </h6>
+
+          <div class="row g-3">
+            {% for address in addresses %}
+              <div class="col-12">
+                <div class="ip-card p-3 p-md-4"
+                     style="{% if address.is_default %}border-left: 4px solid #1B7A3E;{% endif %}">
+
+                  <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <h6 class="fw-bold mb-0">{{ address.label }}</h6>
+                      {% if address.is_default %}
+                        <span class="badge" style="background:#1B7A3E; font-size:0.7rem;">
+                          <i class="bi bi-check-circle me-1"></i>Par défaut
+                        </span>
+                      {% endif %}
+                    </div>
+                    <span class="badge bg-light text-dark border" style="font-size:0.75rem;">
+                      {{ address.get_zone_display }} — {{ address.shipping_cost }} FCFA
+                    </span>
+                  </div>
+
+                  <div class="row g-2 small text-muted">
+                    <div class="col-12 col-md-6">
+                      <i class="bi bi-person me-1"></i>
+                      <strong>{{ address.full_name }}</strong>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <i class="bi bi-telephone me-1"></i>
+                      {{ address.phone }}
+                    </div>
+                    <div class="col-12">
+                      <i class="bi bi-house-door me-1"></i>
+                      {{ address.address_line1 }}
+                      {% if address.address_line2 %}, {{ address.address_line2 }}{% endif %}
+                    </div>
+                    <div class="col-12">
+                      <i class="bi bi-geo me-1"></i>
+                      {{ address.city }}
+                    </div>
+                  </div>
+
+                  <div class="d-flex justify-content-end mt-3">
+                    <form method="POST"
+                          action="{% url 'accounts:address_delete' address.pk %}"
+                          onsubmit="return confirm('Supprimer l\'adresse « {{ address.label|escapejs }} » ?');"
+                          class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-trash me-1"></i>Supprimer
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="alert alert-info mb-4" role="alert">
+          <i class="bi bi-info-circle me-2"></i>
+          Vous n'avez encore aucune adresse enregistrée. Ajoutez-en une ci-dessous.
+        </div>
+      {% endif %}
+
+      <!-- Formulaire d'ajout -->
+      <div class="ip-card p-4">
+        <h6 class="fw-bold text-uppercase text-muted small mb-3 border-bottom pb-2">
+          <i class="bi bi-plus-circle me-2 text-orange"></i>Ajouter une nouvelle adresse
+        </h6>
+
+        <form method="POST">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger small">
+              {{ form.non_field_errors }}
+            </div>
+          {% endif %}
+
+          <div class="row g-3">
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">Libellé *</label>
+              {{ form.label }}
+              {% if form.label.errors %}<div class="text-danger small">{{ form.label.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">Nom complet *</label>
+              {{ form.full_name }}
+              {% if form.full_name.errors %}<div class="text-danger small">{{ form.full_name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">Téléphone *</label>
+              {{ form.phone }}
+              {% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">Ville *</label>
+              {{ form.city }}
+              {% if form.city.errors %}<div class="text-danger small">{{ form.city.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Adresse ligne 1 *</label>
+              {{ form.address_line1 }}
+              {% if form.address_line1.errors %}<div class="text-danger small">{{ form.address_line1.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Adresse ligne 2</label>
+              {{ form.address_line2 }}
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">Zone de livraison *</label>
+              {{ form.zone }}
+              <div class="text-muted small mt-1">
+                Frais : Abidjan 1 200 FCFA — Grandes villes 2 500 FCFA — Intérieur 4 000 FCFA
+              </div>
+              {% if form.zone.errors %}<div class="text-danger small">{{ form.zone.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12 col-md-6 d-flex align-items-end">
+              <div class="form-check">
+                {{ form.is_default }}
+                <label class="form-check-label small ms-1">
+                  Définir comme adresse par défaut
+                </label>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="d-flex gap-3 mt-4">
+            <button type="submit" class="btn btn-green px-4">
+              <i class="bi bi-plus-lg me-2"></i>Ajouter l'adresse
+            </button>
+            <a href="{% url 'accounts:profile' %}"
+               class="btn btn-outline-secondary px-4">
+              Retour
+            </a>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
