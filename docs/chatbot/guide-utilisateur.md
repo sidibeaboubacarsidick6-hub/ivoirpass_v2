@@ -183,6 +183,28 @@ Le premier scan est accepté. Toute tentative suivante avec le même QR code est
 
 **Produit physique :** renseignez le champ « Adresse de livraison ». Le vendeur vous contactera pour la livraison. Les frais de livraison sont à votre charge.
 
+
+
+## Remboursement
+
+**Comment obtenir un remboursement ?**
+
+Le remboursement est à la charge de l'organisateur de l'événement ou du vendeur du produit. IvoirPass agit en tant qu'intermédiaire technique et ne gère pas directement les remboursements.
+
+**Procédure :**
+1. Contactez directement l'organisateur de l'événement ou le vendeur du produit.
+2. Si vous ne parvenez pas à le contacter, écrivez au support IvoirPass : infos@mks-soft-technologies.com ou WhatsApp +225 07 02 06 38 76.
+3. Indiquez votre numéro de commande, la date d'achat et le motif de la demande.
+4. Le support IvoirPass transmettra votre demande à l'organisateur concerné.
+
+**Délai de traitement :** IvoirPass accuse réception de votre réclamation dans un délai de 48 heures et apporte une réponse dans un délai de 15 jours ouvrables.
+
+**Cas particuliers :**
+- **Événement annulé par l'organisateur** : les acheteurs sont prévenus par e-mail. Le remboursement est effectué par l'organisateur selon ses propres conditions.
+- **Produit numérique non reçu** : contactez le support pour relancer l'envoi du lien de téléchargement.
+- **Produit physique non reçu** : contactez le vendeur dans un délai de 72 heures suivant la date de livraison prévue.
+
+
 ---
 
 ## Événement annulé
