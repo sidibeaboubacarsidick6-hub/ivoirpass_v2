@@ -380,6 +380,10 @@ def _release_order_stock(order, AuditLog, log_action, reason='abandonnée'):
             tt.save(update_fields=['quantity_sold'])
             tt.event.save(update_fields=['tickets_sold'])
 
+    # Annuler les Payment PENDING associés (bug 2026-10-14)
+    from apps.payments.utils import cancel_pending_payments_for_order
+    cancel_pending_payments_for_order(order)
+
     log_action(
         action=AuditLog.Action.ORDER_STOCK_RELEASED,
         description=(

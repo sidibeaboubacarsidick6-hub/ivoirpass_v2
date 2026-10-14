@@ -105,6 +105,10 @@ def _release_stock(order, items_related_name):
             tt.save(update_fields=['quantity_sold'])
             tt.event.save(update_fields=['tickets_sold'])
 
+    # Annuler les Payment PENDING associés (bug 2026-10-14)
+    from apps.payments.utils import cancel_pending_payments_for_order
+    cancel_pending_payments_for_order(order)
+
     logger.info(
         "Stock restitué pour la commande %s (%d item(s))",
         order.order_number, len(items),
