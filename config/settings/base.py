@@ -62,7 +62,8 @@ LOCAL_APPS = [
     'apps.scanner',
     'apps.store',
     'apps.notifications',
-    'apps.core'
+    'apps.core',
+    'apps.chatbot',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -427,6 +428,29 @@ PAYDUNYA_API_BASE = (
     if PAYDUNYA_MODE == 'test'
     else 'https://app.paydunya.com/api/v1'
 )
+
+# ============================================
+# ASSISTANT IA (CHATBOT)
+# ============================================
+# Clé API Mistral (console.mistral.ai)
+MISTRAL_API_KEY = config('MISTRAL_API_KEY', default='')
+MISTRAL_API_URL = config('MISTRAL_API_URL', default='https://api.mistral.ai/v1/chat/completions')
+MISTRAL_MODEL = config('MISTRAL_MODEL', default='open-mistral-7b')
+
+# Contrôle l'affichage du widget chat dans le site.
+# False en preprod (code présent mais masqué).
+CHATBOT_ENABLED = config('CHATBOT_ENABLED', default=False, cast=bool)
+
+# Numéro WhatsApp support (format international sans le +)
+CHATBOT_WHATSAPP_NUMBER = config('CHATBOT_WHATSAPP_NUMBER', default='2250702063876')
+
+# Rate limiting
+CHATBOT_RATE_LIMIT_PER_HOUR = 15
+CHATBOT_MAX_MESSAGES_PER_SESSION = 30
+CHATBOT_HISTORY_TTL_SECONDS = 900  # 15 min de contexte
+
+# Nombre d'échanges avant suggestion WhatsApp obligatoire
+CHATBOT_FAILURES_BEFORE_WHATSAPP = 2
 
 # ============================================
 # NOTIFICATIONS

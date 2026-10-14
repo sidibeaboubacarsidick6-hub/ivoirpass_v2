@@ -46,6 +46,7 @@ urlpatterns = [
     path('', include('apps.core.urls')),
     path('api/accounts/', include('apps.accounts.api.urls')),
     path('api/scanner/', include('apps.scanner.api.urls')),
+    path('api/chat/', include('apps.chatbot.urls', namespace='chatbot')),
     path('sitemap.xml', sitemap, {'sitemaps': {'events': EventSitemap, 'static': StaticViewSitemap}}, name='django.contrib.sitemaps.views.sitemap'),
 ]
 
