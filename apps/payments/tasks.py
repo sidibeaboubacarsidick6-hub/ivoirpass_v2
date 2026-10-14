@@ -320,8 +320,10 @@ def _release_order_stock(order, AuditLog, log_action):
             # rien à faire, on ne touche pas au stock une deuxième fois.
             return 0
 
-        locked_order.status = order.Status.CANCELLED
-        locked_order.save(update_fields=['status'])
+        # On utilise .update() et non .save() pour éviter de déclencher
+        # le signal post_save qui restituerait le stock une 2e fois
+        # (le signal a été ajouté le 2026-10-14).
+        type(order).objects.filter(pk=order.pk).update(status=order.Status.CANCELLED)
 
         ticket_type_ids = {item.ticket_type_id for item in items}
         locked_types = {
