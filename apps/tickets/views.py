@@ -183,6 +183,8 @@ def guest_payment_initiate(request, access_token):
 
     headers = {
         'Content-Type': 'application/json',
+        'User-Agent': 'IvoirPass/1.0 (+https://ivoirpass.com)',
+        'Accept': 'application/json',
         'PAYDUNYA-MASTER-KEY': settings.PAYDUNYA_MASTER_KEY,
         'PAYDUNYA-PRIVATE-KEY': settings.PAYDUNYA_PRIVATE_KEY,
         'PAYDUNYA-TOKEN': settings.PAYDUNYA_TOKEN,
@@ -327,6 +329,14 @@ def guest_webhook(request):
 
     logger = logging.getLogger(__name__)
 
+    # 🔍 DEBUG — Tracer chaque tentative de webhook (à retirer après enquête)
+    logger.warning(
+        "WEBHOOK RECU — IP=%s, Content-Type=%s, Body[:200]=%s",
+        request.META.get('REMOTE_ADDR', '?'),
+        request.content_type,
+        (request.body or b'')[:200],
+    )
+
     # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
     if not get_payment_service().verify_webhook_signature(request):
         log_action(
@@ -352,7 +362,6 @@ def guest_webhook(request):
             if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
                 log_action(
                     action=AuditLog.Action.PAYMENT_FAILED,
-                    # ✅ Fix : order_number (pas order.order_number, order n'existe pas encore)
                     description=f"Webhook invité : vérification serveur-à-serveur échouée pour {order_number}",
                     model_name='Payment', object_id=order_number,
                     ip_address=get_client_ip(request),
@@ -411,7 +420,6 @@ def guest_webhook(request):
                     from apps.notifications.tasks import send_guest_ticket_email_async
                     send_guest_ticket_email_async.delay(str(order.uuid))
             except GuestOrder.DoesNotExist:
-                # ✅ Fix : order_number (pas order.order_number)
                 cancelled = GuestOrder.objects.filter(
                     order_number=order_number, status=GuestOrder.Status.CANCELLED,
                 ).exists()

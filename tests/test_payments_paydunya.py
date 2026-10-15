@@ -376,9 +376,14 @@ class VerifyPaymentTests(TestCase):
     def test_token_reel_completed(self, mock_get):
         """Token réel + PayDunya completed → success."""
         mock_resp = MagicMock()
+        # Format RÉEL de PayDunya /confirm : status à la RACINE
+        # (pas dans data.invoice.status)
         mock_resp.json.return_value = {
             'response_code': '00',
-            'data': {'invoice': {'status': 'completed'}},
+            'response_text': 'Transaction Found',
+            'status': 'completed',
+            'invoice': {'token': 'real_token_xyz', 'total_amount': 200},
+            'custom_data': {'guest_order_number': 'IP-TEST-001'},
         }
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
@@ -387,6 +392,8 @@ class VerifyPaymentTests(TestCase):
 
         self.assertTrue(result['success'])
         self.assertEqual(result['status'], 'completed')
+        self.assertIn('invoice', result)
+        self.assertEqual(result['invoice']['total_amount'], 200)
 
     @patch('apps.payments.paydunya.requests.get')
     @override_settings(
@@ -397,7 +404,9 @@ class VerifyPaymentTests(TestCase):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
             'response_code': '00',
-            'data': {'invoice': {'status': 'pending'}},
+            'response_text': 'Transaction Found',
+            'status': 'pending',
+            'invoice': {'token': 'real_token_pending', 'total_amount': 200},
         }
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp

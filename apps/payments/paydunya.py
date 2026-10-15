@@ -328,13 +328,23 @@ class PayDunyaService:
             data = _safe_json(response, 'verify_payment')
 
             if data.get('response_code') == '00':
-                invoice = data.get('data', {}).get('invoice', {})
-                status = invoice.get('status', '')
+                # ⚠️ PayDunya /confirm renvoie un format À PLAT
+                # (pas de wrapper 'data' contrairement à create_invoice).
+                # On accepte les 2 formats par sécurité.
+                payload = data.get('data') if isinstance(data.get('data'), dict) else data
+
+                status = payload.get('status', '')
+                invoice = payload.get('invoice', {})
+                custom_data = payload.get('custom_data', {})
+                customer = payload.get('customer', {})
 
                 return {
                     'success': True,
                     'status': status,
-                    'data': data.get('data', {}),
+                    'invoice': invoice,
+                    'custom_data': custom_data,
+                    'customer': customer,
+                    'data': payload,
                 }
             else:
                 return {
