@@ -190,10 +190,17 @@ class AdminNotificationEmailTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
         self.assertTrue(AdminNotification.objects.filter(type='new_event', title__icontains='publié').exists())
 
-    def test_nouveau_litige_notifie_admin(self):
-        """Soumission d'un litige via le formulaire public /reclamation/."""
+    def test_nouveau_litige_notifie_admin_et_client(self):
+        """
+        Soumission d'un litige via le formulaire public.
+
+        Vérifie :
+        - Le litige est créé en base
+        - 2 emails partent : notification admin + confirmation client
+        - Le client reçoit bien le lien de suivi
+        - Une seule AdminNotification par litige (non-régression)
+        """
         mail.outbox.clear()
-        count_before = AdminNotification.objects.count()
 
         response = self.client.post('/dashboard/reclamation/', {
             'type': 'other',
@@ -204,18 +211,41 @@ class AdminNotificationEmailTests(TestCase):
             'description': 'Je n\'ai jamais reçu mon billet par email après paiement.',
         })
 
-        self.assertTrue(Dispute.objects.filter(email='client@test.com').exists(), "Le litige doit être créé en base")
-        self.assertEqual(len(mail.outbox), 1, "Email de notification attendu pour l'admin")
-        msg = mail.outbox[0]
-        self.assertEqual(msg.to, ["admin@ivoirpass.test"])
-        self.assertIn("Billet non reçu", msg.body)
+        # Le litige est bien créé
+        self.assertTrue(
+            Dispute.objects.filter(email='client@test.com').exists(),
+            "Le litige doit être créé en base",
+        )
 
-        # Non-régression : une seule AdminNotification par litige (le
-        # doublon détecté précédemment — création directe ET via la tâche
-        # asynchrone — a été corrigé, il ne reste que le passage par
-        # notify_admins_async).
-        notif_count_after = AdminNotification.objects.filter(type='fraud_alert', reference__isnull=False).count()
+        # 2 emails : notification admin + confirmation client
+        self.assertEqual(
+            len(mail.outbox), 2,
+            f"2 emails attendus (admin + client), {len(mail.outbox)} reçu(s)",
+        )
+
+        # Email admin
+        admin_email = next(
+            (m for m in mail.outbox if m.to == ["admin@ivoirpass.test"]),
+            None,
+        )
+        self.assertIsNotNone(admin_email, "Email admin manquant")
+        self.assertIn("Billet non reçu", admin_email.body)
+
+        # Email client
+        client_email = next(
+            (m for m in mail.outbox if m.to == ["client@test.com"]),
+            None,
+        )
+        self.assertIsNotNone(client_email, "Email client manquant")
+        self.assertIn("LIT-", client_email.subject, "Référence LIT manquante")
+        self.assertIn("/reclamation/", client_email.body, "Lien de suivi manquant")
+
+        # Non-régression : une seule AdminNotification par litige.
+        notif_count_after = AdminNotification.objects.filter(
+            type='fraud_alert', reference__isnull=False,
+        ).count()
         self.assertEqual(
             notif_count_after, 1,
-            f"Une seule notification attendue par litige, {notif_count_after} trouvée(s)"
+            f"Une seule notification admin attendue par litige, "
+            f"{notif_count_after} trouvée(s)",
         )

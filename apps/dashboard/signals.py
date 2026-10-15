@@ -8,7 +8,7 @@ Contient :
 import logging
 
 from django.urls import reverse, NoReverseMatch
-
+from .models import Dispute, DisputeMessage
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
@@ -219,3 +219,63 @@ def notify_on_dispute_message(sender, instance, created, **kwargs):
             logger.warning(
                 f"Échec envoi email admins litige {dispute.reference}: {e}"
             )
+
+
+# ============================================================
+# LITIGES — Email de confirmation au client à la création
+# ============================================================
+
+@receiver(post_save, sender=Dispute, dispatch_uid='notify_dispute_created')
+def notify_on_dispute_created(sender, instance, created, **kwargs):
+    """
+    Email de confirmation au client à la création d'un litige (ajout 2026-10-15).
+
+    Envoie au client :
+    - Sa référence (LIT-XXXX)
+    - Un récap (type, sujet, description courte)
+    - Le lien de suivi /reclamation/<token>/ pour revenir plus tard
+
+    Ne notifie PAS les admins : c'est déjà fait par submit_dispute()
+    via notify_admins_async (avec un AdminNotification en base).
+    """
+    if not created or not instance.email:
+        return
+
+    site_url = getattr(settings, 'SITE_URL', 'https://prepod.ivoirpass.com').rstrip('/')
+    tracking_url = f"{site_url}/reclamation/{instance.access_token}/"
+
+    try:
+        send_mail(
+            subject=f"[{instance.reference}] Votre réclamation est enregistrée",
+            message=(
+                f"Bonjour,\n\n"
+                f"Nous avons bien reçu votre réclamation et nous vous en remercions.\n\n"
+                f"Récapitulatif :\n"
+                f"  Référence : {instance.reference}\n"
+                f"  Type      : {instance.get_type_display()}\n"
+                f"  Sujet     : {instance.subject}\n\n"
+                f"Description :\n{instance.description}\n\n"
+                f"────────────────────────────────────────\n"
+                f"POUR SUIVRE VOTRE RÉCLAMATION :\n"
+                f"{tracking_url}\n"
+                f"────────────────────────────────────────\n\n"
+                f"Conservez ce lien : il vous permet de consulter les réponses de notre "
+                f"équipe et d'ajouter des messages à tout moment.\n\n"
+                f"Notre délai de traitement habituel est de 48h ouvrées.\n\n"
+                f"Cordialement,\n"
+                f"L'équipe IvoirPass\n"
+                f"MKS Soft Technologies — Abidjan\n"
+                f"support : infos@mks-soft-technologies.com"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[instance.email],
+            fail_silently=True,
+        )
+        logger.info(
+            f"Email de confirmation litige envoyé à {instance.email} "
+            f"pour {instance.reference}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Échec envoi email de confirmation litige {instance.reference}: {e}"
+        )
