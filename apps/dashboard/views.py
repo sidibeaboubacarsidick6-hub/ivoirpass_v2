@@ -1230,34 +1230,54 @@ def submit_dispute(request):
     """Page publique pour soumettre un litige."""
     if request.method == 'POST':
         order_number = request.POST.get('order_number', '').strip()
+        dispute_type = request.POST.get('type', 'other')
 
-        # Cas inhabituel n°6 : blocage des litiges ouverts plus de 30 jours
-        # après l'événement (ou l'achat pour la boutique).
+        # Règle 30j : uniquement pour les litiges COMMERCIAUX.
+        # Une question générale n'a pas de délai (ajout 2026-10-15).
+        COMMERCIAL_TYPES = {'refund', 'non_delivery', 'qr_issue', 'wrong_item'}
         DELAI_MAX_LITIGE_JOURS = 30
-        if order_number:
+
+        if dispute_type in COMMERCIAL_TYPES and order_number:
             ref_date = _get_dispute_reference_date(order_number)
             if ref_date and (timezone.now() - ref_date).days > DELAI_MAX_LITIGE_JOURS:
                 messages.error(
                     request,
-                    f"Délai de contestation dépassé. Un litige ne peut être ouvert "
-                    f"que dans les {DELAI_MAX_LITIGE_JOURS} jours suivant l'événement "
-                    f"ou l'achat. Pour toute exception, contactez le support directement."
+                    f"Délai de contestation dépassé. Un litige commercial "
+                    f"ne peut être ouvert que dans les {DELAI_MAX_LITIGE_JOURS} "
+                    f"jours suivant l'événement ou l'achat. Pour toute exception, "
+                    f"contactez le support directement."
                 )
                 return render(request, 'pages/report_problem.html')
 
+        # Auto-détection priorité HIGH selon mots-clés
+        AUTO_HIGH_KEYWORDS = {
+            'urgent', 'remboursement', 'erreur', 'bloqué', 'bloque',
+            'rembourse', 'rembourser', 'scandale', 'arnaque',
+        }
+        text_blob = (
+            (request.POST.get('subject', '') + ' ' +
+             request.POST.get('description', '')).lower()
+        )
+        detected_priority = (
+            Dispute.Priority.HIGH
+            if any(kw in text_blob for kw in AUTO_HIGH_KEYWORDS)
+            else Dispute.Priority.NORMAL
+        )
+
         dispute = Dispute.objects.create(
-            type=request.POST.get('type', 'other'),
+            type=dispute_type,
             reported_by=request.user if request.user.is_authenticated else None,
             email=request.POST.get('email', ''),
             phone=request.POST.get('phone', ''),
-            order_number=request.POST.get('order_number', ''),
+            order_number=order_number,
             ticket_number=request.POST.get('ticket_number', ''),
             subject=request.POST.get('subject', ''),
             description=request.POST.get('description', ''),
+            source=Dispute.Source.FORM,
+            priority=detected_priority,
         )
 
-        # Notification aux administrateurs (crée l'entrée AdminNotification
-        # ET envoie l'email — un seul appel, plus de doublon en base).
+        # Notification aux administrateurs (inchangée)
         from apps.notifications.tasks import notify_admins_async
 
         notify_admins_async.delay(
@@ -1267,6 +1287,7 @@ def submit_dispute(request):
                 f"Un nouveau litige a été ouvert.\n"
                 f"Référence : {dispute.reference}\n"
                 f"Type : {dispute.get_type_display()}\n"
+                f"Priorité : {dispute.get_priority_display()}\n"
                 f"Sujet : {dispute.subject}\n"
                 f"Email : {dispute.email}\n"
                 f"Commande : {dispute.order_number or 'N/A'}\n\n"
@@ -1278,7 +1299,7 @@ def submit_dispute(request):
         messages.success(
             request,
             f"Votre réclamation {dispute.reference} a été enregistrée. "
-            "Nous vous contacterons sous 48h."
+            f"Suivez son avancement : /reclamation/{dispute.access_token}/"
         )
 
         return redirect('home')

@@ -7,7 +7,7 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied
-
+import uuid as uuid_lib
 
 class OrganizerWallet(models.Model):
     """
@@ -713,11 +713,22 @@ class Dispute(models.Model):
     Gestion des litiges et réclamations.
     """
     class Type(models.TextChoices):
-        REFUND      = 'refund',      _('Remboursement')
+        REFUND       = 'refund',       _('Remboursement')
         NON_DELIVERY = 'non_delivery', _('Non-livraison')
-        QR_ISSUE    = 'qr_issue',    _('Problème QR code')
-        WRONG_ITEM  = 'wrong_item',  _('Mauvais produit')
-        OTHER       = 'other',       _('Autre')
+        QR_ISSUE     = 'qr_issue',     _('Problème QR code')
+        WRONG_ITEM   = 'wrong_item',   _('Mauvais produit')
+        QUESTION     = 'question',     _('Question générale')
+        OTHER        = 'other',        _('Autre')
+
+    class Source(models.TextChoices):
+        FORM    = 'form',    _('Formulaire')
+        CHATBOT = 'chatbot', _('Chatbot')
+        ADMIN   = 'admin',   _('Admin')
+
+    class Priority(models.TextChoices):
+        LOW    = 'low',    _('Basse')
+        NORMAL = 'normal', _('Normale')
+        HIGH   = 'high',   _('Haute')
 
     class Status(models.TextChoices):
         OPEN       = 'open',        _('Ouvert')
@@ -746,6 +757,27 @@ class Dispute(models.Model):
     ticket_number = models.CharField(_('numéro de ticket'), max_length=30, blank=True)
     subject = models.CharField(_('sujet'), max_length=200)
     description = models.TextField(_('description'))
+
+
+        # ─── Métadonnées support (ajout 2026-10-15) ────────────────
+    source = models.CharField(
+        _('source'), max_length=20,
+        choices=Source.choices, default=Source.FORM,
+        help_text=_("Origine de la demande : formulaire, chatbot ou admin."),
+    )
+    priority = models.CharField(
+        _('priorité'), max_length=10,
+        choices=Priority.choices, default=Priority.NORMAL,
+    )
+    access_token = models.UUIDField(
+        _('token de suivi'), default=uuid_lib.uuid4,
+        unique=True, editable=False,
+        help_text=_("Token secret pour la page de suivi publique."),
+    )
+    chatbot_history = models.JSONField(
+        _('historique chatbot'), default=list, blank=True,
+        help_text=_("Historique de conversation si créé depuis le chatbot."),
+    )
 
     # Résolution
     resolution = models.TextField(_('résolution'), blank=True)
@@ -789,3 +821,47 @@ class Dispute(models.Model):
         self.resolved_by = admin_user
         self.resolved_at = timezone.now()
         self.save()
+
+
+
+class DisputeMessage(models.Model):
+    """
+    Fil de discussion d'un litige (ajout 2026-10-15).
+
+    Permet au client de répondre depuis la page de suivi publique
+    et à l'agent MKS de converser depuis l'admin Django.
+    """
+    dispute = models.ForeignKey(
+        Dispute, on_delete=models.CASCADE,
+        related_name='messages',
+        verbose_name=_('litige'),
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='dispute_messages',
+        verbose_name=_('auteur (agent)'),
+    )
+    author_email = models.EmailField(_('email auteur'), blank=True)
+    content = models.TextField(_('message'))
+    is_internal = models.BooleanField(
+        _('note interne'), default=False,
+        help_text=_("Note visible uniquement par les agents MKS."),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('message de litige')
+        verbose_name_plural = _('messages de litige')
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['dispute', 'created_at']),
+        ]
+
+    def __str__(self):
+        who = (
+            self.author.email if self.author
+            else (self.author_email or 'Client')
+        )
+        return f"[{self.dispute.reference}] {who} — {self.content[:50]}"

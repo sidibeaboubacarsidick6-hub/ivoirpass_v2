@@ -18,8 +18,14 @@ def contact(request):
 
 
 def report_problem(request):
-    """Page Signaler un problème"""
-    return render(request, 'pages/report_problem.html')
+    """
+    Ancienne page 'Signaler un problème' — redirige vers la vraie
+    page de réclamation (/reclamation/) qui gère le POST.
+
+    Conservée pour ne pas casser les liens existants (ajout 2026-10-15).
+    """
+    from django.http import HttpResponsePermanentRedirect
+    return HttpResponsePermanentRedirect('/reclamation/')
 
 
 def cgu(request):
