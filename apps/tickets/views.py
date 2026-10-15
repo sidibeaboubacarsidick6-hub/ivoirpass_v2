@@ -267,6 +267,37 @@ def guest_payment_return(request, access_token):
     messages.info(request, "⏳ Vérification du paiement en cours...")
     return redirect('tickets:guest_confirmation', access_token=access_token)
 
+def short_ticket_redirect(request, access_token):
+    """
+    URL courte utilisée dans les SMS : /b/<uuid>/
+
+    Essaie d'abord de trouver une GuestOrder par access_token (cas
+    standard — tous les achats invités passent par là). Si non trouvé,
+    essaie une Order par uuid (achats avec compte — flux legacy).
+
+    Le uuid d'Order n'est pas exposé ailleurs publiquement, il sert
+    donc de token d'accès dans ce contexte.
+    """
+    from .models import GuestOrder, Order
+
+    # Cas 1 : GuestOrder (cas réel en production — tous les achats
+    # invités passent par ce modèle)
+    try:
+        order = GuestOrder.objects.get(access_token=access_token)
+        return redirect('tickets:guest_confirmation', access_token=access_token)
+    except GuestOrder.DoesNotExist:
+        pass
+
+    # Cas 2 : Order avec compte (flux legacy, rarement utilisé)
+    try:
+        order = Order.objects.get(uuid=access_token)
+        # Order n'a pas de page de confirmation publique par token.
+        # On redirige vers la home — le client pourra retrouver ses
+        # billets via son espace utilisateur.
+        return redirect('home')
+    except Order.DoesNotExist:
+        from django.http import Http404
+        raise Http404("Commande introuvable.")
 
 def guest_confirmation(request, access_token):
     from .models import GuestOrder, GuestTicket

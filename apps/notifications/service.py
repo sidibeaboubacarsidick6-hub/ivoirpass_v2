@@ -78,10 +78,12 @@ class NotificationService:
         if getattr(order.buyer, 'phone_number', None):
             try:
                 from apps.notifications.sms import send_sms
+                base_url = settings.PAYDUNYA_BASE_URL.rstrip('/')
+                ticket_link = f"{base_url}/b/{order.uuid}/"
                 send_sms(
                     order.buyer.phone_number,
-                    f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
-                    f"Commande {order.order_number}. Billets envoyés par email."
+                    f"IvoirPass : paiement {int(order.total)} FCFA confirme. "
+                    f"Billets : {ticket_link}"
                 )
             except Exception as e:
                 logger.error(f"Erreur envoi SMS confirmation billet {order.order_number}: {e}")
@@ -186,12 +188,12 @@ class NotificationService:
         if getattr(order, 'phone', None):
             try:
                 from apps.notifications.sms import send_sms
+                base_url = settings.PAYDUNYA_BASE_URL.rstrip('/')
+                ticket_link = f"{base_url}/b/{order.access_token}/"
                 send_sms(
                     order.phone,
-                    f"IvoirPass : votre paiement de {int(order.total)} FCFA est confirmé. "
-                    f"Commande {order.order_number}. "
-                    + ("Votre lien de connexion vous a été envoyé par email."
-                       if is_online_only else "Billets envoyés par email.")
+                    f"IvoirPass : paiement {int(order.total)} FCFA confirme. "
+                    f"Billets : {ticket_link}"
                 )
             except Exception as e:
                 logger.error(

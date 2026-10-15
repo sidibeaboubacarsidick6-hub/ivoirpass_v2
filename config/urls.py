@@ -13,6 +13,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from decouple import config
 from django.contrib.sitemaps.views import sitemap
 from apps.core.sitemaps import EventSitemap, StaticViewSitemap
+from apps.tickets.views import short_ticket_redirect
 
 
 admin.site.site_header = "IvoirPass V2 — Administration"
@@ -47,6 +48,7 @@ urlpatterns = [
     path('api/accounts/', include('apps.accounts.api.urls')),
     path('api/scanner/', include('apps.scanner.api.urls')),
     path('api/chat/', include('apps.chatbot.urls', namespace='chatbot')),
+    path('b/<uuid:access_token>/', short_ticket_redirect, name='short_ticket'),
     path('sitemap.xml', sitemap, {'sitemaps': {'events': EventSitemap, 'static': StaticViewSitemap}}, name='django.contrib.sitemaps.views.sitemap'),
 ]
 

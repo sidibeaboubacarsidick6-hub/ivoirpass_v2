@@ -211,7 +211,12 @@ class GuestTicketsConfirmedTests(TestCase):
     @patch('apps.notifications.service.EmailMultiAlternatives')
     @patch('apps.notifications.service.render_to_string')
     @patch('apps.notifications.sms.send_sms')
-    def test_online_envoie_acces_lien(self, mock_sms, mock_render, mock_email_cls):
+    def test_online_envoie_lien_confirmation(self, mock_sms, mock_render, mock_email_cls):
+        """
+        Événement online : le SMS contient le lien court /b/<access_token>/
+        qui mène à la page de confirmation (où se trouve aussi le lien
+        de connexion à l'événement en ligne).
+        """
         mock_render.return_value = 'Contenu'
         mock_email = MagicMock()
         mock_email_cls.return_value = mock_email
@@ -222,8 +227,9 @@ class GuestTicketsConfirmedTests(TestCase):
         self.assertTrue(result)
         mock_sms.assert_called_once()
         sms_body = mock_sms.call_args[0][1]
-        # Message pour événement online
-        self.assertIn('lien de connexion', sms_body)
+        # Le SMS doit contenir l'URL courte avec le token d'accès
+        self.assertIn('/b/', sms_body)
+        self.assertIn(str(order.access_token), sms_body)
 
     @patch('apps.notifications.service.EmailMultiAlternatives')
     @patch('apps.notifications.service.render_to_string')
