@@ -356,7 +356,36 @@ class DisputeAdmin(admin.ModelAdmin):
             'fields': ('resolution', 'resolved_by', 'resolved_at', 'created_at', 'updated_at'),
         }),
     )
+    actions = ['mark_investigating', 'mark_resolved', 'mark_closed']
 
+    @admin.action(description="Marquer comme en cours d'investigation")
+    def mark_investigating(self, request, queryset):
+        updated = queryset.update(status=Dispute.Status.INVESTIGATING)
+        self.message_user(
+            request,
+            f"{updated} litige(s) marqué(s) en cours.",
+        )
+
+    @admin.action(description="Marquer comme résolu")
+    def mark_resolved(self, request, queryset):
+        from django.utils import timezone
+        updated = queryset.update(
+            status=Dispute.Status.RESOLVED,
+            resolved_at=timezone.now(),
+            resolved_by=request.user,
+        )
+        self.message_user(
+            request,
+            f"{updated} litige(s) marqué(s) résolu(s).",
+        )
+
+    @admin.action(description="Fermer les litiges")
+    def mark_closed(self, request, queryset):
+        updated = queryset.update(status=Dispute.Status.CLOSED)
+        self.message_user(
+            request,
+            f"{updated} litige(s) fermé(s).",
+        )
     def status_badge(self, obj):
         colors = {'open': '#F47920', 'investigating': '#0dcaf0', 'resolved': '#1B7A3E', 'closed': '#6c757d', 'rejected': '#dc3545'}
         color = colors.get(obj.status, '#6c757d')
