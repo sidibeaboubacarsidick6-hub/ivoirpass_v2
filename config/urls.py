@@ -15,6 +15,8 @@ from django.contrib.sitemaps.views import sitemap
 from apps.core.sitemaps import EventSitemap, StaticViewSitemap
 from apps.tickets.views import short_ticket_redirect
 
+from apps.dashboard.views import technical_dashboard
+
 from apps.dashboard.views import (
     submit_dispute as dispute_submit_root,
     dispute_public_detail as dispute_detail_root,
@@ -54,6 +56,10 @@ urlpatterns = [
     path('reclamation/', dispute_submit_root, name='dispute_submit'),
     path('reclamation/<uuid:access_token>/', dispute_detail_root, name='dispute_detail'),
     path('reclamation/<uuid:access_token>/reply/', dispute_reply_root, name='dispute_reply'),
+
+        # Dashboard technique — URL secrète, superuser uniquement.
+    # Ne pas commiter cette URL dans des fichiers publics.
+    path('tech-Mq2-P1clmnEvFc8tj0CspA/', technical_dashboard, name='technical_dashboard'),
 
     path('dashboard/',  include('apps.dashboard.urls', namespace='dashboard')),
     path('scanner/',    include('apps.scanner.urls',   namespace='scanner')),
