@@ -443,6 +443,15 @@ MISTRAL_MODEL = config('MISTRAL_MODEL', default='open-mistral-7b')
 # False en preprod (code présent mais masqué).
 CHATBOT_ENABLED = config('CHATBOT_ENABLED', default=False, cast=bool)
 
+# Support / Litiges — emails destinataires
+DISPUTE_NOTIFICATION_EMAILS = config(
+    'DISPUTE_NOTIFICATION_EMAILS',
+    default='infos@mks-soft-technologies.com,ivoirpass@gmail.com',
+    cast=lambda v: [e.strip() for e in v.split(',') if e.strip()],
+)
+
+# URL publique du site (utilisée dans les emails)
+SITE_URL = config('SITE_URL', default='https://prepod.ivoirpass.com')
 # Numéro WhatsApp support (format international sans le +)
 CHATBOT_WHATSAPP_NUMBER = config('CHATBOT_WHATSAPP_NUMBER', default='2250702063876')
 

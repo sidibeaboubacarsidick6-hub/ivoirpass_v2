@@ -15,6 +15,12 @@ from django.contrib.sitemaps.views import sitemap
 from apps.core.sitemaps import EventSitemap, StaticViewSitemap
 from apps.tickets.views import short_ticket_redirect
 
+from apps.dashboard.views import (
+    submit_dispute as dispute_submit_root,
+    dispute_public_detail as dispute_detail_root,
+    dispute_public_reply as dispute_reply_root,
+)
+
 
 admin.site.site_header = "IvoirPass V2 — Administration"
 admin.site.site_title  = "IvoirPass Admin"
@@ -41,6 +47,14 @@ urlpatterns = [
     path('evenements/', include('apps.events.urls',    namespace='events')),
     path('billets/',    include('apps.tickets.urls',   namespace='tickets')),
     path('paiements/',  include('apps.payments.urls',  namespace='payments')),
+
+    # Réclamations — URLs courtes à la racine (utilisées dans les emails
+    # et messages utilisateur). Les URLs complètes restent accessibles
+    # sous /dashboard/reclamation/ pour rétrocompatibilité.
+    path('reclamation/', dispute_submit_root, name='dispute_submit'),
+    path('reclamation/<uuid:access_token>/', dispute_detail_root, name='dispute_detail'),
+    path('reclamation/<uuid:access_token>/reply/', dispute_reply_root, name='dispute_reply'),
+
     path('dashboard/',  include('apps.dashboard.urls', namespace='dashboard')),
     path('scanner/',    include('apps.scanner.urls',   namespace='scanner')),
     path('boutique/',   include('apps.store.urls',     namespace='store')),

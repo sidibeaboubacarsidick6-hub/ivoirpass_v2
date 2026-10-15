@@ -12,6 +12,7 @@ from django.urls import path, reverse
 from django.shortcuts import render
 from django.db.models import Sum
 from .models import OrganizerWallet, WalletTransaction, WithdrawalRequest, AuditLog, ReversalOTP, Dispute
+from .models import Dispute, DisputeMessage
 
 
 # ============================================
@@ -314,12 +315,21 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
 # DISPUTE
 # ============================================
 
+class DisputeMessageInline(admin.TabularInline):
+    model = DisputeMessage
+    extra = 1
+    fields = ('author', 'author_email', 'content', 'is_internal', 'created_at')
+    readonly_fields = ('created_at',)
+    ordering = ('created_at',)
+
+
 @admin.register(Dispute)
 class DisputeAdmin(admin.ModelAdmin):
     list_display = ('reference', 'type', 'subject', 'reported_by', 'status_badge', 'created_at')
     list_filter = ('status', 'type')
     search_fields = ('reference', 'subject', 'reported_by__email', 'order_number')
     readonly_fields = ('reference', 'created_at', 'updated_at', 'resolved_at')
+    inlines = [DisputeMessageInline]
 
     def status_badge(self, obj):
         colors = {'open': '#F47920', 'investigating': '#0dcaf0', 'resolved': '#1B7A3E', 'closed': '#6c757d', 'rejected': '#dc3545'}

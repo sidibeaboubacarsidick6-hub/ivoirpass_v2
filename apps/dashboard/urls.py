@@ -41,4 +41,15 @@ urlpatterns = [
    path('transactions/export/pdf/', views.export_transactions_pdf, name='export_transactions_pdf'),
 
    path('reclamation/', views.submit_dispute, name='submit_dispute'),
+
+   path(
+        'reclamation/<uuid:access_token>/',
+        views.dispute_public_detail,
+        name='dispute_public_detail',
+    ),
+    path(
+        'reclamation/<uuid:access_token>/reply/',
+        views.dispute_public_reply,
+        name='dispute_public_reply',
+    ),
 ]

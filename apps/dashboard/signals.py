@@ -1,16 +1,28 @@
 """
-IvoirPass V2 — Crédit wallet unifié
-Couvre : Order (compte), GuestOrder (invité), ProductOrder, GuestProductOrder
-Toutes les ventes créditent le même wallet organisateur, sans doublon.
+IvoirPass V2 — Signaux dashboard.
+
+Contient :
+1. Crédit wallet unifié (Order, GuestOrder, ProductOrder, GuestProductOrder)
+2. Notifications email sur les messages de litige (DisputeMessage)
 """
-from django.db import transaction, IntegrityError
+import logging
+
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db import IntegrityError, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
 from apps.tickets.models import Order, GuestOrder
-import logging
+
+from .models import DisputeMessage
 
 logger = logging.getLogger(__name__)
 
+
+# ============================================================
+# WALLET — Crédit unifié depuis une commande tickets
+# ============================================================
 
 def _credit_from_ticket_order(instance, items_related_name='items'):
     """
@@ -70,7 +82,8 @@ def _credit_from_ticket_order(instance, items_related_name='items'):
                 wallet = OrganizerWallet.objects.select_for_update().get(pk=wallet.pk)
 
                 if WalletTransaction.objects.filter(
-                    wallet=wallet, reference=instance.order_number, type=WalletTransaction.Type.CREDIT
+                    wallet=wallet, reference=instance.order_number,
+                    type=WalletTransaction.Type.CREDIT,
                 ).exists():
                     continue
 
@@ -119,3 +132,76 @@ def credit_organizer_wallet_from_guest_order(sender, instance, **kwargs):
     if instance.status != GuestOrder.Status.PAID:
         return
     _credit_from_ticket_order(instance, items_related_name='guest_items')
+
+
+# ============================================================
+# LITIGES — Notification email sur nouveau message
+# ============================================================
+
+@receiver(post_save, sender=DisputeMessage, dispatch_uid='notify_dispute_message')
+def notify_on_dispute_message(sender, instance, created, **kwargs):
+    """
+    Email automatique à chaque message (ajout 2026-10-15).
+
+    - Client répond (author=None) → email aux admins MKS
+    - Agent répond (author=User) → email au client
+    Les notes internes (is_internal=True) ne déclenchent rien.
+    """
+    if not created or instance.is_internal:
+        return
+
+    dispute = instance.dispute
+    site_url = getattr(settings, 'SITE_URL', 'https://prepod.ivoirpass.com').rstrip('/')
+
+    support_emails = getattr(
+        settings, 'DISPUTE_NOTIFICATION_EMAILS',
+        ['infos@mks-soft-technologies.com', 'ivoirpass@gmail.com'],
+    )
+
+    if instance.author_id:
+        # ─── Agent → client ───────────────────────────────────
+        if not dispute.email:
+            return
+        try:
+            send_mail(
+                subject=f"[{dispute.reference}] Réponse à votre réclamation",
+                message=(
+                    f"Bonjour,\n\n"
+                    f"Vous avez reçu une réponse à votre réclamation "
+                    f"{dispute.reference} :\n\n"
+                    f"{instance.content}\n\n"
+                    f"Pour répondre, suivez ce lien :\n"
+                    f"{site_url}/reclamation/{dispute.access_token}/\n\n"
+                    f"Cordialement,\n"
+                    f"L'équipe IvoirPass"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[dispute.email],
+                fail_silently=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Échec envoi email client litige {dispute.reference}: {e}"
+            )
+    else:
+        # ─── Client → admins ──────────────────────────────────
+        try:
+            send_mail(
+                subject=f"[{dispute.reference}] Nouveau message du client",
+                message=(
+                    f"Nouveau message sur la réclamation {dispute.reference}.\n\n"
+                    f"De : {instance.author_email or dispute.email}\n"
+                    f"Type : {dispute.get_type_display()}\n"
+                    f"Priorité : {dispute.get_priority_display()}\n\n"
+                    f"Message :\n{instance.content}\n\n"
+                    f"Traiter : {site_url}/admin/dashboard/dispute/"
+                    f"{dispute.pk}/change/"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=support_emails,
+                fail_silently=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Échec envoi email admins litige {dispute.reference}: {e}"
+            )

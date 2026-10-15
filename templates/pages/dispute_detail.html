@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Suivi réclamation {{ dispute.reference }} — IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+
+  <div class="mb-4">
+    <a href="/" class="text-decoration-none small text-muted">
+      <i class="bi bi-arrow-left"></i> Retour à l'accueil
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+        <div>
+          <h1 class="h4 mb-1">{{ dispute.reference }}</h1>
+          <p class="text-muted small mb-0">
+            {{ dispute.get_type_display }} — ouvert le {{ dispute.created_at|date:"d/m/Y à H:i" }}
+          </p>
+        </div>
+        <div>
+          {% if dispute.status == 'open' %}
+            <span class="badge bg-warning text-dark">Ouvert</span>
+          {% elif dispute.status == 'investigating' %}
+            <span class="badge bg-info text-dark">En cours</span>
+          {% elif dispute.status == 'resolved' %}
+            <span class="badge bg-success">Résolu</span>
+          {% elif dispute.status == 'closed' %}
+            <span class="badge bg-secondary">Fermé</span>
+          {% elif dispute.status == 'rejected' %}
+            <span class="badge bg-danger">Rejeté</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <hr>
+
+      <h2 class="h6 text-muted text-uppercase mb-2">Sujet</h2>
+      <p class="mb-3"><strong>{{ dispute.subject }}</strong></p>
+
+      <h2 class="h6 text-muted text-uppercase mb-2">Description</h2>
+      <p style="white-space: pre-line;">{{ dispute.description }}</p>
+
+      {% if dispute.order_number %}
+      <p class="small text-muted mb-0">
+        <i class="bi bi-receipt"></i> Commande : {{ dispute.order_number }}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-chat-dots"></i> Discussion
+    <span class="badge bg-secondary">{{ thread.count }}</span>
+  </h2>
+
+  <div class="mb-4">
+    {% for msg in thread %}
+      <div class="card mb-3 {% if msg.author_id %}border-primary{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <strong class="small">
+              {% if msg.author_id %}
+                <i class="bi bi-shield-check text-primary"></i> Support IvoirPass
+              {% else %}
+                <i class="bi bi-person-circle text-muted"></i> Vous
+              {% endif %}
+            </strong>
+            <small class="text-muted">{{ msg.created_at|date:"d/m/Y à H:i" }}</small>
+          </div>
+          <p class="mb-0" style="white-space: pre-line;">{{ msg.content }}</p>
+        </div>
+      </div>
+    {% empty %}
+      <div class="alert alert-light border">
+        <small class="text-muted">Aucun message pour le moment.</small>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if dispute.status == 'resolved' %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle"></i>
+      <strong>Réclamation résolue.</strong>
+      {% if dispute.resolution %}<br>{{ dispute.resolution }}{% endif %}
+    </div>
+  {% endif %}
+
+  {% if can_reply %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h3 class="h6 mb-3">Ajouter un message</h3>
+      <form method="post" action="{% url 'dispute_reply' access_token=dispute.access_token %}"></form>
+        {% csrf_token %}
+        <div class="mb-3">
+          <textarea
+            name="content"
+            class="form-control"
+            rows="4"
+            placeholder="Votre message…"
+            maxlength="5000"
+            required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-send"></i> Envoyer
+        </button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-warning">
+    Cette réclamation est fermée. Contactez le support si vous souhaitez la rouvrir.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

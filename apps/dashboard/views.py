@@ -9,6 +9,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from io import BytesIO
 
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from django.views.decorators.http import require_POST
+from .models import Dispute, DisputeMessage  # ← ajouter DisputeMessage
+
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views import decorators  # ✅ Correction : enlever la virgule finale
 from django.contrib.auth.decorators import login_required
@@ -1713,3 +1719,78 @@ def export_transactions_pdf(request):
                user=request.user, model_name='Payment', metadata={'count': len(rows), 'filters': filters},
                ip_address=get_client_ip(request))
     return response
+
+
+def dispute_public_detail(request, access_token):
+    """
+    Page publique de suivi d'une réclamation (ajout 2026-10-15).
+
+    Le client accède via /reclamation/<access_token>/ (UUID secret
+    reçu par email). Il voit son ticket + fil de discussion
+    (hors notes internes).
+    """
+    from django.shortcuts import get_object_or_404
+
+    dispute = get_object_or_404(Dispute, access_token=access_token)
+
+    # Fil : uniquement messages non-internes
+    thread = dispute.messages.filter(is_internal=False).order_by('created_at')
+
+    context = {
+        'dispute': dispute,
+        'thread': thread,
+        'can_reply': dispute.status not in (
+            Dispute.Status.CLOSED, Dispute.Status.REJECTED,
+        ),
+    }
+    return render(request, 'pages/dispute_detail.html', context)
+
+
+@require_POST
+def dispute_public_reply(request, access_token):
+    """
+    Réponse du client depuis la page de suivi publique.
+
+    Crée un DisputeMessage (author=None → client).
+    Le signal post_save envoie l'email aux admins.
+    """
+    from django.shortcuts import get_object_or_404
+
+    dispute = get_object_or_404(Dispute, access_token=access_token)
+
+    # Interdire la réponse si le ticket est fermé/rejeté
+    if dispute.status in (Dispute.Status.CLOSED, Dispute.Status.REJECTED):
+        messages.error(
+            request,
+            "Cette réclamation est fermée. Contactez le support si vous "
+            "souhaitez la rouvrir.",
+        )
+        return redirect('dashboard:dispute_public_detail', access_token=access_token)
+
+    content = (request.POST.get('content') or '').strip()
+    if not content:
+        messages.error(request, "Le message ne peut pas être vide.")
+        return redirect('dashboard:dispute_public_detail', access_token=access_token)
+
+    if len(content) > 5000:
+        messages.error(request, "Message trop long (5000 caractères max).")
+        return redirect('dashboard:dispute_public_detail', access_token=access_token)
+
+    DisputeMessage.objects.create(
+        dispute=dispute,
+        author=None,  # client
+        author_email=dispute.email or '',
+        content=content,
+        is_internal=False,
+    )
+
+    # Rouvrir si était résolu
+    if dispute.status == Dispute.Status.RESOLVED:
+        dispute.status = Dispute.Status.INVESTIGATING
+        dispute.save(update_fields=['status'])
+
+    messages.success(
+        request,
+        "Votre message a été envoyé. Nous vous répondrons rapidement.",
+    )
+    return redirect('dashboard:dispute_public_detail', access_token=access_token)
