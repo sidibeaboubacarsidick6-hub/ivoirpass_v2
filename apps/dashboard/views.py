@@ -8,6 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from io import BytesIO
+from django.conf import settings
 
 from django.contrib import messages
 from django.shortcuts import render, redirect
@@ -1233,84 +1234,160 @@ def export_sales_pdf(request):
     return response
 
 def submit_dispute(request):
-    """Page publique pour soumettre un litige."""
-    if request.method == 'POST':
-        order_number = request.POST.get('order_number', '').strip()
-        dispute_type = request.POST.get('type', 'other')
+    """
+    Page publique pour soumettre un litige (formulaire /reclamation/).
 
-        # Règle 30j : uniquement pour les litiges COMMERCIAUX.
-        # Une question générale n'a pas de délai (ajout 2026-10-15).
-        COMMERCIAL_TYPES = {'refund', 'non_delivery', 'qr_issue', 'wrong_item'}
-        DELAI_MAX_LITIGE_JOURS = 30
+    Supporte le pré-remplissage depuis le chatbot :
+    GET /reclamation/?source=chatbot&session=<key>
+    → Le formulaire est pré-rempli avec l'historique de conversation.
+    """
+    # ─── GET : préparer le formulaire (avec prefill si chatbot) ───
+    if request.method == 'GET':
+        prefill = {}
+        source_param = request.GET.get('source', '')
+        session_key = request.GET.get('session', '')
 
-        if dispute_type in COMMERCIAL_TYPES and order_number:
-            ref_date = _get_dispute_reference_date(order_number)
-            if ref_date and (timezone.now() - ref_date).days > DELAI_MAX_LITIGE_JOURS:
-                messages.error(
-                    request,
-                    f"Délai de contestation dépassé. Un litige commercial "
-                    f"ne peut être ouvert que dans les {DELAI_MAX_LITIGE_JOURS} "
-                    f"jours suivant l'événement ou l'achat. Pour toute exception, "
-                    f"contactez le support directement."
-                )
-                return render(request, 'pages/report_problem.html')
+        if source_param == 'chatbot' and session_key:
+            prefill = _build_chatbot_prefill(session_key, request.user)
 
-        # Auto-détection priorité HIGH selon mots-clés
-        AUTO_HIGH_KEYWORDS = {
-            'urgent', 'remboursement', 'erreur', 'bloqué', 'bloque',
-            'rembourse', 'rembourser', 'scandale', 'arnaque',
-        }
-        text_blob = (
-            (request.POST.get('subject', '') + ' ' +
-             request.POST.get('description', '')).lower()
-        )
-        detected_priority = (
-            Dispute.Priority.HIGH
-            if any(kw in text_blob for kw in AUTO_HIGH_KEYWORDS)
-            else Dispute.Priority.NORMAL
-        )
-
-        dispute = Dispute.objects.create(
-            type=dispute_type,
-            reported_by=request.user if request.user.is_authenticated else None,
-            email=request.POST.get('email', ''),
-            phone=request.POST.get('phone', ''),
-            order_number=order_number,
-            ticket_number=request.POST.get('ticket_number', ''),
-            subject=request.POST.get('subject', ''),
-            description=request.POST.get('description', ''),
-            source=Dispute.Source.FORM,
-            priority=detected_priority,
-        )
-
-        # Notification aux administrateurs (inchangée)
-        from apps.notifications.tasks import notify_admins_async
-
-        notify_admins_async.delay(
-            notification_type='fraud_alert',
-            title=f'Nouveau litige : {dispute.get_type_display()}',
-            message=(
-                f"Un nouveau litige a été ouvert.\n"
-                f"Référence : {dispute.reference}\n"
-                f"Type : {dispute.get_type_display()}\n"
-                f"Priorité : {dispute.get_priority_display()}\n"
-                f"Sujet : {dispute.subject}\n"
-                f"Email : {dispute.email}\n"
-                f"Commande : {dispute.order_number or 'N/A'}\n\n"
-                f"Description : {dispute.description[:200]}"
-            ),
-            reference=dispute.reference,
-        )
-
-        messages.success(
+        return render(
             request,
-            f"Votre réclamation {dispute.reference} a été enregistrée. "
-            f"Suivez son avancement : /reclamation/{dispute.access_token}/"
+            'pages/report_problem.html',
+            {'prefill': prefill},
         )
 
-        return redirect('home')
+    # ─── POST : créer le litige ─────────────────────────────────
+    order_number = request.POST.get('order_number', '').strip()
+    dispute_type = request.POST.get('type', 'other')
 
-    return render(request, 'pages/report_problem.html')
+    # Règle 30j : uniquement pour les litiges COMMERCIAUX.
+    COMMERCIAL_TYPES = {'refund', 'non_delivery', 'qr_issue', 'wrong_item'}
+    DELAI_MAX_LITIGE_JOURS = 30
+
+    if dispute_type in COMMERCIAL_TYPES and order_number:
+        ref_date = _get_dispute_reference_date(order_number)
+        if ref_date and (timezone.now() - ref_date).days > DELAI_MAX_LITIGE_JOURS:
+            messages.error(
+                request,
+                f"Délai de contestation dépassé. Un litige commercial "
+                f"ne peut être ouvert que dans les {DELAI_MAX_LITIGE_JOURS} "
+                f"jours suivant l'événement ou l'achat.",
+            )
+            return render(request, 'pages/report_problem.html', {'prefill': {}})
+
+    # Auto-détection priorité HIGH
+    AUTO_HIGH_KEYWORDS = {
+        'urgent', 'remboursement', 'erreur', 'bloqué', 'bloque',
+        'rembourse', 'rembourser', 'scandale', 'arnaque',
+    }
+    text_blob = (
+        (request.POST.get('subject', '') + ' ' +
+         request.POST.get('description', '')).lower()
+    )
+    detected_priority = (
+        Dispute.Priority.HIGH
+        if any(kw in text_blob for kw in AUTO_HIGH_KEYWORDS)
+        else Dispute.Priority.NORMAL
+    )
+
+    # Source (form par défaut, chatbot si transmis)
+    source_param = request.POST.get('source', 'form')
+    dispute_source = (
+        Dispute.Source.CHATBOT
+        if source_param == 'chatbot'
+        else Dispute.Source.FORM
+    )
+
+    # Historique chatbot (si créé depuis le widget)
+    chatbot_session = request.POST.get('chatbot_session', '').strip()
+    chatbot_history = []
+    if dispute_source == Dispute.Source.CHATBOT and chatbot_session:
+        try:
+            from apps.chatbot.service import ChatbotService
+            session_data = ChatbotService.get_session(chatbot_session)
+            chatbot_history = session_data.get('history', [])
+        except Exception:
+            pass
+
+    dispute = Dispute.objects.create(
+        type=dispute_type,
+        reported_by=request.user if request.user.is_authenticated else None,
+        email=request.POST.get('email', ''),
+        phone=request.POST.get('phone', ''),
+        order_number=order_number,
+        ticket_number=request.POST.get('ticket_number', ''),
+        subject=request.POST.get('subject', '')[:200],
+        description=request.POST.get('description', ''),
+        source=dispute_source,
+        priority=detected_priority,
+        chatbot_history=chatbot_history,
+    )
+
+    # Notification admins
+    from apps.notifications.tasks import notify_admins_async
+
+    notify_admins_async.delay(
+        notification_type='fraud_alert',
+        title=f'Nouveau litige : {dispute.get_type_display()}',
+        message=(
+            f"Un nouveau litige a été ouvert.\n"
+            f"Référence : {dispute.reference}\n"
+            f"Type : {dispute.get_type_display()}\n"
+            f"Priorité : {dispute.get_priority_display()}\n"
+            f"Source : {dispute.get_source_display()}\n"
+            f"Sujet : {dispute.subject}\n"
+            f"Email : {dispute.email}\n"
+            f"Commande : {dispute.order_number or 'N/A'}\n\n"
+            f"Description : {dispute.description[:200]}"
+        ),
+        reference=dispute.reference,
+    )
+
+    messages.success(
+        request,
+        f"Votre réclamation {dispute.reference} a été enregistrée. "
+        f"Un email de confirmation vous a été envoyé. "
+        f"Vous pouvez la suivre ici : {settings.SITE_URL}/reclamation/{dispute.access_token}/",
+    )
+
+    return redirect('home')
+
+
+def _build_chatbot_prefill(session_key, user):
+    """
+    Construit le prefill du formulaire depuis la session chatbot.
+
+    Récupère l'historique depuis Redis et le formate en texte lisible.
+    """
+    try:
+        from apps.chatbot.service import ChatbotService
+    except Exception:
+        return {}
+
+    session_data = ChatbotService.get_session(session_key)
+    history = session_data.get('history', [])
+    if not history:
+        return {}
+
+    # Formater l'historique en texte lisible
+    lines = ["--- Conversation avec l'assistant IvoirPass ---", ""]
+    for msg in history:
+        role = "Vous" if msg.get('role') == 'user' else "Assistant"
+        content = msg.get('content', '').strip()
+        if content:
+            lines.append(f"{role} : {content}")
+            lines.append("")
+    lines.append("--- Fin de la conversation ---")
+    lines.append("")
+    lines.append("Décrivez ci-dessous votre demande :")
+
+    prefill = {
+        'description': '\n'.join(lines),
+        'chatbot_session': session_key,
+        'source': 'chatbot',
+        'email': user.email if user.is_authenticated else '',
+    }
+    return prefill
 
 # ============================================================
 # BACK-OFFICE FINANCIER — Recherche/fiche/export des transactions

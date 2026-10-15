@@ -1,3 +1,4 @@
+```django
 {% extends 'base.html' %}
 {% load static %}
 
@@ -7,7 +8,7 @@
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-lg-8">
-      
+
       <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
@@ -17,7 +18,7 @@
 
       <h1 class="fw-bold mb-4">Signaler un problème</h1>
       <div class="section-divider mb-4"></div>
-      
+
       <p class="text-muted lead mb-4">
         Vous rencontrez un problème ? Signalez-le nous, nous le traitons rapidement.
       </p>
@@ -82,24 +83,34 @@
       <div class="p-4" style="background:#f8f9fa; border-radius:12px;">
         <form method="POST" class="needs-validation" novalidate>
           {% csrf_token %}
-          
+
+          <!-- Type (mappé vers Dispute.Type) -->
           <div class="mb-3">
-            <label for="problem_type" class="form-label fw-semibold">
+            <label for="type" class="form-label fw-semibold">
               <i class="bi bi-tag me-1 text-orange"></i>Type de problème
             </label>
-            <select class="form-select" id="problem_type" name="problem_type" required>
+            <select class="form-select" id="type" name="type" required>
               <option value="">Choisissez un type</option>
-              <option value="paiement">💰 Problème de paiement</option>
-              <option value="billet">🎫 Problème avec mon billet</option>
-              <option value="qr-code">📱 QR Code non reçu</option>
-              <option value="evenement">🎪 Problème avec un événement</option>
-              <option value="compte">👤 Problème avec mon compte</option>
-              <option value="technique">⚙️ Problème technique</option>
-              <option value="remboursement">↩️ Demande de remboursement</option>
-              <option value="autre">❓ Autre problème</option>
+              <option value="refund">💰 Demande de remboursement</option>
+              <option value="qr_issue">📱 QR Code non reçu</option>
+              <option value="non_delivery">🎫 Billet non reçu</option>
+              <option value="wrong_item">🎪 Problème avec un événement</option>
+              <option value="question">👤 Question générale</option>
+              <option value="other">❓ Autre problème</option>
             </select>
           </div>
-          
+
+          <!-- Sujet -->
+          <div class="mb-3">
+            <label for="subject" class="form-label fw-semibold">
+              <i class="bi bi-chat-left-text me-1 text-orange"></i>Sujet
+            </label>
+            <input type="text" class="form-control" id="subject" name="subject"
+                   placeholder="Ex: Billet non reçu après paiement"
+                   maxlength="200" required>
+          </div>
+
+          <!-- Email -->
           <div class="mb-3">
             <label for="email" class="form-label fw-semibold">
               <i class="bi bi-envelope me-1 text-orange"></i>Votre email
@@ -107,26 +118,50 @@
             {% if user.is_authenticated %}
             <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" readonly>
             {% else %}
-            <input type="email" class="form-control" id="email" name="email" placeholder="jean@exemple.com" required>
+            <input type="email" class="form-control" id="email" name="email"
+                   value="{{ prefill.email|default:'' }}"
+                   placeholder="jean@exemple.com" required>
             {% endif %}
           </div>
-          
+
+          <!-- Téléphone (optionnel) -->
+          <div class="mb-3">
+            <label for="phone" class="form-label fw-semibold">
+              <i class="bi bi-telephone me-1 text-orange"></i>Téléphone
+              <span class="text-muted fw-normal small">(optionnel)</span>
+            </label>
+            <input type="tel" class="form-control" id="phone" name="phone"
+                   placeholder="+225 07 XX XX XX XX">
+          </div>
+
+          <!-- Numéro de commande (optionnel) -->
           <div class="mb-3">
             <label for="order_number" class="form-label fw-semibold">
               <i class="bi bi-receipt me-1 text-orange"></i>Numéro de commande
               <span class="text-muted fw-normal small">(optionnel)</span>
             </label>
-            <input type="text" class="form-control" id="order_number" name="order_number" placeholder="Ex: IVP-2024-0123">
-            <div class="form-text">Indiquez votre numéro de commande pour un traitement plus rapide.</div>
+            <input type="text" class="form-control" id="order_number" name="order_number"
+                   value="{{ prefill.order_number|default:'' }}"
+                   placeholder="Ex: IP-2026-ABC123">
           </div>
-          
+
+          <!-- Description (pré-remplie si vient du chatbot) -->
           <div class="mb-3">
-            <label for="message" class="form-label fw-semibold">
+            <label for="description" class="form-label fw-semibold">
               <i class="bi bi-chat-dots me-1 text-orange"></i>Description du problème
             </label>
-            <textarea class="form-control" id="message" name="message" rows="5" placeholder="Décrivez précisément le problème rencontré..." required></textarea>
+            <textarea class="form-control" id="description" name="description"
+                      rows="6" maxlength="5000"
+                      placeholder="Décrivez précisément le problème rencontré..."
+                      required>{{ prefill.description|default:'' }}</textarea>
           </div>
-          
+
+          <!-- Champs cachés (contexte chatbot) -->
+          {% if prefill.source == 'chatbot' %}
+            <input type="hidden" name="source" value="chatbot">
+            <input type="hidden" name="chatbot_session" value="{{ prefill.chatbot_session }}">
+          {% endif %}
+
           <div class="mb-3">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="agreement" required>
@@ -135,7 +170,7 @@
               </label>
             </div>
           </div>
-          
+
           <button type="submit" class="btn btn-orange w-100">
             <i class="bi bi-send me-2"></i>Envoyer le signalement
           </button>
@@ -146,3 +181,4 @@
   </div>
 </div>
 {% endblock %}
+```

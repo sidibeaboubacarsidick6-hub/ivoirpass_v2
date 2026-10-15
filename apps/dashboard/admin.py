@@ -323,36 +323,91 @@ class DisputeMessageInline(admin.TabularInline):
     ordering = ('created_at',)
 
 
+
 @admin.register(Dispute)
 class DisputeAdmin(admin.ModelAdmin):
-    list_display = ('reference', 'type', 'subject', 'reported_by', 'status_badge', 'created_at')
-    list_filter = ('status', 'type')
-    search_fields = ('reference', 'subject', 'reported_by__email', 'order_number')
-    readonly_fields = ('reference', 'created_at', 'updated_at', 'resolved_at')
+    list_display = (
+        'reference', 'type', 'subject', 'reported_by',
+        'status_badge', 'priority_badge', 'source', 'created_at',
+    )
+    list_filter = ('status', 'type', 'priority', 'source')
+    search_fields = ('reference', 'subject', 'reported_by__email', 'order_number', 'email')
+    readonly_fields = (
+        'reference', 'access_token', 'created_at', 'updated_at',
+        'resolved_at', 'chatbot_history_display',
+    )
     inlines = [DisputeMessageInline]
+    fieldsets = (
+        ('Identification', {
+            'fields': ('reference', 'access_token', 'type', 'status', 'priority', 'source'),
+        }),
+        ('Demandeur', {
+            'fields': ('reported_by', 'email', 'phone'),
+        }),
+        ('Détails', {
+            'fields': ('subject', 'description', 'order_number', 'ticket_number'),
+        }),
+        ('Contexte chatbot', {
+            'fields': ('chatbot_history_display',),
+            'classes': ('collapse',),
+            'description': "Historique de la conversation chatbot si la réclamation vient du widget.",
+        }),
+        ('Résolution', {
+            'fields': ('resolution', 'resolved_by', 'resolved_at', 'created_at', 'updated_at'),
+        }),
+    )
 
     def status_badge(self, obj):
         colors = {'open': '#F47920', 'investigating': '#0dcaf0', 'resolved': '#1B7A3E', 'closed': '#6c757d', 'rejected': '#dc3545'}
         color = colors.get(obj.status, '#6c757d')
-        return format_html('<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;">{}</span>', color, obj.get_status_display())
+        return format_html(
+            '<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;">{}</span>',
+            color, obj.get_status_display(),
+        )
     status_badge.short_description = "Statut"
 
-    actions = ['mark_investigating', 'mark_resolved', 'mark_closed']
+    def priority_badge(self, obj):
+        colors = {'low': '#6c757d', 'normal': '#0d6efd', 'high': '#dc3545'}
+        color = colors.get(obj.priority, '#6c757d')
+        return format_html(
+            '<span style="background:{};color:white;padding:3px 10px;border-radius:20px;font-size:0.78rem;">{}</span>',
+            color, obj.get_priority_display(),
+        )
+    priority_badge.short_description = "Priorité"
 
-    @admin.action(description="🔍 En investigation")
-    def mark_investigating(self, request, queryset):
-        queryset.filter(status=Dispute.Status.OPEN).update(status=Dispute.Status.INVESTIGATING)
-        self.message_user(request, "Litiges passés en investigation.")
+    @admin.display(description="Historique de la conversation")
+    def chatbot_history_display(self, obj):
+        """
+        Affiche l'historique chatbot en clair (pas du JSON brut).
+        """
+        history = obj.chatbot_history or []
+        if not history:
+            return "— Aucun historique chatbot —"
 
-    @admin.action(description="✅ Résoudre")
-    def mark_resolved(self, request, queryset):
-        queryset.exclude(status=Dispute.Status.CLOSED).update(status=Dispute.Status.RESOLVED, resolved_by=request.user, resolved_at=timezone.now())
-        self.message_user(request, "Litiges résolus.")
+        rows = []
+        for msg in history:
+            role = msg.get('role', '')
+            content = msg.get('content', '')
 
-    @admin.action(description="🔒 Fermer")
-    def mark_closed(self, request, queryset):
-        queryset.update(status=Dispute.Status.CLOSED)
-        self.message_user(request, "Litiges fermés.")
+            if role == 'user':
+                label = '👤 Client'
+                bg = '#e7f1ff'
+            else:
+                label = '🤖 Assistant'
+                bg = '#f8f9fa'
+
+            rows.append(
+                f'<div style="background:{bg};padding:8px 12px;'
+                f'border-radius:8px;margin-bottom:6px;">'
+                f'<strong style="font-size:0.85rem;">{label}</strong><br>'
+                f'<span style="white-space:pre-line;">{content}</span>'
+                f'</div>'
+            )
+
+        return format_html(
+            '<div style="max-height:400px;overflow-y:auto;">{}</div>',
+            format_html(''.join(rows)),
+        )
 
 
 # ============================================

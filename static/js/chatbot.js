@@ -42,6 +42,16 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----------------------------------------------------------------
+    // Getters
+    // ----------------------------------------------------------------
+
+    // URL vers la page de réclamation, avec le session_key
+    // pour pré-remplir l'historique de conversation côté serveur.
+    get disputeUrl() {
+      return '/reclamation/?source=chatbot&session=' + encodeURIComponent(this.sessionKey);
+    },
+
+    // ----------------------------------------------------------------
     // Utilitaires
     // ----------------------------------------------------------------
     generateUuid() {
@@ -110,7 +120,7 @@ document.addEventListener('alpine:init', () => {
           role: 'assistant',
           content:
             "Désolé, une erreur technique est survenue. " +
-            "Réessayez dans quelques instants ou contactez-nous sur WhatsApp.",
+            "Réessayez dans quelques instants ou ouvrez une réclamation.",
         });
         this.suggestWhatsapp = true;
       } finally {

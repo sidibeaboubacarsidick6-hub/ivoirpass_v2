@@ -79,16 +79,18 @@
         </div>
       </template>
 
-      <!-- Bouton WhatsApp si 2 échecs -->
+      <!-- Bouton Ouvrir une réclamation si 2 échecs -->
       <template x-if="suggestWhatsapp && !loading">
         <div class="chatbot-whatsapp">
           <p class="chatbot-whatsapp__text">
-            Pour une réponse personnalisée, contactez notre support :
+            Je n'ai pas la réponse dans ma documentation. Vous pouvez ouvrir une réclamation :
           </p>
-          <a :href="whatsappUrl" target="_blank" rel="noopener"
-             class="chatbot-whatsapp__btn">
-            <i class="bi bi-whatsapp"></i>
-            Ouvrir WhatsApp
+          <a :href="disputeUrl"
+             class="chatbot-whatsapp__btn"
+             target="_blank"
+             rel="noopener">
+            <i class="bi bi-ticket-detailed"></i>
+            Ouvrir une réclamation
           </a>
         </div>
       </template>
