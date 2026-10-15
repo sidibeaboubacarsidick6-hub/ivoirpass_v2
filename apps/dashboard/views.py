@@ -1871,3 +1871,91 @@ def dispute_public_reply(request, access_token):
         "Votre message a été envoyé. Nous vous répondrons rapidement.",
     )
     return redirect('dashboard:dispute_public_detail', access_token=access_token)
+
+
+
+    # ============================================================
+# DASHBOARD TECHNIQUE (superuser uniquement)
+# ============================================================
+
+from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import PermissionDenied
+
+
+def _superuser_required(view_func):
+    """
+    Décorateur : accès réservé aux superusers.
+    Renvoie 403 (pas de redirect vers login) pour ne pas révéler
+    l'existence de cette URL aux autres staff.
+    """
+    from functools import wraps
+
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect(f'/accounts/login/?next={request.path}')
+        if not request.user.is_superuser:
+            raise PermissionDenied("Accès réservé au superuser.")
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+@_superuser_required
+def technical_dashboard(request):
+    """
+    Dashboard technique IvoirPass — vue d'ensemble pour le dev/superuser.
+
+    Bloc 1 (ce soir) : Litiges — état, priorités, activité récente.
+    Blocs futurs : Confirmations (paiements, users, events),
+                   Actions en attente (KYC, retraits, modérations),
+                   Alertes (échecs paiements, réconciliations),
+                   Stats 7 jours, Activité chatbot.
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+    from django.db.models import Count, Q
+
+    now = timezone.now()
+    last_7d = now - timedelta(days=7)
+    last_24h = now - timedelta(hours=24)
+
+    # ─── Stats litiges ─────────────────────────────────────────
+    disputes_qs = Dispute.objects.all()
+
+    disputes_open = disputes_qs.filter(
+        status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING],
+    ).count()
+
+    disputes_high = disputes_qs.filter(
+        status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING],
+        priority=Dispute.Priority.HIGH,
+    ).count()
+
+    disputes_new_24h = disputes_qs.filter(created_at__gte=last_24h).count()
+
+    disputes_from_chatbot = disputes_qs.filter(
+        source=Dispute.Source.CHATBOT,
+        created_at__gte=last_7d,
+    ).count()
+
+    # ─── Liste des litiges à traiter (top 10) ──────────────────
+    disputes_urgent = (
+        disputes_qs
+        .filter(status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING])
+        .order_by('-priority', '-created_at')
+        .select_related('reported_by')
+        [:10]
+    )
+
+    context = {
+        'now': now,
+        'stats': {
+            'disputes_open': disputes_open,
+            'disputes_high': disputes_high,
+            'disputes_new_24h': disputes_new_24h,
+            'disputes_from_chatbot_7d': disputes_from_chatbot,
+        },
+        'disputes_urgent': disputes_urgent,
+    }
+    return render(request, 'dashboard/technical.html', context)

@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Dashboard technique — IvoirPass{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 1400px;">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="h3 mb-1">
+        <i class="bi bi-speedometer2 text-orange"></i>
+        Dashboard technique
+      </h1>
+      <p class="text-muted mb-0 small">
+        Vue d'ensemble — {{ now|date:"l d F Y, H:i" }}
+      </p>
+    </div>
+    <div>
+      <span class="badge bg-dark">
+        <i class="bi bi-shield-lock"></i> Superuser
+      </span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC 1 : LITIGES                                         -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-ticket-detailed"></i> Litiges
+  </h2>
+
+  <!-- Stats litiges -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Ouverts</p>
+              <h2 class="mb-0 display-6 fw-bold">{{ stats.disputes_open }}</h2>
+            </div>
+            <div class="rounded-circle bg-warning bg-opacity-10 p-3">
+              <i class="bi bi-hourglass-split text-warning fs-4"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Priorité haute</p>
+              <h2 class="mb-0 display-6 fw-bold text-danger">{{ stats.disputes_high }}</h2>
+            </div>
+            <div class="rounded-circle bg-danger bg-opacity-10 p-3">
+              <i class="bi bi-exclamation-triangle-fill text-danger fs-4"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Nouveaux (24h)</p>
+              <h2 class="mb-0 display-6 fw-bold">{{ stats.disputes_new_24h }}</h2>
+            </div>
+            <div class="rounded-circle bg-info bg-opacity-10 p-3">
+              <i class="bi bi-clock-history text-info fs-4"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Via chatbot (7j)</p>
+              <h2 class="mb-0 display-6 fw-bold">{{ stats.disputes_from_chatbot_7d }}</h2>
+            </div>
+            <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+              <i class="bi bi-robot text-primary fs-4"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Liste litiges actifs -->
+  <div class="card border-0 shadow-sm mb-5">
+    <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+      <h3 class="h6 mb-0">
+        <i class="bi bi-list-check"></i> Litiges à traiter (top 10)
+      </h3>
+      <a href="/X9IGAXWm6pVzi-AS/dashboard/dispute/" class="btn btn-sm btn-outline-secondary">
+        Voir tous <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+    <div class="card-body p-0">
+      {% if disputes_urgent %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Référence</th>
+                <th>Type</th>
+                <th>Sujet</th>
+                <th>Source</th>
+                <th>Priorité</th>
+                <th>Créé</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in disputes_urgent %}
+                <tr>
+                  <td>
+                    <strong>{{ d.reference }}</strong>
+                  </td>
+                  <td>
+                    <span class="badge bg-secondary">{{ d.get_type_display }}</span>
+                  </td>
+                  <td>
+                    <span title="{{ d.subject }}">
+                      {{ d.subject|truncatechars:50 }}
+                    </span>
+                  </td>
+                  <td>
+                    {% if d.source == 'chatbot' %}
+                      <span class="badge bg-primary"><i class="bi bi-robot"></i> Chatbot</span>
+                    {% elif d.source == 'form' %}
+                      <span class="badge bg-light text-dark">Formulaire</span>
+                    {% else %}
+                      <span class="badge bg-light text-dark">{{ d.get_source_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if d.priority == 'high' %}
+                      <span class="badge bg-danger">Haute</span>
+                    {% elif d.priority == 'normal' %}
+                      <span class="badge bg-info text-dark">Normale</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Basse</span>
+                    {% endif %}
+                  </td>
+                  <td class="small text-muted">
+                    {{ d.created_at|date:"d/m H:i" }}
+                  </td>
+                  <td>
+                    <a href="/X9IGAXWm6pVzi-AS/dashboard/dispute/{{ d.pk }}/change/"
+                       class="btn btn-sm btn-outline-primary"
+                       title="Traiter dans l'admin">
+                      <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="p-4 text-center text-muted">
+          <i class="bi bi-check-circle display-4 text-success opacity-50"></i>
+          <p class="mt-2 mb-0">Aucun litige à traiter. Tout est propre. ✨</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOCS FUTURS (placeholder)                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3 text-muted">
+    <i class="bi bi-hourglass"></i> Prochains blocs (à venir)
+  </h2>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-cash-coin display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Confirmations</h5>
+          <p class="text-muted small mb-0">Paiements, nouveaux users, events publiés</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-clipboard-check display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Actions en attente</h5>
+          <p class="text-muted small mb-0">KYC, retraits, modérations</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-exclamation-octagon display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Alertes</h5>
+          <p class="text-muted small mb-0">Paiements échoués, réconciliations ratées</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-bar-chart-line display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Stats 7 jours</h5>
+          <p class="text-muted small mb-0">Litiges, emails, SMS</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-robot display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Activité chatbot</h5>
+          <p class="text-muted small mb-0">Questions, taux d'échec, escalades</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100" style="opacity: 0.55;">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-activity display-5 text-muted"></i>
+          <h5 class="mt-3 mb-1">Santé système</h5>
+          <p class="text-muted small mb-0">Celery, Redis, DB, backups</p>
+          <span class="badge bg-secondary mt-2">Bientôt</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

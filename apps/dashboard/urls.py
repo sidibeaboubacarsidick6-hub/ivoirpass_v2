@@ -52,4 +52,7 @@ urlpatterns = [
         views.dispute_public_reply,
         name='dispute_public_reply',
     ),
+
+    # Dashboard technique (superuser uniquement)
+    path('technique/', views.technical_dashboard, name='technical_dashboard'),
 ]
