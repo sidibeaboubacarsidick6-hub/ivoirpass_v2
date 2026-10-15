@@ -93,7 +93,7 @@
   <div class="card shadow-sm">
     <div class="card-body">
       <h3 class="h6 mb-3">Ajouter un message</h3>
-      <form method="post" action="{% url 'dispute_reply' access_token=dispute.access_token %}"></form>
+      <form method="post" action="{% url 'dispute_reply' access_token=dispute.access_token %}">
         {% csrf_token %}
         <div class="mb-3">
           <textarea
