@@ -7,6 +7,8 @@ Contient :
 """
 import logging
 
+from django.urls import reverse, NoReverseMatch
+
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
@@ -138,6 +140,19 @@ def credit_organizer_wallet_from_guest_order(sender, instance, **kwargs):
 # LITIGES — Notification email sur nouveau message
 # ============================================================
 
+def _admin_dispute_url(dispute):
+    """
+    Retourne le chemin admin réel du litige (respecte ADMIN_URL custom).
+
+    Utilise reverse() pour ne pas casser si le préfixe admin change
+    (le projet utilise un préfixe custom dans .env : ADMIN_URL=...).
+    """
+    try:
+        return reverse('admin:dashboard_dispute_change', args=[dispute.pk])
+    except NoReverseMatch:
+        # Fallback : chemin standard, mais ne devrait pas arriver
+        return f"/admin/dashboard/dispute/{dispute.pk}/change/"
+
 @receiver(post_save, sender=DisputeMessage, dispatch_uid='notify_dispute_message')
 def notify_on_dispute_message(sender, instance, created, **kwargs):
     """
@@ -194,8 +209,7 @@ def notify_on_dispute_message(sender, instance, created, **kwargs):
                     f"Type : {dispute.get_type_display()}\n"
                     f"Priorité : {dispute.get_priority_display()}\n\n"
                     f"Message :\n{instance.content}\n\n"
-                    f"Traiter : {site_url}/admin/dashboard/dispute/"
-                    f"{dispute.pk}/change/"
+                    f"Traiter : {site_url}{_admin_dispute_url(dispute)}"
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=support_emails,
