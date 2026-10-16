@@ -129,6 +129,13 @@ else
 fi
 echo
 
+# ─── Nettoyage Docker (garde 7j de build cache, 14j d'images) ───
+# Empêche le disque de se remplir à chaque déploiement.
+# Les images des containers ACTIFS sont toujours préservées.
+docker builder prune -af --filter "until=168h"  > /dev/null 2>&1 || true
+docker image prune -af --filter "until=336h"    > /dev/null 2>&1 || true
+
+
 # ───────────────────────────────────────────────────────────
 # ÉTAPE 7 — Vérifications finales
 # ───────────────────────────────────────────────────────────
