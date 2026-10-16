@@ -2177,6 +2177,60 @@ def technical_dashboard(request):
         .order_by('-cancel_requested_at')
         [:5]
     )
+        # ─── Santé système (ajout 2026-10-16) ─────────────────────
+    from django.core.cache import cache
+    from django.db import connection
+    from django.db.migrations.recorder import MigrationRecorder
+    from django.conf import settings
+
+    # Redis (test ping via Django cache)
+    redis_ok = False
+    try:
+        cache.set('__health_ping__', 'pong', 10)
+        redis_ok = cache.get('__health_ping__') == 'pong'
+    except Exception:
+        redis_ok = False
+
+    # DB (test query + taille PostgreSQL)
+    db_ok = False
+    db_size = "n/a"
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        db_ok = True
+        if connection.vendor == 'postgresql':
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_size_pretty(pg_database_size(current_database()))")
+                db_size = cursor.fetchone()[0]
+    except Exception:
+        db_ok = False
+
+    # Dernière migration appliquée
+    last_migration = (
+        MigrationRecorder.Migration.objects
+        .order_by('-applied')
+        .first()
+    )
+
+    # Celery Beat — tâches planifiées
+    beat_schedule = getattr(settings, 'CELERY_BEAT_SCHEDULE', {})
+    beat_tasks = []
+    for name, cfg in beat_schedule.items():
+        sched = cfg.get('schedule')
+        # Formatage du schedule (crontab ou int)
+        try:
+            sched_str = str(sched)
+        except Exception:
+            sched_str = '?'
+        beat_tasks.append({
+            'name': name,
+            'task': cfg.get('task', ''),
+            'schedule': sched_str,
+        })
+
+    # Version Celery Beat scheduler (info)
+    beat_scheduler = getattr(settings, 'CELERY_BEAT_SCHEDULER', 'default')
 
     context = {
         'now': now,
@@ -2218,5 +2272,15 @@ def technical_dashboard(request):
         'kyc_pending_list': kyc_pending_list,
         'withdrawals_pending_list': withdrawals_pending_list,
         'event_cancels_list': event_cancels_list,
+        'health': {
+            'redis_ok': redis_ok,
+            'db_ok': db_ok,
+            'db_size': db_size,
+            'last_migration': last_migration,
+            'beat_tasks': beat_tasks,
+            'beat_count': len(beat_tasks),
+            'beat_scheduler': beat_scheduler,
+        },
+    
     }
     return render(request, 'dashboard/technical.html', context)

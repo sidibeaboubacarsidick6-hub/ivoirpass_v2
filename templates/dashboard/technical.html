@@ -506,9 +506,134 @@
   </div>
   {% endif %}
 
+   <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC SANTÉ SYSTÈME                                       -->
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- BLOC LITIGES                                             -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-activity"></i> Santé système
+  </h2>
+
+  <!-- 4 cartes état -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Base de données</p>
+              <h3 class="mb-0 fw-bold {% if health.db_ok %}text-success{% else %}text-danger{% endif %}">
+                {% if health.db_ok %}
+                  <i class="bi bi-check-circle-fill"></i> OK
+                {% else %}
+                  <i class="bi bi-x-circle-fill"></i> KO
+                {% endif %}
+              </h3>
+              <p class="text-muted small mb-0">Taille : {{ health.db_size }}</p>
+            </div>
+            <i class="bi bi-database fs-3 text-muted opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Redis (cache)</p>
+              <h3 class="mb-0 fw-bold {% if health.redis_ok %}text-success{% else %}text-danger{% endif %}">
+                {% if health.redis_ok %}
+                  <i class="bi bi-check-circle-fill"></i> OK
+                {% else %}
+                  <i class="bi bi-x-circle-fill"></i> KO
+                {% endif %}
+              </h3>
+              <p class="text-muted small mb-0">Ping cache</p>
+            </div>
+            <i class="bi bi-hdd-stack fs-3 text-muted opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Tâches Beat</p>
+              <h3 class="mb-0 fw-bold">{{ health.beat_count }}</h3>
+              <p class="text-muted small mb-0">planifiées</p>
+            </div>
+            <i class="bi bi-clock-history fs-3 text-muted opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Dernière migration</p>
+              <h3 class="mb-0 fw-bold fs-6">
+                {% if health.last_migration %}
+                  {{ health.last_migration.app }}.{{ health.last_migration.name }}
+                {% else %}
+                  —
+                {% endif %}
+              </h3>
+              <p class="text-muted small mb-0">
+                {% if health.last_migration %}
+                  {{ health.last_migration.applied|date:"d/m H:i" }}
+                {% endif %}
+              </p>
+            </div>
+            <i class="bi bi-diagram-3 fs-3 text-muted opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tâches planifiées détail -->
+  <div class="card border-0 shadow-sm mb-5">
+    <div class="card-header bg-white border-bottom">
+      <h3 class="h6 mb-0">
+        <i class="bi bi-list-task"></i> Tâches planifiées Celery Beat
+        <span class="badge bg-secondary ms-2">{{ health.beat_count }}</span>
+      </h3>
+    </div>
+    <div class="card-body p-0">
+      {% if health.beat_tasks %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Nom</th>
+                <th>Schedule</th>
+                <th>Task</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in health.beat_tasks %}
+                <tr>
+                  <td><strong class="small">{{ t.name }}</strong></td>
+                  <td><code class="small">{{ t.schedule|truncatechars:40 }}</code></td>
+                  <td><code class="small text-muted">{{ t.task|truncatechars:50 }}</code></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="p-3 text-muted small">Aucune tâche planifiée.</div>
+      {% endif %}
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
   <!-- BLOC LITIGES                                             -->
