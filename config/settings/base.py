@@ -375,7 +375,7 @@ CELERY_BEAT_SCHEDULE = {
         # envoyé chaque lundi à 08:30 (Africa/Abidjan) aux destinataires
         # définis dans WEEKLY_REPORT_RECIPIENTS.
         'task': 'apps.dashboard.tasks.send_weekly_report',
-        'schedule': crontab(day_of_week=1, hour=8, minute=30),
+        'schedule': crontab(day_of_week=1, hour=7, minute=30),
     },
 }
 
