@@ -356,13 +356,6 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/15'),
     },
 
-    'release-expired-pending-orders': {
-        # ✅ Correctif audit H-1 : libère le stock billetterie réservé par
-        # des commandes PENDING abandonnées (jamais de paiement initié),
-        # voir apps/payments/tasks.py::release_expired_pending_orders.
-        'task': 'apps.payments.tasks.release_expired_pending_orders',
-        'schedule': crontab(minute='*/15'),
-    },
     'release-expired-product-orders': {
         # Annule les commandes boutique PENDING abandonnées (sans token
         # > 30 min, avec token > 24h). Pas de gestion de stock (boutique
@@ -376,10 +369,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.dashboard.tasks.generate_bceao_report',
         'schedule': crontab(hour=8, day_of_month=1),  # 1er de chaque mois à 8h
     },
-    'backup-database-nightly': {
-        'task': 'apps.core.tasks.backup_database',
-        'schedule': crontab(hour=3, minute=0),  # 3h du matin, faible trafic
-    },
+
     'send-weekly-report': {
         # Rapport hebdomadaire (Excel multi-onglets, ZIP chiffré)
         # envoyé chaque lundi à 08:30 (Africa/Abidjan) aux destinataires
