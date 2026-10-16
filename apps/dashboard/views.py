@@ -2080,7 +2080,7 @@ def technical_dashboard(request):
             'icon': 'cash-coin',
             'color': 'success',
             'label': f'Paiement confirmé — {int(p.amount)} FCFA',
-            'detail': str(p.token)[:20],
+            'detail': str(getattr(p, 'reference', '') or getattr(p, 'order_number', '') or f'#{p.pk}'),
             'at': p.created_at,
         })
 
