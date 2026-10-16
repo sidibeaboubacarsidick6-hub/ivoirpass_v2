@@ -520,6 +520,38 @@ CSP_FRAME_SRC = (
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo
 
+
+# ============================================
+# LOGGING — Silence les erreurs bruyantes
+#
+# Django logue par défaut DisallowedHost en ERROR. Comme Sentry
+# forward tous les logs ERROR (via LoggingIntegration), chaque bot
+# qui scanne notre IP avec un Host invalide (ex: pastpapers.co)
+# génère une "erreur" Sentry → on a saturé le quota (5220/5000).
+#
+# Ce bloc silence le logger spécifique : ERROR est ignoré (seul
+# CRITICAL passe), et rien n'est propagé au logger root.
+# Résultat : 0 erreur Sentry pour les scans de bots, aucune perte
+# pour les vrais bugs.
+# ============================================
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'null': {
+            'class': 'logging.NullHandler',
+        },
+    },
+    'loggers': {
+        # Bots qui envoient un Host non whitelisté → on ignore.
+        'django.security.DisallowedHost': {
+            'handlers': ['null'],
+            'level': 'CRITICAL',   # ERROR < CRITICAL → filtré
+            'propagate': False,    # ne remonte pas au root logger
+        },
+    },
+}
+
 # ============================================
 # SENTRY — Alertes en temps réel sur les erreurs
 #
@@ -537,6 +569,34 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo
 # apps/notifications/tasks.py pour les échecs d'email silencieux).
 # ============================================
 SENTRY_DSN = config('SENTRY_DSN', default='')
+
+
+def _sentry_before_send(event, hint):
+    """
+    Filtre les événements Sentry avant envoi (ajout 2026-10-16).
+
+    Objectif : ne PAS envoyer les erreurs bruyantes qui ne sont pas
+    de vrais bugs applicatifs. En particulier DisallowedHost (bots
+    qui scannent avec un Host invalide).
+
+    Retourne None pour jeter l'événement, sinon retourne event.
+    """
+    # Cas 1 : log record (LoggingIntegration)
+    if 'log_record' in hint:
+        record = hint['log_record']
+        if getattr(record, 'name', '') == 'django.security.DisallowedHost':
+            return None
+
+    # Cas 2 : exception levée (intégration auto)
+    if 'exc_info' in hint:
+        exc_info = hint['exc_info']
+        if exc_info and len(exc_info) >= 1:
+            exc_type = exc_info[0]
+            if exc_type is not None and exc_type.__name__ == 'DisallowedHost':
+                return None
+
+    return event
+
 
 if SENTRY_DSN:
     import sentry_sdk
@@ -561,6 +621,8 @@ if SENTRY_DSN:
         # Pas de valeurs de variables locales dans les traces d'erreur
         # (jetons de paiement, OTP, téléphones...).
         include_local_variables=False,
+        # Filtre les erreurs bruyantes (bots/DisallowedHost) — ajout 2026-10-16.
+        before_send=_sentry_before_send,
         event_scrubber=EventScrubber(
             denylist=DEFAULT_DENYLIST + [
                 'phone', 'telephone', 'otp', 'payment_token', 'token',
@@ -570,4 +632,3 @@ if SENTRY_DSN:
             recursive=True,
         ),
     )
-    
