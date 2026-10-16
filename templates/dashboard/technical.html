@@ -308,6 +308,208 @@
   </div>
   {% endif %}
 
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC ACTIONS EN ATTENTE                                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-clipboard-check"></i> Actions en attente
+  </h2>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if actions.kyc_pending %}border-start border-4 border-info{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">KYC à valider</p>
+              <h3 class="mb-0 fw-bold {% if actions.kyc_pending %}text-info{% endif %}">
+                {{ actions.kyc_pending }}
+              </h3>
+            </div>
+            <i class="bi bi-person-badge text-info fs-3 opacity-50"></i>
+          </div>
+          {% if actions.kyc_pending %}
+            <a href="{% url 'admin:accounts_customuser_changelist' %}?is_organizer_verified__exact=0"
+               class="btn btn-sm btn-outline-info mt-3 w-100">
+              Voir <i class="bi bi-arrow-right"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if actions.withdrawals_pending %}border-start border-4 border-warning{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Retraits en attente</p>
+              <h3 class="mb-0 fw-bold {% if actions.withdrawals_pending %}text-warning{% endif %}">
+                {{ actions.withdrawals_pending }}
+              </h3>
+            </div>
+            <i class="bi bi-cash-stack text-warning fs-3 opacity-50"></i>
+          </div>
+          {% if actions.withdrawals_pending %}
+            <a href="{% url 'admin:dashboard_withdrawalrequest_changelist' %}"
+               class="btn btn-sm btn-outline-warning mt-3 w-100">
+              Voir <i class="bi bi-arrow-right"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if actions.event_cancels_pending %}border-start border-4 border-danger{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Annulations à traiter</p>
+              <h3 class="mb-0 fw-bold {% if actions.event_cancels_pending %}text-danger{% endif %}">
+                {{ actions.event_cancels_pending }}
+              </h3>
+            </div>
+            <i class="bi bi-calendar-x text-danger fs-3 opacity-50"></i>
+          </div>
+          {% if actions.event_cancels_pending %}
+            <a href="{% url 'admin:events_event_changelist' %}"
+               class="btn btn-sm btn-outline-danger mt-3 w-100">
+              Voir <i class="bi bi-arrow-right"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if actions.disputes_open_for_action %}border-start border-4 border-primary{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Litiges à traiter</p>
+              <h3 class="mb-0 fw-bold {% if actions.disputes_open_for_action %}text-primary{% endif %}">
+                {{ actions.disputes_open_for_action }}
+              </h3>
+            </div>
+            <i class="bi bi-ticket-detailed text-primary fs-3 opacity-50"></i>
+          </div>
+          {% if actions.disputes_open_for_action %}
+            <a href="{% url 'admin:dashboard_dispute_changelist' %}"
+               class="btn btn-sm btn-outline-primary mt-3 w-100">
+              Voir <i class="bi bi-arrow-right"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Détails (3 colonnes, chacune affichée si non vide) -->
+  {% if kyc_pending_list or withdrawals_pending_list or event_cancels_list %}
+  <div class="row g-3 mb-5">
+
+    {% if kyc_pending_list %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-info">
+            <i class="bi bi-person-badge"></i> KYC récents à valider
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for u in kyc_pending_list %}
+                <tr>
+                  <td>
+                    <a href="{% url 'admin:accounts_customuser_change' u.pk %}"
+                       class="text-decoration-none">
+                      {{ u.email|truncatechars:30 }}
+                    </a>
+                    <br>
+                    <small class="text-muted">{{ u.date_joined|date:"d/m H:i" }}</small>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if withdrawals_pending_list %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-warning">
+            <i class="bi bi-cash-stack"></i> Derniers retraits
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for w in withdrawals_pending_list %}
+                <tr>
+                  <td>
+                    <a href="{% url 'admin:dashboard_withdrawalrequest_change' w.pk %}"
+                       class="text-decoration-none">
+                      {{ w.reference }}
+                    </a>
+                    <br>
+                    <small class="text-muted">
+                      {{ w.amount|floatformat:0 }} FCFA — {{ w.created_at|date:"d/m H:i" }}
+                    </small>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if event_cancels_list %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-danger">
+            <i class="bi bi-calendar-x"></i> Annulations demandées
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for e in event_cancels_list %}
+                <tr>
+                  <td>
+                    <a href="{% url 'admin:events_event_change' e.pk %}"
+                       class="text-decoration-none">
+                      {{ e.title|truncatechars:40 }}
+                    </a>
+                    <br>
+                    <small class="text-muted">{{ e.cancel_requested_at|date:"d/m H:i" }}</small>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC LITIGES                                             -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
   <!-- ═══════════════════════════════════════════════════════ -->
   <!-- BLOC LITIGES                                             -->
   <!-- ═══════════════════════════════════════════════════════ -->

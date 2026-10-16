@@ -1902,6 +1902,22 @@ def _superuser_required(view_func):
 
 
 @_superuser_required
+
+def _payment_detail_label(payment):
+    """
+    Retourne un label lisible pour un Payment dans la timeline :
+    privilégie le numéro de commande, sinon le token PayDunya tronqué.
+    """
+    # Cherche un order_number parmi les 4 FK possibles
+    for rel in ('guest_order', 'order', 'guest_product_order', 'product_order'):
+        obj = getattr(payment, rel, None)
+        if obj and hasattr(obj, 'order_number') and obj.order_number:
+            return obj.order_number
+    # Fallback : token PayDunya tronqué
+    if payment.paydunya_token:
+        return f"PAYDUNYA-{payment.paydunya_token[:8]}"
+    return f"#{payment.pk}"
+
 def technical_dashboard(request):
     """
     Dashboard technique IvoirPass — vue d'ensemble pour le dev/superuser.
@@ -2080,7 +2096,7 @@ def technical_dashboard(request):
             'icon': 'cash-coin',
             'color': 'success',
             'label': f'Paiement confirmé — {int(p.amount)} FCFA',
-            'detail': str(getattr(p, 'reference', '') or getattr(p, 'order_number', '') or f'#{p.pk}'),
+            'detail': _payment_detail_label(p),
             'at': p.created_at,
         })
 
@@ -2116,6 +2132,56 @@ def technical_dashboard(request):
     timeline.sort(key=lambda x: x['at'], reverse=True)
     timeline = timeline[:10]
 
+        # ─── Actions en attente (ajout 2026-10-16) ─────────────────
+    from apps.dashboard.models import WithdrawalRequest
+
+    # KYC à valider : docs uploadés mais pas encore vérifiés
+    kyc_pending = (
+        User.objects
+        .filter(is_organizer_verified=False, kyc_identity_doc__isnull=False)
+        .exclude(kyc_identity_doc='')
+        .count()
+    )
+
+    # Retraits en attente (pending ou processing)
+    withdrawals_pending = WithdrawalRequest.objects.filter(
+        status__in=['pending', 'processing'],
+    ).count()
+
+    # Annulations d'événement demandées mais pas encore traitées
+    event_cancels_pending = Event.objects.filter(
+        cancel_requested_at__isnull=False,
+    ).exclude(status='cancelled').count()
+
+    # Litiges ouverts non résolus
+    disputes_open_for_action = Dispute.objects.filter(
+        status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING],
+    ).count()
+
+    # ─── Listes détaillées (top 5 par catégorie) ───────────────
+    kyc_pending_list = (
+        User.objects
+        .filter(is_organizer_verified=False, kyc_identity_doc__isnull=False)
+        .exclude(kyc_identity_doc='')
+        .order_by('-date_joined')
+        [:5]
+    )
+
+    withdrawals_pending_list = (
+        WithdrawalRequest.objects
+        .filter(status__in=['pending', 'processing'])
+        .order_by('-created_at')
+        [:5]
+    )
+
+    event_cancels_list = (
+        Event.objects
+        .filter(cancel_requested_at__isnull=False)
+        .exclude(status='cancelled')
+        .order_by('-cancel_requested_at')
+        [:5]
+    )
+
     context = {
         'now': now,
         'stats': {
@@ -2146,5 +2212,15 @@ def technical_dashboard(request):
             'tickets_7d': tickets_7d,
         },
         'timeline': timeline,
+
+        'actions': {
+            'kyc_pending': kyc_pending,
+            'withdrawals_pending': withdrawals_pending,
+            'event_cancels_pending': event_cancels_pending,
+            'disputes_open_for_action': disputes_open_for_action,
+        },
+        'kyc_pending_list': kyc_pending_list,
+        'withdrawals_pending_list': withdrawals_pending_list,
+        'event_cancels_list': event_cancels_list,
     }
     return render(request, 'dashboard/technical.html', context)
