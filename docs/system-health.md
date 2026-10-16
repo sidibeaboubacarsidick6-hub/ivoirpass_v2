@@ -121,6 +121,30 @@ generate-bceao-report	1er du mois, 8h	Rapport BCEAO (obligation légale)
 send-weekly-report	Lundi 8h30	Rapport hebdo par email
 ⚠️ Note historique : la tâche backup-database-nightly a été retirée le 2026-10-16 car redondante avec le script VPS (dump perdu dans le container à chaque rebuild).
 
+## 📧 Rapport hebdomadaire (lundi 8h30)
+
+**Tâche Celery :** `apps.dashboard.tasks.send_weekly_report`
+**Planifié :** chaque lundi à 08h30 (timezone Africa/Abidjan)
+**Module :** `apps/dashboard/reports.py`
+
+### Ce qu'il envoie
+
+- **Format :** Excel multi-onglets (`.xlsx`)
+- **Protection :** ZIP chiffré par mot de passe (hors email)
+- **Contenu :** ventes, litiges, wallet, activité (voir `build_weekly_report_zip()`)
+- **Période :** les 7 derniers jours (lundi → dimanche)
+- **Sujet :** `[IvoirPass] Rapport hebdomadaire — JJ/MM/AAAA → JJ/MM/AAAA`
+- **Template :** `templates/notifications/email/weekly_report.html`
+
+### Configuration (`~/apps/preprod-ivoirpass/.env`)
+
+```bash
+# Destinataires (séparés par virgule)
+WEEKLY_REPORT_RECIPIENTS=dir@example.com,fin@example.com
+
+# Mot de passe du ZIP (communiqué hors email aux destinataires)
+WEEKLY_REPORT_ZIP_PASSWORD=<mot-de-passe-fort>
+
 📊 Dashboard technique
 URL secrète : /tech-<secret>/ (voir config/urls.py)
 Accès : superuser uniquement
