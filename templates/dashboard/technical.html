@@ -29,6 +29,149 @@
   <!-- ═══════════════════════════════════════════════════════ -->
 
   <h2 class="h5 mb-3">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC ALERTES (priorité max — à traiter en premier)       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  {% if alerts.payments_failed_24h or alerts.payments_stuck or alerts.critical_failures_24h or alerts.unread_notifs %}
+  <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-octagon-fill fs-4 me-3"></i>
+    <div>
+      <strong>Alertes actives — à vérifier maintenant</strong>
+      <p class="mb-0 small">
+        {{ alerts.payments_failed_24h }} paiement(s) échoué(s),
+        {{ alerts.payments_stuck }} bloqué(s),
+        {{ alerts.critical_failures_24h }} action(s) critique(s) échouée(s),
+        {{ alerts.unread_notifs }} notification(s) non lue(s).
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-exclamation-octagon"></i> Alertes
+  </h2>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if alerts.payments_failed_24h %}border-start border-4 border-danger{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Paiements échoués (24h)</p>
+          <h2 class="mb-0 display-6 fw-bold {% if alerts.payments_failed_24h %}text-danger{% endif %}">
+            {{ alerts.payments_failed_24h }}
+          </h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if alerts.payments_stuck %}border-start border-4 border-danger{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Bloqués &gt; 48h</p>
+          <h2 class="mb-0 display-6 fw-bold {% if alerts.payments_stuck %}text-danger{% endif %}">
+            {{ alerts.payments_stuck }}
+          </h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if alerts.critical_failures_24h %}border-start border-4 border-danger{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Actions critiques (24h)</p>
+          <h2 class="mb-0 display-6 fw-bold {% if alerts.critical_failures_24h %}text-danger{% endif %}">
+            {{ alerts.critical_failures_24h }}
+          </h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if alerts.unread_notifs %}border-start border-4 border-warning{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Notifs non lues</p>
+          <h2 class="mb-0 display-6 fw-bold {% if alerts.unread_notifs %}text-warning{% endif %}">
+            {{ alerts.unread_notifs }}
+          </h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Détail des alertes (2 colonnes) -->
+  {% if failed_payments or unread_notifs_list %}
+  <div class="row g-3 mb-5">
+
+    <!-- Paiements échoués -->
+    {% if failed_payments %}
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-danger">
+            <i class="bi bi-x-circle"></i> Paiements échoués (7 derniers jours)
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for p in failed_payments %}
+                <tr>
+                  <td>
+                    <span class="small text-muted">{{ p.created_at|date:"d/m H:i" }}</span><br>
+                    <code class="small">{{ p.token|truncatechars:20 }}</code>
+                  </td>
+                  <td class="text-end">
+                    <span class="badge bg-danger">Échoué</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Notifications admin non lues -->
+    {% if unread_notifs_list %}
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-warning">
+            <i class="bi bi-bell-fill"></i> Notifications non lues
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for n in unread_notifs_list %}
+                <tr>
+                  <td>
+                    <span class="small text-muted">{{ n.created_at|date:"d/m H:i" }}</span><br>
+                    <strong class="small">{{ n.title|truncatechars:60 }}</strong>
+                  </td>
+                  <td class="text-end">
+                    <span class="badge bg-{% if n.type == 'fraud_alert' %}danger{% else %}info{% endif %}">
+                      {{ n.get_type_display }}
+                    </span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC LITIGES                                             -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
     <i class="bi bi-ticket-detailed"></i> Litiges
   </h2>
 

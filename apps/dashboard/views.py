@@ -1948,6 +1948,55 @@ def technical_dashboard(request):
         [:10]
     )
 
+    # ─── Stats Alertes (ajout 2026-10-16) ─────────────────────
+    from apps.payments.models import Payment
+    from apps.notifications.models import AdminNotification
+    from apps.dashboard.models import AuditLog
+
+    payments_failed_24h = Payment.objects.filter(
+        status=Payment.Status.FAILED,
+        created_at__gte=last_24h,
+    ).count()
+
+    # Paiements bloqués : pending depuis plus de 48h
+    pending_cutoff = now - timedelta(hours=48)
+    payments_stuck = Payment.objects.filter(
+        status=Payment.Status.PENDING,
+        created_at__lte=pending_cutoff,
+    ).count()
+
+    # Actions critiques échouées (24h) via AuditLog
+    critical_actions = [
+        AuditLog.Action.PAYOUT_FAILED,
+        AuditLog.Action.PAYMENT_FAILED,
+        AuditLog.Action.PAYMENT_PAID_STOCK_UNAVAILABLE,
+    ]
+    critical_failures_24h = AuditLog.objects.filter(
+        action__in=critical_actions,
+        created_at__gte=last_24h,
+    ).count()
+
+    # Notifications admin non lues
+    unread_notifs = AdminNotification.objects.filter(is_read=False).count()
+
+    # ─── Liste détaillée des alertes ──────────────────────────
+    # Paiements échoués récents
+    failed_payments = (
+        Payment.objects
+        .filter(status=Payment.Status.FAILED, created_at__gte=last_7d)
+        .order_by('-created_at')
+        .select_related('order', 'guest_order', 'guest_product_order')
+        [:5]
+    )
+
+    # Notifications admin non lues
+    unread_notifs_list = (
+        AdminNotification.objects
+        .filter(is_read=False)
+        .order_by('-created_at')
+        [:5]
+    )
+
     context = {
         'now': now,
         'stats': {
@@ -1957,5 +2006,13 @@ def technical_dashboard(request):
             'disputes_from_chatbot_7d': disputes_from_chatbot,
         },
         'disputes_urgent': disputes_urgent,
+        'alerts': {
+            'payments_failed_24h': payments_failed_24h,
+            'payments_stuck': payments_stuck,
+            'critical_failures_24h': critical_failures_24h,
+            'unread_notifs': unread_notifs,
+        },
+        'failed_payments': failed_payments,
+        'unread_notifs_list': unread_notifs_list,
     }
     return render(request, 'dashboard/technical.html', context)
