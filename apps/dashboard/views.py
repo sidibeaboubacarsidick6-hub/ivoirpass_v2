@@ -1901,33 +1901,29 @@ def _superuser_required(view_func):
     return _wrapped
 
 
-@_superuser_required
+
 
 def _payment_detail_label(payment):
     """
     Retourne un label lisible pour un Payment dans la timeline :
     privilégie le numéro de commande, sinon le token PayDunya tronqué.
     """
-    # Cherche un order_number parmi les 4 FK possibles
     for rel in ('guest_order', 'order', 'guest_product_order', 'product_order'):
         obj = getattr(payment, rel, None)
         if obj and hasattr(obj, 'order_number') and obj.order_number:
             return obj.order_number
-    # Fallback : token PayDunya tronqué
     if payment.paydunya_token:
         return f"PAYDUNYA-{payment.paydunya_token[:8]}"
     return f"#{payment.pk}"
 
+
+@_superuser_required
 def technical_dashboard(request):
     """
     Dashboard technique IvoirPass — vue d'ensemble pour le dev/superuser.
-
-    Bloc 1 (ce soir) : Litiges — état, priorités, activité récente.
-    Blocs futurs : Confirmations (paiements, users, events),
-                   Actions en attente (KYC, retraits, modérations),
-                   Alertes (échecs paiements, réconciliations),
-                   Stats 7 jours, Activité chatbot.
+    ...
     """
+    # ... reste du code inchangé
     from django.utils import timezone
     from datetime import timedelta
     from django.db.models import Count, Q
