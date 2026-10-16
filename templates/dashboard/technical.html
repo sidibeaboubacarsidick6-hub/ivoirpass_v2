@@ -168,6 +168,146 @@
   </div>
   {% endif %}
 
+  
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC CONFIRMATIONS                                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-check-circle text-success"></i> Confirmations
+  </h2>
+
+  <!-- CA -->
+  <div class="row g-3 mb-3">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm border-start border-4 border-success">
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-6">
+              <p class="text-muted text-uppercase small fw-bold mb-1">
+                Chiffre d'affaires encaissé
+              </p>
+              <h2 class="mb-0 display-5 fw-bold text-success">
+                {{ confirmations.ca_24h|floatformat:0 }} <small class="fs-5">FCFA</small>
+              </h2>
+              <p class="text-muted small mb-0">
+                <i class="bi bi-clock-history"></i> Dernières 24h
+              </p>
+            </div>
+            <div class="col-md-6 text-md-end">
+              <p class="text-muted text-uppercase small fw-bold mb-1">
+                7 derniers jours
+              </p>
+              <h3 class="mb-0 fw-bold text-muted">
+                {{ confirmations.ca_7d|floatformat:0 }} FCFA
+              </h3>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 mini-cartes -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Paiements</p>
+              <h3 class="mb-0 fw-bold">{{ confirmations.payments_24h }}</h3>
+              <p class="text-muted small mb-0">7j : {{ confirmations.payments_7d }}</p>
+            </div>
+            <i class="bi bi-credit-card text-success fs-3 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Nouveaux users</p>
+              <h3 class="mb-0 fw-bold">{{ confirmations.users_24h }}</h3>
+              <p class="text-muted small mb-0">7j : {{ confirmations.users_7d }}</p>
+            </div>
+            <i class="bi bi-person-plus text-info fs-3 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Events publiés</p>
+              <h3 class="mb-0 fw-bold">{{ confirmations.events_24h }}</h3>
+              <p class="text-muted small mb-0">7j : {{ confirmations.events_7d }}</p>
+            </div>
+            <i class="bi bi-calendar-check text-primary fs-3 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="text-muted text-uppercase small fw-bold mb-1">Billets vendus</p>
+              <h3 class="mb-0 fw-bold">{{ confirmations.tickets_24h }}</h3>
+              <p class="text-muted small mb-0">7j : {{ confirmations.tickets_7d }}</p>
+            </div>
+            <i class="bi bi-ticket-perforated text-warning fs-3 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline 24h -->
+  {% if timeline %}
+  <div class="card border-0 shadow-sm mb-5">
+    <div class="card-header bg-white border-bottom">
+      <h3 class="h6 mb-0">
+        <i class="bi bi-activity"></i> Activité des dernières 24h
+      </h3>
+    </div>
+    <div class="card-body p-0">
+      <ul class="list-group list-group-flush">
+        {% for item in timeline %}
+          <li class="list-group-item d-flex align-items-center">
+            <span class="badge bg-{{ item.color }} bg-opacity-10 text-{{ item.color }} p-2 me-3">
+              <i class="bi bi-{{ item.icon }}"></i>
+            </span>
+            <div class="flex-grow-1">
+              <div class="small fw-semibold">{{ item.label }}</div>
+              {% if item.detail %}
+                <code class="text-muted small">{{ item.detail }}</code>
+              {% endif %}
+            </div>
+            <span class="text-muted small ms-3">
+              {{ item.at|date:"H:i" }}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-light border mb-5">
+    <i class="bi bi-moon-stars"></i>
+    <small class="text-muted">Aucune activité dans les dernières 24h.</small>
+  </div>
+  {% endif %}
+
   <!-- ═══════════════════════════════════════════════════════ -->
   <!-- BLOC LITIGES                                             -->
   <!-- ═══════════════════════════════════════════════════════ -->

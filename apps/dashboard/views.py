@@ -1997,6 +1997,125 @@ def technical_dashboard(request):
         [:5]
     )
 
+    # ─── Stats Confirmations (ajout 2026-10-16) ───────────────
+    from django.contrib.auth import get_user_model
+    from django.db.models import Sum
+    from apps.events.models import Event
+    from apps.tickets.models import GuestOrder, GuestOrderItem
+
+    User = get_user_model()
+
+    # Chiffre d'affaires (payments completed)
+    ca_24h = Payment.objects.filter(
+        status=Payment.Status.COMPLETED,
+        created_at__gte=last_24h,
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    ca_7d = Payment.objects.filter(
+        status=Payment.Status.COMPLETED,
+        created_at__gte=last_7d,
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    # Paiements confirmés
+    payments_24h = Payment.objects.filter(
+        status=Payment.Status.COMPLETED,
+        created_at__gte=last_24h,
+    ).count()
+    payments_7d = Payment.objects.filter(
+        status=Payment.Status.COMPLETED,
+        created_at__gte=last_7d,
+    ).count()
+
+    # Nouveaux utilisateurs (hors staff/superuser)
+    users_24h = User.objects.filter(
+        date_joined__gte=last_24h,
+        is_staff=False,
+        is_superuser=False,
+    ).count()
+    users_7d = User.objects.filter(
+        date_joined__gte=last_7d,
+        is_staff=False,
+        is_superuser=False,
+    ).count()
+
+    # Événements publiés
+    events_24h = Event.objects.filter(
+        published_at__gte=last_24h,
+    ).count()
+    events_7d = Event.objects.filter(
+        published_at__gte=last_7d,
+    ).count()
+
+    # Billets vendus (via les GuestOrderItem sur commandes PAID)
+    from apps.tickets.models import GuestOrder, GuestOrderItem
+    from django.db.models import Sum
+
+    tickets_24h = (
+        GuestOrderItem.objects
+        .filter(
+            order__status=GuestOrder.Status.PAID,
+            order__paid_at__gte=last_24h,
+        )
+        .aggregate(total=Sum('quantity'))['total'] or 0
+    )
+    tickets_7d = (
+        GuestOrderItem.objects
+        .filter(
+            order__status=GuestOrder.Status.PAID,
+            order__paid_at__gte=last_7d,
+        )
+        .aggregate(total=Sum('quantity'))['total'] or 0
+    )
+
+    # ─── Timeline — 10 derniers événements positifs (24h) ─────
+    timeline = []
+
+    # Paiements confirmés
+    for p in Payment.objects.filter(
+        status=Payment.Status.COMPLETED,
+        created_at__gte=last_24h,
+    ).order_by('-created_at')[:10]:
+        timeline.append({
+            'kind': 'payment',
+            'icon': 'cash-coin',
+            'color': 'success',
+            'label': f'Paiement confirmé — {int(p.amount)} FCFA',
+            'detail': str(p.token)[:20],
+            'at': p.created_at,
+        })
+
+    # Nouveaux utilisateurs
+    for u in User.objects.filter(
+        date_joined__gte=last_24h,
+        is_staff=False,
+        is_superuser=False,
+    ).order_by('-date_joined')[:5]:
+        timeline.append({
+            'kind': 'user',
+            'icon': 'person-plus',
+            'color': 'info',
+            'label': f'Nouvel utilisateur — {u.email}',
+            'detail': '',
+            'at': u.date_joined,
+        })
+
+    # Événements publiés
+    for e in Event.objects.filter(
+        published_at__gte=last_24h,
+    ).order_by('-published_at')[:5]:
+        timeline.append({
+            'kind': 'event',
+            'icon': 'calendar-check',
+            'color': 'primary',
+            'label': f'Événement publié — {e.title[:60]}',
+            'detail': '',
+            'at': e.published_at,
+        })
+
+    # Trier par date desc, garder 10
+    timeline.sort(key=lambda x: x['at'], reverse=True)
+    timeline = timeline[:10]
+
     context = {
         'now': now,
         'stats': {
@@ -2014,5 +2133,18 @@ def technical_dashboard(request):
         },
         'failed_payments': failed_payments,
         'unread_notifs_list': unread_notifs_list,
+        'confirmations': {
+            'ca_24h': ca_24h,
+            'ca_7d': ca_7d,
+            'payments_24h': payments_24h,
+            'payments_7d': payments_7d,
+            'users_24h': users_24h,
+            'users_7d': users_7d,
+            'events_24h': events_24h,
+            'events_7d': events_7d,
+            'tickets_24h': tickets_24h,
+            'tickets_7d': tickets_7d,
+        },
+        'timeline': timeline,
     }
     return render(request, 'dashboard/technical.html', context)
