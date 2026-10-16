@@ -636,6 +636,88 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC STATS 7 JOURS                                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-bar-chart-line"></i> Stats 7 jours
+  </h2>
+
+  <div class="row g-3 mb-2">
+    <!-- Graphique Litiges -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h3 class="h6 text-muted mb-3">
+            <i class="bi bi-ticket-detailed text-warning"></i> Litiges
+          </h3>
+          <div style="height: 140px; position: relative;">
+            <canvas id="chartDisputes"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graphique Paiements -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h3 class="h6 text-muted mb-3">
+            <i class="bi bi-credit-card text-success"></i> Paiements
+          </h3>
+          <div style="height: 140px; position: relative;">
+            <canvas id="chartPayments"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graphique Users -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h3 class="h6 text-muted mb-3">
+            <i class="bi bi-person-plus text-info"></i> Utilisateurs
+          </h3>
+          <div style="height: 140px; position: relative;">
+            <canvas id="chartUsers"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Totaux 7j -->
+  <div class="card border-0 shadow-sm mb-5">
+    <div class="card-body py-3">
+      <div class="row text-center">
+        <div class="col-md-3 border-end">
+          <p class="text-muted small text-uppercase mb-1">Litiges</p>
+          <strong class="fs-5">{{ stats_7d.totals.disputes }}</strong>
+          <small class="text-muted">créés</small>
+          <br>
+          <small class="text-success">{{ stats_7d.totals.disputes_resolved }} résolus</small>
+        </div>
+        <div class="col-md-3 border-end">
+          <p class="text-muted small text-uppercase mb-1">Paiements</p>
+          <strong class="fs-5">{{ stats_7d.totals.payments }}</strong>
+          <small class="text-muted">confirmés</small>
+        </div>
+        <div class="col-md-3 border-end">
+          <p class="text-muted small text-uppercase mb-1">CA encaissé</p>
+          <strong class="fs-5">{{ stats_7d.totals.ca|floatformat:0 }}</strong>
+          <small class="text-muted">FCFA</small>
+        </div>
+        <div class="col-md-3">
+          <p class="text-muted small text-uppercase mb-1">Utilisateurs</p>
+          <strong class="fs-5">{{ stats_7d.totals.users }}</strong>
+          <small class="text-muted">inscrits</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
   <!-- BLOC LITIGES                                             -->
   <!-- ═══════════════════════════════════════════════════════ -->
 
@@ -867,4 +949,104 @@
   </div>
 
 </div>
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  // Protection : ne rien faire si Chart.js n'est pas chargé
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js non chargé');
+    return;
+  }
+
+  const labels = {{ stats_7d.labels|safe }};
+
+  // Options communes (minimaliste, pas de légende, tooltip léger)
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: 8,
+        titleFont: { size: 11 },
+        bodyFont: { size: 12 },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { font: { size: 10 } },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { precision: 0, font: { size: 10 } },
+        grid: { color: 'rgba(0,0,0,0.05)' },
+      },
+    },
+  };
+
+  // ─── Graphique Litiges ──────────────────────────────────
+  new Chart(document.getElementById('chartDisputes'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Créés',
+          data: {{ stats_7d.disputes_created|safe }},
+          backgroundColor: 'rgba(244, 121, 32, 0.8)',
+          borderRadius: 4,
+        },
+        {
+          label: 'Résolus',
+          data: {{ stats_7d.disputes_resolved|safe }},
+          backgroundColor: 'rgba(27, 122, 62, 0.8)',
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: commonOptions,
+  });
+
+  // ─── Graphique Paiements ────────────────────────────────
+  new Chart(document.getElementById('chartPayments'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Paiements',
+          data: {{ stats_7d.payments_count|safe }},
+          backgroundColor: 'rgba(25, 135, 84, 0.8)',
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: commonOptions,
+  });
+
+  // ─── Graphique Users ────────────────────────────────────
+  new Chart(document.getElementById('chartUsers'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Utilisateurs',
+          data: {{ stats_7d.users_count|safe }},
+          backgroundColor: 'rgba(13, 202, 240, 0.8)',
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: commonOptions,
+  });
+})();
+</script>
 {% endblock %}
+
+{% endblock %}
+

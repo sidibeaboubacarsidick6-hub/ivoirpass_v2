@@ -1902,6 +1902,126 @@ def _superuser_required(view_func):
 
 
 
+def _get_last_7_days_stats():
+    """
+    Retourne les stats journalières des 7 derniers jours pour :
+    - Litiges créés / résolus
+    - Paiements confirmés (nombre + CA)
+    - Nouveaux utilisateurs
+
+    Format : {
+        'labels': ['Lun 10', 'Mar 11', ...],
+        'disputes_created': [0, 1, 2, ...],
+        'disputes_resolved': [...],
+        'payments_count': [...],
+        'payments_ca': [...],
+        'users_count': [...],
+        'totals': {'disputes': 28, 'payments': 142, 'users': 87, 'ca': 125000},
+    }
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from django.db.models import Count, Sum
+    from django.db.models.functions import TruncDate
+    from django.contrib.auth import get_user_model
+    from apps.payments.models import Payment
+
+    User = get_user_model()
+    today = timezone.localdate()
+    start = today - timedelta(days=6)  # 7 jours total (aujourd'hui inclus)
+
+    # Labels : "Lun 10", "Mar 11", ...
+    JOURS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    labels = []
+    dates = []
+    for i in range(7):
+        d = start + timedelta(days=i)
+        dates.append(d)
+        labels.append(f"{JOURS_FR[d.weekday()]} {d.day}")
+
+    # Helper : liste indexée par jour (0 = start, 6 = aujourd'hui)
+    def fill_days(qs, value_field=None):
+        """Transforme un queryset TruncDate en tableau de 7 valeurs."""
+        result = [0] * 7
+        for row in qs:
+            day = row['day']
+            if day in dates:
+                idx = dates.index(day)
+                val = row['total'] if value_field else row['count']
+                result[idx] = int(val) if val else 0
+        return result
+
+    # Litiges créés par jour
+    disputes_created_qs = (
+        Dispute.objects
+        .filter(created_at__date__gte=start)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(count=Count('id'))
+    )
+    disputes_created = fill_days(disputes_created_qs)
+
+    # Litiges résolus par jour
+    disputes_resolved_qs = (
+        Dispute.objects
+        .filter(resolved_at__date__gte=start, resolved_at__isnull=False)
+        .annotate(day=TruncDate('resolved_at'))
+        .values('day')
+        .annotate(count=Count('id'))
+    )
+    disputes_resolved = fill_days(disputes_resolved_qs)
+
+    # Paiements confirmés (nombre + CA) par jour
+    payments_qs = (
+        Payment.objects
+        .filter(
+            status=Payment.Status.COMPLETED,
+            created_at__date__gte=start,
+            amount__isnull=False,
+        )
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(count=Count('id'), total=Sum('amount'))
+    )
+    payments_count = [0] * 7
+    payments_ca = [0] * 7
+    for row in payments_qs:
+        day = row['day']
+        if day in dates:
+            idx = dates.index(day)
+            payments_count[idx] = int(row['count'] or 0)
+            payments_ca[idx] = int(row['total'] or 0)
+
+    # Nouveaux users (hors staff/superuser)
+    users_qs = (
+        User.objects
+        .filter(
+            date_joined__date__gte=start,
+            is_staff=False,
+            is_superuser=False,
+        )
+        .annotate(day=TruncDate('date_joined'))
+        .values('day')
+        .annotate(count=Count('id'))
+    )
+    users_count = fill_days(users_qs)
+
+    return {
+        'labels': labels,
+        'disputes_created': disputes_created,
+        'disputes_resolved': disputes_resolved,
+        'payments_count': payments_count,
+        'payments_ca': payments_ca,
+        'users_count': users_count,
+        'totals': {
+            'disputes': sum(disputes_created),
+            'disputes_resolved': sum(disputes_resolved),
+            'payments': sum(payments_count),
+            'ca': sum(payments_ca),
+            'users': sum(users_count),
+        },
+    }
+
 
 def _payment_detail_label(payment):
     """
@@ -2231,6 +2351,8 @@ def technical_dashboard(request):
 
     # Version Celery Beat scheduler (info)
     beat_scheduler = getattr(settings, 'CELERY_BEAT_SCHEDULER', 'default')
+        # Stats 7 jours (graphiques)
+    stats_7d = _get_last_7_days_stats()
 
     context = {
         'now': now,
@@ -2262,6 +2384,9 @@ def technical_dashboard(request):
             'tickets_7d': tickets_7d,
         },
         'timeline': timeline,
+
+        'stats_7d': stats_7d,
+        
 
         'actions': {
             'kyc_pending': kyc_pending,
