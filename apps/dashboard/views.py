@@ -2388,6 +2388,9 @@ def technical_dashboard(request):
         'stats_7d': stats_7d,
         
 
+        'chatbot': _get_chatbot_stats(),
+        
+
         'actions': {
             'kyc_pending': kyc_pending,
             'withdrawals_pending': withdrawals_pending,
@@ -2409,3 +2412,82 @@ def technical_dashboard(request):
     
     }
     return render(request, 'dashboard/technical.html', context)
+
+
+
+
+def _get_chatbot_stats():
+    """
+    Stats chatbot pour le dashboard technique (ajout 2026-10-16).
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from django.db.models import Count, Q
+    from django.db.models.functions import TruncDate
+    from apps.chatbot.models import ChatbotLog
+
+    now = timezone.now()
+    last_7d = now - timedelta(days=7)
+    last_24h = now - timedelta(hours=24)
+
+    qs = ChatbotLog.objects.all()
+
+    total_7d = qs.filter(created_at__gte=last_7d).count()
+    failures_7d = qs.filter(created_at__gte=last_7d, was_failure=True).count()
+    escalations_7d = qs.filter(
+        created_at__gte=last_7d,
+        escalated_to_dispute__isnull=False,
+    ).count()
+    questions_24h = qs.filter(created_at__gte=last_24h).count()
+
+    # Taux d'échec (arrondi)
+    failure_rate = round(100 * failures_7d / total_7d, 1) if total_7d else 0
+
+    # Top 10 questions ratées (7 derniers jours)
+    top_failed = list(
+        qs.filter(was_failure=True, created_at__gte=last_7d)
+        .values('question', 'error_type')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+        [:10]
+    )
+
+    # Graphique : questions par jour (7 jours)
+    JOURS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    today = timezone.localdate()
+    start = today - timedelta(days=6)
+    dates = [start + timedelta(days=i) for i in range(7)]
+    labels = [f"{JOURS_FR[d.weekday()]} {d.day}" for d in dates]
+
+    daily_total = [0] * 7
+    daily_failures = [0] * 7
+
+    daily_qs = (
+        qs.filter(created_at__date__gte=start)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(
+            total=Count('id'),
+            failures=Count('id', filter=Q(was_failure=True)),
+        )
+    )
+    for row in daily_qs:
+        day = row['day']
+        if day in dates:
+            idx = dates.index(day)
+            daily_total[idx] = row['total']
+            daily_failures[idx] = row['failures']
+
+    return {
+        'total_7d': total_7d,
+        'failures_7d': failures_7d,
+        'escalations_7d': escalations_7d,
+        'questions_24h': questions_24h,
+        'failure_rate': failure_rate,
+        'top_failed': top_failed,
+        'chart': {
+            'labels': labels,
+            'total': daily_total,
+            'failures': daily_failures,
+        },
+    }

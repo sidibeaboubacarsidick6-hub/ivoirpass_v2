@@ -290,7 +290,16 @@ QUESTION DU CLIENT :
     @classmethod
     def answer(cls, question, session_key):
         """
-        Répond à une question.
+        Wrapper public : calcule la réponse puis log l'interaction en DB.
+        """
+        result = cls._answer_impl(question, session_key)
+        cls._log_interaction(question, session_key, result)
+        return result
+
+    @classmethod
+    def _answer_impl(cls, question, session_key):
+        """
+        Répond à une question (implémentation — pas de log DB ici).
 
         Returns:
             dict {
@@ -370,7 +379,38 @@ QUESTION DU CLIENT :
             'sections_found': len(sections),
             'error': None,
         }
+    @classmethod
+    def _log_interaction(cls, question, session_key, result):
+        """
+        Enregistre l'interaction en DB (ChatbotLog).
+        Silencieux si erreur — ne doit jamais casser le chat.
+        """
+        try:
+            from .models import ChatbotLog
 
+            # Déterminer was_failure + error_type
+            error_type = result.get('error') or ''
+            sections_found = result.get('sections_found', 0)
+
+            if not error_type:
+                if sections_found == 0:
+                    error_type = ChatbotLog.ErrorType.NO_SECTIONS
+                elif result.get('answer', '').strip().startswith("Je n'ai pas cette information"):
+                    error_type = ChatbotLog.ErrorType.MISTRAL_FAILED
+
+            was_failure = bool(error_type)
+
+            ChatbotLog.objects.create(
+                question=question[:5000],
+                answer=(result.get('answer') or '')[:5000],
+                session_key=(session_key or '')[:100],
+                sections_found=sections_found,
+                was_failure=was_failure,
+                error_type=error_type if error_type in dict(ChatbotLog.ErrorType.choices) else '',
+            )
+        except Exception as e:
+            logger.warning(f"ChatbotLog création échouée : {e}")
+            
     @classmethod
     def build_whatsapp_url(cls):
         """Construit l'URL WhatsApp avec le message pré-rempli."""

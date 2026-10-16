@@ -718,6 +718,115 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- BLOC ACTIVITÉ CHATBOT                                    -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <h2 class="h5 mb-3">
+    <i class="bi bi-robot"></i> Activité chatbot
+  </h2>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Questions 7j</p>
+          <h2 class="mb-0 display-6 fw-bold">{{ chatbot.total_7d }}</h2>
+          <p class="text-muted small mb-0">24h : {{ chatbot.questions_24h }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if chatbot.failure_rate > 30 %}border-start border-4 border-warning{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Taux d'échec</p>
+          <h2 class="mb-0 display-6 fw-bold {% if chatbot.failure_rate > 30 %}text-warning{% endif %}">
+            {{ chatbot.failure_rate }}%
+          </h2>
+          <p class="text-muted small mb-0">{{ chatbot.failures_7d }} échecs sur 7j</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100 {% if chatbot.escalations_7d %}border-start border-4 border-primary{% endif %}">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Escalades (7j)</p>
+          <h2 class="mb-0 display-6 fw-bold {% if chatbot.escalations_7d %}text-primary{% endif %}">
+            {{ chatbot.escalations_7d }}
+          </h2>
+          <p class="text-muted small mb-0">litiges créés via chatbot</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small fw-bold mb-1">Top échecs</p>
+          <h2 class="mb-0 display-6 fw-bold">{{ chatbot.top_failed|length }}</h2>
+          <p class="text-muted small mb-0">questions ratées distinctes</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-5">
+    <!-- Graphique questions/jour -->
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-graph-up"></i> Questions par jour (7j)
+          </h3>
+        </div>
+        <div class="card-body">
+          <div style="height: 200px; position: relative;">
+            <canvas id="chartChatbot"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top questions ratées -->
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-bottom">
+          <h3 class="h6 mb-0 text-danger">
+            <i class="bi bi-exclamation-triangle"></i> Top 10 questions ratées
+          </h3>
+        </div>
+        <div class="card-body p-0">
+          {% if chatbot.top_failed %}
+            <ul class="list-group list-group-flush">
+              {% for q in chatbot.top_failed %}
+                <li class="list-group-item py-2">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1 me-2">
+                      <div class="small">{{ q.question|truncatechars:80 }}</div>
+                      {% if q.error_type %}
+                        <span class="badge bg-light text-dark mt-1" style="font-size:0.7rem;">
+                          {{ q.error_type }}
+                        </span>
+                      {% endif %}
+                    </div>
+                    <span class="badge bg-danger">×{{ q.count }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="p-4 text-center text-muted">
+              <i class="bi bi-check-circle display-4 text-success opacity-50"></i>
+              <p class="mt-2 mb-0">Aucune question ratée en 7 jours. 🎉</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
   <!-- BLOC LITIGES                                             -->
   <!-- ═══════════════════════════════════════════════════════ -->
 
@@ -1044,6 +1153,32 @@
     },
     options: commonOptions,
   });
+  // ─── Graphique Chatbot ──────────────────────────────────
+  const chatbotCanvas = document.getElementById('chartChatbot');
+  if (chatbotCanvas) {
+    new Chart(chatbotCanvas, {
+      type: 'bar',
+      data: {
+        labels: {{ chatbot.chart.labels|safe }},
+        datasets: [
+          {
+            label: 'Total',
+            data: {{ chatbot.chart.total|safe }},
+            backgroundColor: 'rgba(13, 110, 253, 0.7)',
+            borderRadius: 4,
+          },
+          {
+            label: 'Échecs',
+            data: {{ chatbot.chart.failures|safe }},
+            backgroundColor: 'rgba(220, 53, 69, 0.85)',
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: commonOptions,
+    });
+  }
+
 })();
 </script>
 {% endblock %}
