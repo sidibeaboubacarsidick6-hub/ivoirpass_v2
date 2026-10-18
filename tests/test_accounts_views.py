@@ -89,18 +89,13 @@ class AddressListTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('apps.accounts.views.render')
-    def test_get_affiche_formulaire(self, mock_render):
-        """GET → render appelé avec le bon template."""
-        from django.http import HttpResponse
-        mock_render.return_value = HttpResponse('ok')
-
+    def test_get_affiche_formulaire(self):
+        """GET → rend le vrai template (statut 200)."""
         response = self.client.get(reverse('accounts:addresses'))
 
         self.assertEqual(response.status_code, 200)
-        # Vérifie que le bon template est demandé
-        args = mock_render.call_args[0]
-        self.assertEqual(args[1], 'pages/addresses.html')
+        # Vérifie que le vrai template est utilisé (et existe réellement)
+        self.assertTemplateUsed(response, 'pages/addresses.html')
 
     @patch('apps.accounts.views.render')
     def test_post_cree_adresse(self, mock_render):
