@@ -573,62 +573,33 @@ SENTRY_DSN = config('SENTRY_DSN', default='')
 
 def _sentry_before_send(event, hint):
     """
-    Filtre les événements Sentry avant envoi (ajout 2026-10-16).
-
-    Objectif : ne PAS envoyer les erreurs bruyantes qui ne sont pas
-    de vrais bugs applicatifs. En particulier DisallowedHost (bots
-    qui scannent avec un Host invalide).
-
-    Retourne None pour jeter l'événement, sinon retourne event.
+    Filtre les événements Sentry avant envoi (ajout 2026-10-16, mis à jour 2026-10-18).
     """
-    # Cas 1 : log record (LoggingIntegration)
+    # 1. Filtre par type d'exception (avant même de regarder les logs)
+    if 'exc_info' in hint:
+        exc_type, exc_value, _ = hint['exc_info']
+        if exc_type is not None:
+            exc_name = exc_type.__name__
+            
+            # Bots et domaines invalides
+            if exc_name == 'DisallowedHost':
+                return None
+                
+            # Démarrage Docker (Celery/Web qui démarrent avant DB/Redis)
+            if exc_name == 'OperationalError' and 'translate host name' in str(exc_value):
+                return None
+            if exc_name == 'ConnectionError' and 'redis' in str(exc_value):
+                return None
+
+    # 2. Filtre par LogRecord (si l'erreur est juste loggée en ERROR)
     if 'log_record' in hint:
         record = hint['log_record']
         if getattr(record, 'name', '') == 'django.security.DisallowedHost':
             return None
-
-    # Cas 2 : exception levée (intégration auto)
-    if 'exc_info' in hint:
-        exc_info = hint['exc_info']
-        if exc_info and len(exc_info) >= 1:
-            exc_type = exc_info[0]
-            if exc_type is not None and exc_type.__name__ == 'DisallowedHost':
+        # Filtrage des logs réseau bruyants
+        if getattr(record, 'name', '') in ('celery.worker.consumer', 'django.db.backends'):
+            msg = getattr(record, 'getMessage', lambda: '')()
+            if 'Connection refused' in msg or 'name resolution' in msg:
                 return None
 
     return event
-
-
-if SENTRY_DSN:
-    import sentry_sdk
-    from sentry_sdk.integrations.django import DjangoIntegration
-    from sentry_sdk.integrations.celery import CeleryIntegration
-    from sentry_sdk.integrations.logging import LoggingIntegration
-    from sentry_sdk.scrubber import EventScrubber, DEFAULT_DENYLIST, DEFAULT_PII_DENYLIST
-
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[
-            DjangoIntegration(),
-            CeleryIntegration(monitor_beat_tasks=True),
-            LoggingIntegration(level=None, event_level='ERROR'),
-        ],
-        environment=config('SENTRY_ENVIRONMENT', default='development'),
-        release=config('SENTRY_RELEASE', default=None),
-        # 100 % des erreurs, 10 % des traces de performance (quota gratuit).
-        traces_sample_rate=0.1,
-        # Pas de données personnelles (IP, emails) envoyées à Sentry.
-        send_default_pii=False,
-        # Pas de valeurs de variables locales dans les traces d'erreur
-        # (jetons de paiement, OTP, téléphones...).
-        include_local_variables=False,
-        # Filtre les erreurs bruyantes (bots/DisallowedHost) — ajout 2026-10-16.
-        before_send=_sentry_before_send,
-        event_scrubber=EventScrubber(
-            denylist=DEFAULT_DENYLIST + [
-                'phone', 'telephone', 'otp', 'payment_token', 'token',
-                'iban', 'kyc', 'id_number', 'document',
-            ],
-            pii_denylist=DEFAULT_PII_DENYLIST,
-            recursive=True,
-        ),
-    )
