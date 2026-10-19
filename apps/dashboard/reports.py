@@ -86,9 +86,36 @@ def _collect_data(start, end):
     }
 
 
+def _collect_all_time_data():
+    """Récupère toutes les données depuis le début (pour la colonne Total)."""
+    from apps.tickets.models import Order, GuestOrder
+    from apps.store.models import ProductOrder, GuestProductOrder
+    from apps.dashboard.models import WithdrawalRequest
+    from apps.accounts.models import CustomUser
+
+    return {
+        'orders': Order.objects.filter(status=Order.Status.PAID).order_by('-paid_at'),
+        'guest_orders': GuestOrder.objects.filter(status=GuestOrder.Status.PAID).order_by('-paid_at'),
+        'product_orders': ProductOrder.objects.filter(status=ProductOrder.Status.PAID).order_by('-paid_at'),
+        'guest_product_orders': GuestProductOrder.objects.filter(status=GuestProductOrder.Status.PAID).order_by('-paid_at'),
+        'withdrawals': WithdrawalRequest.objects.all().order_by('-created_at'),
+        'new_users': CustomUser.objects.all().order_by('-date_joined'),
+    }
+
 def _sum_amount(queryset):
     """Somme des 'total' d'un queryset (0 si vide)."""
     return queryset.aggregate(t=Sum('total'))['t'] or Decimal('0')
+
+
+def _sum_commission(queryset):
+    """
+    Somme des commissions d'un queryset (0 si le champ n'existe pas).
+    Évite le FieldError pour la boutique qui n'a pas encore ce champ.
+    """
+    model = queryset.model
+    if any(f.name == 'commission' for f in model._meta.get_fields()):
+        return queryset.aggregate(t=Sum('commission'))['t'] or Decimal('0')
+    return Decimal('0')
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +153,7 @@ def _fmt_dt(dt):
 # ---------------------------------------------------------------------------
 # ONGLETS
 # ---------------------------------------------------------------------------
-def _build_summary_sheet(wb, week_data, month_data, week_range, month_range):
+def _build_summary_sheet(wb, week_data, month_data, total_data, week_range, month_range):
     """Onglet 1 : Résumé."""
     ws = wb.active
     ws.title = "Résumé"
@@ -143,7 +170,7 @@ def _build_summary_sheet(wb, week_data, month_data, week_range, month_range):
 
     # En-têtes tableau
     row = 5
-    headers = ["Indicateur", "Semaine", "30 jours", "Total"]
+    headers = ["Indicateur", "Semaine", "30 jours", "Total (Tout temps)"]
     for col, h in enumerate(headers, start=1):
         c = ws.cell(row=row, column=col, value=h)
         c.font = _WHITE_BOLD
@@ -152,53 +179,65 @@ def _build_summary_sheet(wb, week_data, month_data, week_range, month_range):
 
     # Compteurs
     counters = [
-        ("Commandes billets (compte)", len(week_data['orders']), len(month_data['orders'])),
-        ("Commandes billets (invité)", len(week_data['guest_orders']), len(month_data['guest_orders'])),
-        ("Commandes boutique (compte)", len(week_data['product_orders']), len(month_data['product_orders'])),
-        ("Commandes boutique (invité)", len(week_data['guest_product_orders']), len(month_data['guest_product_orders'])),
-        ("Reversements", len(week_data['withdrawals']), len(month_data['withdrawals'])),
-        ("Nouveaux utilisateurs", len(week_data['new_users']), len(month_data['new_users'])),
+        ("Commandes billets (compte)", len(week_data['orders']), len(month_data['orders']), len(total_data['orders'])),
+        ("Commandes billets (invité)", len(week_data['guest_orders']), len(month_data['guest_orders']), len(total_data['guest_orders'])),
+        ("Commandes boutique (compte)", len(week_data['product_orders']), len(month_data['product_orders']), len(total_data['product_orders'])),
+        ("Commandes boutique (invité)", len(week_data['guest_product_orders']), len(month_data['guest_product_orders']), len(total_data['guest_product_orders'])),
+        ("Reversements", len(week_data['withdrawals']), len(month_data['withdrawals']), len(total_data['withdrawals'])),
+        ("Nouveaux utilisateurs", len(week_data['new_users']), len(month_data['new_users']), len(total_data['new_users'])),
     ]
     row += 1
-    for label, w_val, m_val in counters:
+    for label, w_val, m_val, t_val in counters:
         ws.cell(row=row, column=1, value=label)
         ws.cell(row=row, column=2, value=w_val).alignment = _CENTER
         ws.cell(row=row, column=3, value=m_val).alignment = _CENTER
-        ws.cell(row=row, column=4, value=w_val + m_val).alignment = _CENTER
+        ws.cell(row=row, column=4, value=t_val).alignment = _CENTER
         row += 1
 
-    # Chiffre d'affaires
+    # Chiffre d'affaires (Brut / Commission / Net)
     row += 2
     ws.cell(row=row, column=1, value="Chiffre d'affaires (FCFA)").font = _BOLD
+    
     row += 1
+    for col, h in enumerate(["Catégorie", "CA Brut (Semaine)", "Commissions", "CA Net (Semaine)"], start=1):
+        c = ws.cell(row=row, column=col, value=h)
+        c.font = _WHITE_BOLD
+        c.fill = _ORANGE_FILL
+        c.alignment = _CENTER
 
+    row += 1
     revenues = [
-        ("Billets (compte)",
-         _sum_amount(week_data['orders']), _sum_amount(month_data['orders'])),
-        ("Billets (invité)",
-         _sum_amount(week_data['guest_orders']), _sum_amount(month_data['guest_orders'])),
-        ("Boutique (compte)",
-         _sum_amount(week_data['product_orders']), _sum_amount(month_data['product_orders'])),
-        ("Boutique (invité)",
-         _sum_amount(week_data['guest_product_orders']), _sum_amount(month_data['guest_product_orders'])),
+        ("Billets (compte)", week_data['orders'], month_data['orders'], total_data['orders']),
+        ("Billets (invité)", week_data['guest_orders'], month_data['guest_orders'], total_data['guest_orders']),
+        ("Boutique (compte)", week_data['product_orders'], month_data['product_orders'], total_data['product_orders']),
+        ("Boutique (invité)", week_data['guest_product_orders'], month_data['guest_product_orders'], total_data['guest_product_orders']),
     ]
-    total_w = Decimal('0')
-    total_m = Decimal('0')
-    for label, w_val, m_val in revenues:
+    
+    total_brut_w = Decimal('0')
+    total_comm_w = Decimal('0')
+    total_net_w = Decimal('0')
+
+    for label, w_qs, m_qs, t_qs in revenues:
+        w_brut = _sum_amount(w_qs)
+        w_comm = _sum_commission(w_qs)
+        w_net = w_brut - w_comm
+        
         ws.cell(row=row, column=1, value=label)
-        ws.cell(row=row, column=2, value=int(w_val))
-        ws.cell(row=row, column=3, value=int(m_val))
-        ws.cell(row=row, column=4, value=int(w_val + m_val))
-        total_w += w_val
-        total_m += m_val
+        ws.cell(row=row, column=2, value=int(w_brut))
+        ws.cell(row=row, column=3, value=int(w_comm))
+        ws.cell(row=row, column=4, value=int(w_net)).font = _BOLD
+        
+        total_brut_w += w_brut
+        total_comm_w += w_comm
+        total_net_w += w_net
         row += 1
 
-    ws.cell(row=row, column=1, value="TOTAL").font = _BOLD
-    ws.cell(row=row, column=2, value=int(total_w)).font = _BOLD
-    ws.cell(row=row, column=3, value=int(total_m)).font = _BOLD
-    ws.cell(row=row, column=4, value=int(total_w + total_m)).font = _BOLD
+    ws.cell(row=row, column=1, value="TOTAL SEMAINE").font = _BOLD
+    ws.cell(row=row, column=2, value=int(total_brut_w)).font = _BOLD
+    ws.cell(row=row, column=3, value=int(total_comm_w)).font = _BOLD
+    ws.cell(row=row, column=4, value=int(total_net_w)).font = _BOLD
 
-    _auto_width(ws, [35, 15, 15, 18])
+    _auto_width(ws, [35, 18, 15, 20])
 
 
 def _build_transactions_sheet(wb, week_data):
@@ -206,59 +245,43 @@ def _build_transactions_sheet(wb, week_data):
     ws = wb.create_sheet("Transactions")
     _write_header(ws, [
         "Type", "Canal", "Référence", "Client", "Email",
-        "Date paiement", "Montant FCFA", "Moyen paiement", "Statut"
+        "Date paiement", "Brut FCFA", "Commission", "Net FCFA", "Moyen paiement", "Statut"
     ], _ORANGE_FILL)
 
     row = 2
-    for o in week_data['orders']:
-        ws.cell(row=row, column=1, value="Billet")
-        ws.cell(row=row, column=2, value="Compte")
+
+    def _write_order_data(o, type_label, channel, name, email):
+        nonlocal row
+        brut = o.total or 0
+        comm = getattr(o, 'commission', 0) or 0
+        net = brut - comm
+
+        ws.cell(row=row, column=1, value=type_label)
+        ws.cell(row=row, column=2, value=channel)
         ws.cell(row=row, column=3, value=o.order_number)
-        ws.cell(row=row, column=4, value=o.buyer.get_full_name() if o.buyer else '')
-        ws.cell(row=row, column=5, value=o.buyer.email if o.buyer else '')
+        ws.cell(row=row, column=4, value=name)
+        ws.cell(row=row, column=5, value=email)
         ws.cell(row=row, column=6, value=_fmt_dt(o.paid_at))
-        ws.cell(row=row, column=7, value=int(o.total or 0))
-        ws.cell(row=row, column=8, value=o.payment_method or '')
-        ws.cell(row=row, column=9, value=o.get_status_display())
+        ws.cell(row=row, column=7, value=int(brut))
+        ws.cell(row=row, column=8, value=int(comm))
+        ws.cell(row=row, column=9, value=int(net))
+        ws.cell(row=row, column=10, value=getattr(o, 'payment_method', ''))
+        ws.cell(row=row, column=11, value=o.get_status_display())
         row += 1
+
+    for o in week_data['orders']:
+        _write_order_data(o, "Billet", "Compte", o.buyer.get_full_name() if o.buyer else '', o.buyer.email if o.buyer else '')
 
     for o in week_data['guest_orders']:
-        ws.cell(row=row, column=1, value="Billet")
-        ws.cell(row=row, column=2, value="Invité")
-        ws.cell(row=row, column=3, value=o.order_number)
-        ws.cell(row=row, column=4, value=o.buyer_name)
-        ws.cell(row=row, column=5, value=o.email or '')
-        ws.cell(row=row, column=6, value=_fmt_dt(o.paid_at))
-        ws.cell(row=row, column=7, value=int(o.total or 0))
-        ws.cell(row=row, column=8, value=o.payment_method or '')
-        ws.cell(row=row, column=9, value=o.get_status_display())
-        row += 1
+        _write_order_data(o, "Billet", "Invité", o.buyer_name, o.email or '')
 
     for o in week_data['product_orders']:
-        ws.cell(row=row, column=1, value="Boutique")
-        ws.cell(row=row, column=2, value="Compte")
-        ws.cell(row=row, column=3, value=o.order_number)
-        ws.cell(row=row, column=4, value=o.buyer.get_full_name() if o.buyer else '')
-        ws.cell(row=row, column=5, value=o.buyer.email if o.buyer else '')
-        ws.cell(row=row, column=6, value=_fmt_dt(o.paid_at))
-        ws.cell(row=row, column=7, value=int(o.total or 0))
-        ws.cell(row=row, column=8, value=o.payment_method or '')
-        ws.cell(row=row, column=9, value=o.get_status_display())
-        row += 1
+        _write_order_data(o, "Boutique", "Compte", o.buyer.get_full_name() if o.buyer else '', o.buyer.email if o.buyer else '')
 
     for o in week_data['guest_product_orders']:
-        ws.cell(row=row, column=1, value="Boutique")
-        ws.cell(row=row, column=2, value="Invité")
-        ws.cell(row=row, column=3, value=o.order_number)
-        ws.cell(row=row, column=4, value=f"{o.first_name} {o.last_name}".strip())
-        ws.cell(row=row, column=5, value=o.email or '')
-        ws.cell(row=row, column=6, value=_fmt_dt(o.paid_at))
-        ws.cell(row=row, column=7, value=int(o.total or 0))
-        ws.cell(row=row, column=8, value=o.payment_method or '')
-        ws.cell(row=row, column=9, value=o.get_status_display())
-        row += 1
+        _write_order_data(o, "Boutique", "Invité", f"{o.first_name} {o.last_name}".strip(), o.email or '')
 
-    _auto_width(ws, [12, 10, 18, 28, 32, 18, 14, 16, 14])
+    _auto_width(ws, [12, 10, 18, 28, 32, 18, 14, 14, 14, 16, 14])
 
 
 def _build_withdrawals_sheet(wb, week_data):
@@ -315,9 +338,10 @@ def build_weekly_report_xlsx():
 
     week_data = _collect_data(week_start, week_end)
     month_data = _collect_data(month_start, month_end)
+    total_data = _collect_all_time_data()
 
     wb = Workbook()
-    _build_summary_sheet(wb, week_data, month_data, (week_start, week_end), (month_start, month_end))
+    _build_summary_sheet(wb, week_data, month_data, total_data, (week_start, week_end), (month_start, month_end))
     _build_transactions_sheet(wb, week_data)
     _build_withdrawals_sheet(wb, week_data)
     _build_users_sheet(wb, week_data)
