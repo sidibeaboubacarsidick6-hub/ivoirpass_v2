@@ -949,15 +949,24 @@ def paydunya_payout_webhook(request):
     """Callback PayDunya pour confirmer un décaissement."""
     from django.http import JsonResponse
     from apps.payments.paydunya import PayDunyaService
+    
+    # ✅ AJOUT : PayDunya teste l'URL avec GET/HEAD avant d'autoriser le payout.
+    # On renvoie 200 OK pour valider l'accessibilité de l'endpoint.
+    if request.method in ['GET', 'HEAD']:
+        return JsonResponse({'status': 'ok', 'endpoint': 'payout_webhook'}, status=200)
+    
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
     payload = PayDunyaService.parse_disbursement_callback(request)
     if not payload or not PayDunyaService.verify_disbursement_callback(payload):
         return JsonResponse({'success': False, 'error': 'Invalid callback'}, status=400)
+    
     reference = payload.get('disburse_id')
     withdrawal = WithdrawalRequest.objects.filter(reference=reference).first()
     if not withdrawal:
         return JsonResponse({'success': False, 'error': 'Unknown disbursement'}, status=404)
+    
     from .tasks import finalize_payout_from_provider
     finalize_payout_from_provider.delay(withdrawal.pk, payload)
     return JsonResponse({'success': True})
