@@ -550,7 +550,7 @@ def wallet_view(request):
 @organizer_required
 def withdraw_request(request):
     wallet, _ = OrganizerWallet.objects.get_or_create(organizer=request.user)
-    MIN_AMOUNT = 5000
+    MIN_AMOUNT = 100
 
     # ── Chantier A (2026-09-27) : wallet gelé après annulation ──────
     # Un wallet peut être gelé par cancel_event_organizer_liable() si
