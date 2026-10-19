@@ -947,30 +947,33 @@ def verify_otp(request, reference):
 @decorators.csrf.csrf_exempt
 def paydunya_payout_webhook(request):
     """Callback PayDunya pour confirmer un décaissement."""
-    from django.http import JsonResponse
+    from django.http import JsonResponse, HttpResponse
     from apps.payments.paydunya import PayDunyaService
     
-    # ✅ AJOUT : PayDunya teste l'URL avec GET/HEAD avant d'autoriser le payout.
-    # On renvoie 200 OK pour valider l'accessibilité de l'endpoint.
+    # 1. PayDunya teste l'URL avec GET/HEAD -> 200 OK
     if request.method in ['GET', 'HEAD']:
-        return JsonResponse({'status': 'ok', 'endpoint': 'payout_webhook'}, status=200)
+        return HttpResponse("OK", status=200)
     
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    # 2. PayDunya envoie un POST de test (souvent vide ou invalide)
+    if request.method == 'POST':
+        payload = PayDunyaService.parse_disbursement_callback(request)
+        
+        # Si le payload est vide/invalide, on répond 200 OK !
+        # C'est ce qui rassure PayDunya et débloque le paiement.
+        if not payload or not PayDunyaService.verify_disbursement_callback(payload):
+            return HttpResponse("OK", status=200)
+        
+        # Si le payload est valide, on traite le vrai webhook
+        reference = payload.get('disburse_id')
+        withdrawal = WithdrawalRequest.objects.filter(reference=reference).first()
+        if not withdrawal:
+            return HttpResponse("OK", status=200)
+        
+        from .tasks import finalize_payout_from_provider
+        finalize_payout_from_provider.delay(withdrawal.pk, payload)
+        return JsonResponse({'success': True})
     
-    payload = PayDunyaService.parse_disbursement_callback(request)
-    if not payload or not PayDunyaService.verify_disbursement_callback(payload):
-        return JsonResponse({'success': False, 'error': 'Invalid callback'}, status=400)
-    
-    reference = payload.get('disburse_id')
-    withdrawal = WithdrawalRequest.objects.filter(reference=reference).first()
-    if not withdrawal:
-        return JsonResponse({'success': False, 'error': 'Unknown disbursement'}, status=404)
-    
-    from .tasks import finalize_payout_from_provider
-    finalize_payout_from_provider.delay(withdrawal.pk, payload)
-    return JsonResponse({'success': True})
-
+    return HttpResponse("OK", status=200)
 
 @organizer_required
 def audit_log(request):
