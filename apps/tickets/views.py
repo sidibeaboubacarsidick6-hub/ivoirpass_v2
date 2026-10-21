@@ -172,12 +172,9 @@ def guest_payment_initiate(request, access_token):
     if updates:
         payment.save(update_fields=updates)
 
-        # Récupérer l'opérateur choisi par le client (?network=wave_ci)
-    selected_network = request.GET.get('network', None)
-    
     service = get_payment_service()
     # Au lieu de : result = service.create_guest_invoice(order, request)
-    result = service.create_guest_invoice(order, request, network=selected_network)
+    result = service.create_guest_invoice(order, request)
 
     if result['success']:
         payment.provider_reference = result['provider_reference']
@@ -348,29 +345,16 @@ def short_ticket_redirect(request, access_token):
 
 def guest_confirmation(request, access_token):
     from .models import GuestOrder, GuestTicket
-    from apps.payments.models import Payment
-    from apps.payments.provider import get_provider_name
 
     order = get_object_or_404(GuestOrder, access_token=access_token)
     tickets = GuestTicket.objects.filter(order_item__order=order)
 
-    # 🛡️ Isolation : On ne cache le sélecteur QUE si on est sur FeexPay
-    # Pour PayDunya, on garde le comportement historique (le sélecteur reste visible en cas de retour/annulation)
-    current_provider = get_provider_name()
-    is_feexpay = (current_provider == 'feexpay')
-    
-    payment_initiated = False
-    if is_feexpay:
-        payment = Payment.objects.filter(guest_order=order).first()
-        payment_initiated = bool(payment and payment.provider_reference)
-
     return render(request, 'tickets/guest_confirmation.html', {
         'order': order,
         'tickets': tickets,
-        'is_feexpay': is_feexpay,               # Nouvelle variable
-        'payment_initiated': payment_initiated, # Ne sera True que pour FeexPay
     })
 
+    
 def guest_payment_cancel(request, access_token):
     """
     URL appelée si l'acheteur invité annule le paiement sur PayDunya.
