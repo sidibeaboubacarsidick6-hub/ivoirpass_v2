@@ -215,7 +215,8 @@ class FeexPayService:
     def verify_payment(cls, reference):
         """
         Vérifie le statut — format normalisé {success, status, amount, raw}.
-        'SUCCESSFUL' → status='completed', success=True.
+        L'API status FeexPay peut retourner amount dans différents champs
+        selon la version. On est défensif.
         """
         endpoint = f"/api/transactions/public/single/status/{reference}"
         url = f"{cls._base_url()}{endpoint}"
@@ -235,11 +236,25 @@ class FeexPayService:
                 'PENDING':    'pending',
             }
             normalized = status_map.get(raw_status, 'pending')
+
+            # Extraction robuste du montant (plusieurs formats possibles)
+            amount = (
+                data.get('amount')
+                or data.get('montant')
+                or (data.get('data') or {}).get('amount')
+                or (data.get('transaction') or {}).get('amount')
+            )
+            if amount is not None:
+                try:
+                    amount = int(amount)
+                except (TypeError, ValueError):
+                    pass
+
             return {
                 'success': normalized == 'completed',
                 'status':  normalized,
-                'amount':  data.get('amount'),
-                'reference': data.get('reference'),
+                'amount':  amount,
+                'reference': data.get('reference') or reference,
                 'raw':     data,
             }
         except requests.RequestException as exc:

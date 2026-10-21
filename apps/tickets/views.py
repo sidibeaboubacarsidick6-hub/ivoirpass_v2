@@ -16,6 +16,9 @@ from apps.events.models import Event, TicketType
 from apps.dashboard.models import AuditLog
 from apps.dashboard.services import log_action, get_client_ip
 
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
 
 # ============================================
 # ✅ CORRECTIF AUDIT — H-3 : suppression du code mort
@@ -193,6 +196,32 @@ def guest_payment_initiate(request, access_token):
             ip_address=get_client_ip(request),
         )
 
+        # 🛡️ Défensif : si le provider renvoie déjà SUCCESSFUL (cas sandbox 00),
+        # on confirme immédiatement sans attendre le webhook.
+        raw_status = (result.get('raw', {}).get('status') or '').upper()
+        if raw_status == 'SUCCESSFUL':
+            newly_paid = order.mark_as_paid(
+                payment_method=current_provider,
+                payment_reference=result['provider_reference'],
+            )
+            if newly_paid:
+                Payment.objects.filter(guest_order=order).update(
+                    status=Payment.Status.COMPLETED,
+                    completed_at=timezone.now(),
+                    raw_response=result['raw'],
+                )
+                log_action(
+                    action=AuditLog.Action.PAYMENT_SUCCESS,
+                    description=f"Paiement confirmé immédiatement ({current_provider}) {order.order_number}",
+                    model_name='Payment', object_id=order.order_number,
+                    metadata={'provider': current_provider, 'amount': str(order.total)},
+                    ip_address=get_client_ip(request),
+                )
+                from apps.notifications.tasks import send_guest_ticket_email_async
+                send_guest_ticket_email_async.delay(str(order.uuid))
+                messages.success(request, "🎉 Paiement confirmé ! Vos billets arrivent.")
+                return redirect('tickets:guest_confirmation', access_token=order.access_token)
+
         # Provider avec page de paiement hébergée (PayDunya) → on redirige.
         # Provider push-USSD (FeexPay) → payment_url vide ou placeholder
         # sandbox, on renvoie vers la page de confirmation. Le webhook
@@ -227,6 +256,7 @@ def guest_payment_initiate(request, access_token):
     if first_item:
         return redirect('events:detail', slug=first_item.ticket_type.event.slug)
     return redirect('home')
+
 
 def guest_payment_return(request, access_token):
     """Retour après paiement PayDunya — commande invité."""
@@ -278,6 +308,7 @@ def guest_payment_return(request, access_token):
     messages.info(request, "⏳ Vérification du paiement en cours...")
     return redirect('tickets:guest_confirmation', access_token=access_token)
 
+
 def short_ticket_redirect(request, access_token):
     """
     URL courte utilisée dans les SMS : /b/<uuid>/
@@ -309,6 +340,7 @@ def short_ticket_redirect(request, access_token):
     except Order.DoesNotExist:
         from django.http import Http404
         raise Http404("Commande introuvable.")
+
 
 def guest_confirmation(request, access_token):
     from .models import GuestOrder, GuestTicket
@@ -354,10 +386,6 @@ def guest_payment_cancel(request, access_token):
         )
 
     return redirect('tickets:guest_confirmation', access_token=access_token)
-
-
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
 
 
 @csrf_exempt
@@ -435,6 +463,19 @@ def guest_webhook(request):
 
     # Vérification serveur-à-serveur
     verify_result = service.verify_payment(reference)
+
+    # 🛡️ Fallback : si l'API status ne renvoie pas le montant mais que le
+    # webhook le contient, on utilise celui du webhook (comme pour PayDunya).
+    if verify_result.get('amount') is None:
+        webhook_amount = (raw or {}).get('amount')
+        if webhook_amount is not None:
+            try:
+                verify_result['amount'] = int(webhook_amount)
+                logger.info("Fallback montant depuis webhook: %s",
+                            verify_result['amount'])
+            except (TypeError, ValueError):
+                pass
+
     if not (verify_result.get('success')
             and verify_result.get('status') == 'completed'):
         log_action(
