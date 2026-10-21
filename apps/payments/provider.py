@@ -34,6 +34,10 @@ def _load_cinetpay():
     from apps.payments.cinetpay import CinetPayService
     return CinetPayService
 
+def _load_feexpay():
+    """Charge le service FeexPay."""
+    from apps.payments.feexpay import FeexPayService
+    return FeexPayService
 
 # Mapping nom → fonction de chargement
 # On utilise des fonctions (et non des imports directs) pour éviter
@@ -42,6 +46,7 @@ def _load_cinetpay():
 _PROVIDERS = {
     'paydunya': _load_paydunya,
     'cinetpay': _load_cinetpay,
+    'feexpay': _load_feexpay,
 }
 
 

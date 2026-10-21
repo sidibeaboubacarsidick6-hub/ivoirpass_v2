@@ -22,6 +22,9 @@ class Payment(models.Model):
 
     class Provider(models.TextChoices):
         PAYDUNYA = 'paydunya', 'PayDunya'
+        FEEXPAY  = 'feexpay',  'FeexPay'
+        CINETPAY = 'cinetpay', 'CinetPay'
+        JULAYA   = 'julaya',   'Julaya'
         WAVE     = 'wave',     'Wave'
         ORANGE   = 'orange',   'Orange Money'
         MTN      = 'mtn',      'MTN MoMo'
@@ -75,6 +78,17 @@ class Payment(models.Model):
         _('token facture'),
         max_length=200,
         blank=True
+    )
+
+    provider_reference = models.CharField(
+        _('référence provider'),
+        max_length=200,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Référence unique côté agrégateur. PayDunya: token, "
+            "FeexPay: reference, etc."
+        ),
     )
 
     # Détails du paiement

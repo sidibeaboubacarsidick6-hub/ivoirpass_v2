@@ -2,6 +2,10 @@
 IvoirPass V2 — Vues billetterie
 """
 from django.shortcuts import render, redirect, get_object_or_404
+import logging
+
+logger = logging.getLogger(__name__)
+
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import HttpResponse
@@ -132,90 +136,97 @@ def guest_checkout(request, slug):
 
 
 def guest_payment_initiate(request, access_token):
+    """Initie le paiement pour une commande invité — provider piloté par .env."""
     from .models import GuestOrder
-    from django.conf import settings
-    import requests
+    from apps.payments.models import Payment
+    from apps.payments.provider import get_payment_service, get_provider_name
 
     order = get_object_or_404(GuestOrder, access_token=access_token)
 
     if order.status == GuestOrder.Status.PAID:
         return redirect('tickets:guest_confirmation', access_token=access_token)
 
-    from apps.payments.models import Payment
+    current_provider = get_provider_name()
     payment, _created = Payment.objects.get_or_create(
         guest_order=order,
-        defaults={'amount': order.total, 'provider': Payment.Provider.PAYDUNYA},
+        defaults={
+            'amount':   order.total,
+            'provider': current_provider,
+        },
     )
+    # Si on change de provider ou si le paiement n'est plus pending → reset
+    updates = []
+    if payment.provider != current_provider:
+        payment.provider = current_provider
+        payment.provider_reference = ''   # nouvelle tentative → nouvelle ref
+        updates += ['provider', 'provider_reference']
     if payment.status != Payment.Status.PENDING:
         payment.status = Payment.Status.PENDING
+        updates.append('status')
+    if payment.amount != order.total:
         payment.amount = order.total
-        payment.save(update_fields=['status', 'amount'])
+        updates.append('amount')
+    if updates:
+        payment.save(update_fields=updates)
 
-    base_url = settings.PAYDUNYA_BASE_URL
-    return_url  = f"{base_url}/billets/guest/retour/{order.access_token}/"
-    cancel_url  = f"{base_url}/billets/guest/annulation/{order.access_token}/"
-    webhook_url = f"{base_url}/billets/guest/webhook/"
+    service = get_payment_service()
+    result = service.create_guest_invoice(order, request)
 
-    invoice_items = {}
-    for i, item in enumerate(order.guest_items.select_related('ticket_type__event'), 1):
-        invoice_items[f"item_{i}"] = {
-            "name": item.ticket_type.name,
-            "quantity": item.quantity,
-            "unit_price": str(item.unit_price),
-            "total_price": str(item.subtotal),
-            "description": f"Billet {item.ticket_type.event.title}",
-        }
+    if result['success']:
+        payment.provider_reference = result['provider_reference']
+        payment.raw_response = result['raw']
+        payment.save(update_fields=['provider_reference', 'raw_response'])
 
-    payload = {
-        "store": {"name": "IvoirPass", "tagline": "Votre billetterie ivoirienne", "website_url": base_url},
-        "invoice": {
-            "items": invoice_items, "taxes": {},
-            "total_amount": str(int(order.total)),
-            "description": f"Billets IvoirPass — {order.order_number}",
-        },
-        "actions": {"cancel_url": cancel_url, "return_url": return_url, "callback_url": webhook_url},
-        "custom_data": {
-            "guest_order_number": order.order_number,
-            "buyer_email": order.email,
-            "buyer_name": order.buyer_name,
-        },
-    }
+        # Compat legacy : order.payment_reference pour les autres vues
+        order.payment_reference = result['provider_reference']
+        order.save(update_fields=['payment_reference'])
 
-    headers = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'IvoirPass/1.0 (+https://ivoirpass.com)',
-        'Accept': 'application/json',
-        'PAYDUNYA-MASTER-KEY': settings.PAYDUNYA_MASTER_KEY,
-        'PAYDUNYA-PRIVATE-KEY': settings.PAYDUNYA_PRIVATE_KEY,
-        'PAYDUNYA-TOKEN': settings.PAYDUNYA_TOKEN,
-    }
-
-    try:
-        response = requests.post(
-            settings.PAYDUNYA_API_BASE + '/checkout-invoice/create',
-            json=payload, headers=headers, timeout=30,
+        logger.info("Initiation %s — Commande: %s, URL: %s",
+                    current_provider, order.order_number,
+                    result.get('payment_url') or '(aucune)')
+        log_action(
+            action=AuditLog.Action.PAYMENT_INITIATED,
+            description=f"Paiement initié pour {order.order_number} via {current_provider}",
+            user=request.user if request.user.is_authenticated else None,
+            model_name='Payment', object_id=order.order_number,
+            metadata={'amount': str(payment.amount), 'provider': current_provider},
+            ip_address=get_client_ip(request),
         )
-        data = response.json()
-        if data.get('response_code') == '00':
-            token = data['token']
-            request.session[f'guest_token_{order.order_number}'] = token
-            order.payment_reference = token
-            order.save(update_fields=['payment_reference'])
-            payment.paydunya_token = token
-            payment.raw_response = data
-            payment.save(update_fields=['paydunya_token', 'raw_response'])
-            return redirect(data['response_text'])
-        else:
-            payment.status = Payment.Status.FAILED
-            payment.save(update_fields=['status'])
-            messages.error(request, f"Erreur PayDunya : {data.get('response_text')}")
-    except Exception as e:
-        payment.status = Payment.Status.FAILED
-        payment.save(update_fields=['status'])
-        messages.error(request, f"Erreur connexion : {e}")
 
-    return redirect('events:detail', slug=order.guest_items.first().ticket_type.event.slug)
+        # Provider avec page de paiement hébergée (PayDunya) → on redirige.
+        # Provider push-USSD (FeexPay) → payment_url vide ou placeholder
+        # sandbox, on renvoie vers la page de confirmation. Le webhook
+        # confirmera le paiement.
+        payment_url = (result.get('payment_url') or '').strip()
+        if payment_url and not payment_url.startswith('https://sandbox-'):
+            return redirect(payment_url)
 
+        messages.info(
+            request,
+            "📱 Vérifiez votre téléphone pour valider le paiement. "
+            "Vos billets vous seront envoyés dès confirmation.",
+        )
+        return redirect(
+            'tickets:guest_confirmation', access_token=order.access_token,
+        )
+
+    # Échec
+    payment.status = Payment.Status.FAILED
+    payment.raw_response = result.get('raw', {})
+    payment.save(update_fields=['status', 'raw_response'])
+    log_action(
+        action=AuditLog.Action.PAYMENT_FAILED,
+        description=f"Échec initiation paiement {order.order_number}",
+        model_name='Payment', object_id=order.order_number,
+        metadata={'provider': current_provider,
+                  'reason': str(result.get('error', ''))[:200]},
+        ip_address=get_client_ip(request),
+    )
+    messages.error(request, f"Impossible d'initier le paiement : {result['error']}")
+    first_item = order.guest_items.select_related('ticket_type__event').first()
+    if first_item:
+        return redirect('events:detail', slug=first_item.ticket_type.event.slug)
+    return redirect('home')
 
 def guest_payment_return(request, access_token):
     """Retour après paiement PayDunya — commande invité."""
@@ -352,121 +363,126 @@ from django.views.decorators.http import require_POST
 @csrf_exempt
 @require_POST
 def guest_webhook(request):
-    import json
-    import logging
     from django.http import HttpResponse
     from .models import GuestOrder
-    from apps.payments.provider import get_payment_service
+    from apps.payments.models import Payment
+    from apps.payments.provider import get_payment_service, get_provider_name
 
-    logger = logging.getLogger(__name__)
-
-    # 🔍 DEBUG — Tracer chaque tentative de webhook (à retirer après enquête)
+    current_provider = get_provider_name()
     logger.warning(
-        "WEBHOOK RECU — IP=%s, Content-Type=%s, Body[:200]=%s",
+        "WEBHOOK RECU — provider=%s, IP=%s, Body[:200]=%s",
+        current_provider,
         request.META.get('REMOTE_ADDR', '?'),
-        request.content_type,
         (request.body or b'')[:200],
     )
 
-    # 🔒 VÉRIFICATION SIGNATURE PAYDUNYA
-    if not get_payment_service().verify_webhook_signature(request):
+    service = get_payment_service()
+    if not service.verify_webhook_signature(request):
         log_action(
             action=AuditLog.Action.PAYMENT_FAILED,
-            description="Webhook invité rejeté : signature PayDunya invalide",
+            description=f"Webhook invité rejeté : signature {current_provider} invalide",
             model_name='Payment', object_id='',
             ip_address=get_client_ip(request),
         )
         return HttpResponse('FORBIDDEN', status=403)
 
     try:
-        data = json.loads(request.body)
-        invoice_data = data.get('data', {})
-        custom_data = invoice_data.get('custom_data', {})
-        status = invoice_data.get('invoice', {}).get('status', '')
-        token = invoice_data.get('invoiceToken', '')
-        order_number = custom_data.get('guest_order_number', '')
-
-        # 🔒 VÉRIFICATION SERVEUR-À-SERVEUR
-        verify_result = {}
-        if status == 'completed' and token:
-            verify_result = get_payment_service().verify_payment(token)
-            if not (verify_result.get('success') and verify_result.get('status') == 'completed'):
-                log_action(
-                    action=AuditLog.Action.PAYMENT_FAILED,
-                    description=f"Webhook invité : vérification serveur-à-serveur échouée pour {order_number}",
-                    model_name='Payment', object_id=order_number,
-                    ip_address=get_client_ip(request),
-                )
-                return HttpResponse('OK', status=200)
-
-        if status == 'completed' and order_number:
-            try:
-                order = GuestOrder.objects.get(
-                    order_number=order_number, status=GuestOrder.Status.PENDING,
-                )
-
-                # 🔒 VÉRIFICATION MONTANT + BINDING TOKEN (ajout sécurité 2026-10-08)
-                from apps.payments.verification import verify_payment_amount_and_binding
-                verif = verify_payment_amount_and_binding(verify_result, order, token)
-                if not verif['ok']:
-                    logger.critical(
-                        "Webhook invité PayDunya rejeté (commande %s, token %s) : %s — attendu=%s, reçu=%s",
-                        order.order_number, token, verif['reason'],
-                        verif.get('expected'), verif.get('received'),
-                    )
-                    log_action(
-                        action=AuditLog.Action.PAYMENT_FAILED,
-                        description=(
-                            f"Webhook invité PayDunya rejeté pour la commande {order.order_number} : "
-                            f"{verif['reason']} (attendu={verif.get('expected')}, "
-                            f"reçu={verif.get('received')})"
-                        ),
-                        model_name='Payment', object_id=order.order_number,
-                        metadata={
-                            'reason': verif['reason'],
-                            'expected': str(verif.get('expected')),
-                            'received': str(verif.get('received')),
-                        },
-                        ip_address=get_client_ip(request),
-                    )
-                    return HttpResponse('VERIFICATION_FAILED', status=400)
-
-                newly_confirmed = order.mark_as_paid(
-                    payment_method='paydunya', payment_reference=token,
-                )
-                if newly_confirmed:
-                    from apps.payments.models import Payment
-                    Payment.objects.filter(guest_order=order).update(
-                        status=Payment.Status.COMPLETED,
-                        completed_at=timezone.now(),
-                        raw_response=data,
-                    )
-                    log_action(
-                        action=AuditLog.Action.PAYMENT_SUCCESS,
-                        description=f"Paiement confirmé (webhook) pour la commande invité {order.order_number}",
-                        model_name='Payment', object_id=order.order_number,
-                        metadata={'provider': 'paydunya', 'amount': str(order.total)},
-                        ip_address=get_client_ip(request),
-                    )
-                    from apps.notifications.tasks import send_guest_ticket_email_async
-                    send_guest_ticket_email_async.delay(str(order.uuid))
-            except GuestOrder.DoesNotExist:
-                cancelled = GuestOrder.objects.filter(
-                    order_number=order_number, status=GuestOrder.Status.CANCELLED,
-                ).exists()
-                log_action(
-                    action=AuditLog.Action.PAYMENT_FAILED,
-                    description=(
-                        f"Webhook invité : commande {order_number} annulée, paiement non relancé"
-                        if cancelled else
-                        f"Webhook invité : commande {order_number} introuvable ou déjà traitée"
-                    ),
-                    model_name='Payment', object_id=order_number,
-                    ip_address=get_client_ip(request),
-                )
+        parsed = service.parse_webhook(request)
+    except Exception as exc:
+        logger.exception("Webhook %s parse error: %s", current_provider, exc)
         return HttpResponse('OK', status=200)
-    except Exception:
+
+    order_number = parsed['order_number']
+    reference = parsed['provider_reference']
+    status = parsed['status']
+    raw = parsed['raw']
+
+    logger.info("Webhook %s — order=%s, ref=%s, status=%s",
+                current_provider, order_number, reference, status)
+
+    if status != 'completed' or not order_number:
         return HttpResponse('OK', status=200)
+
+    try:
+        order = GuestOrder.objects.get(
+            order_number=order_number, status=GuestOrder.Status.PENDING,
+        )
+    except GuestOrder.DoesNotExist:
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Webhook {current_provider} : commande {order_number} introuvable/annulée",
+            model_name='Payment', object_id=order_number,
+            ip_address=get_client_ip(request),
+        )
+        return HttpResponse('OK', status=200)
+
+    # 🔒 Garde-fou : la Payment doit correspondre au provider actif
+    payment = Payment.objects.filter(
+        guest_order=order, provider=current_provider,
+    ).first()
+    if not payment:
+        logger.critical(
+            "Webhook %s : aucune Payment pour %s (provider mismatch)",
+            current_provider, order_number,
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Webhook {current_provider} : Payment absente pour {order_number}",
+            model_name='Payment', object_id=order_number,
+            ip_address=get_client_ip(request),
+        )
+        return HttpResponse('PROVIDER_MISMATCH', status=400)
+
+    # Vérification serveur-à-serveur
+    verify_result = service.verify_payment(reference)
+    if not (verify_result.get('success')
+            and verify_result.get('status') == 'completed'):
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Webhook {current_provider} : vérif API échouée pour {order_number}",
+            model_name='Payment', object_id=order_number,
+            ip_address=get_client_ip(request),
+        )
+        return HttpResponse('OK', status=200)
+
+    # Vérification montant + binding
+    from apps.payments.verification import verify_payment_amount_and_binding
+    verif = verify_payment_amount_and_binding(verify_result, order, reference)
+    if not verif['ok']:
+        logger.critical(
+            "Webhook %s rejeté (%s) : %s attendu=%s reçu=%s",
+            current_provider, order_number, verif['reason'],
+            verif.get('expected'), verif.get('received'),
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_FAILED,
+            description=f"Webhook {current_provider} rejeté {order_number} : {verif['reason']}",
+            model_name='Payment', object_id=order_number,
+            metadata={'expected': str(verif.get('expected')),
+                      'received': str(verif.get('received'))},
+            ip_address=get_client_ip(request),
+        )
+        return HttpResponse('VERIFICATION_FAILED', status=400)
+
+    newly_confirmed = order.mark_as_paid(
+        payment_method=current_provider, payment_reference=reference,
+    )
+    if newly_confirmed:
+        Payment.objects.filter(guest_order=order).update(
+            status=Payment.Status.COMPLETED,
+            completed_at=timezone.now(),
+            raw_response=raw,
+        )
+        log_action(
+            action=AuditLog.Action.PAYMENT_SUCCESS,
+            description=f"Paiement confirmé ({current_provider}) {order.order_number}",
+            model_name='Payment', object_id=order.order_number,
+            metadata={'provider': current_provider, 'amount': str(order.total)},
+            ip_address=get_client_ip(request),
+        )
+        from apps.notifications.tasks import send_guest_ticket_email_async
+        send_guest_ticket_email_async.delay(str(order.uuid))
+    return HttpResponse('OK', status=200)
 
 
 def download_guest_ticket_pdf(request, access_token):

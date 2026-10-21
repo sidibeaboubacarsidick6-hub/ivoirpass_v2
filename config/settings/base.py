@@ -421,6 +421,14 @@ PAYDUNYA_API_BASE = (
     else 'https://app.paydunya.com/api/v1'
 )
 
+# FEEXPAY
+FEEXPAY_API_TOKEN = config('FEEXPAY_API_TOKEN', default='')
+FEEXPAY_SHOP_ID   = config('FEEXPAY_SHOP_ID',   default='')
+FEEXPAY_BASE_URL  = config(
+    'FEEXPAY_BASE_URL',
+    default='https://api-v2.feexpay.me',
+)
+
 # ============================================
 # ASSISTANT IA (CHATBOT)
 # ============================================

@@ -197,6 +197,126 @@ class PayDunyaService:
     }
 
     @classmethod
+    def create_guest_invoice(cls, order, request):
+        """
+        Crée une facture PayDunya pour une GuestOrder (flux production).
+        Retourne le format normalisé commun aux providers.
+        """
+        PAYDUNYA_MIN_AMOUNT_LIVE = 200
+        if settings.PAYDUNYA_MODE == 'live':
+            try:
+                total_int = int(order.total)
+            except (TypeError, ValueError):
+                return {'success': False, 'error': "Montant invalide.",
+                        'provider_reference': '', 'payment_url': '', 'raw': {}}
+            if total_int < PAYDUNYA_MIN_AMOUNT_LIVE:
+                return {
+                    'success': False,
+                    'error': f"Montant minimum {PAYDUNYA_MIN_AMOUNT_LIVE} FCFA "
+                             f"(votre commande : {total_int} FCFA).",
+                    'provider_reference': '', 'payment_url': '', 'raw': {},
+                }
+
+        base_url    = settings.PAYDUNYA_BASE_URL.rstrip('/')
+        return_url  = f"{base_url}/billets/guest/retour/{order.access_token}/"
+        cancel_url  = f"{base_url}/billets/guest/annulation/{order.access_token}/"
+        webhook_url = f"{base_url}/billets/guest/webhook/"
+
+        items = {}
+        for i, item in enumerate(
+            order.guest_items.select_related('ticket_type__event'), start=1,
+        ):
+            items[f"item_{i}"] = {
+                "name":        item.ticket_type.name,
+                "quantity":    item.quantity,
+                "unit_price":  str(item.unit_price),
+                "total_price": str(item.subtotal),
+                "description": f"Billet {item.ticket_type.event.title}",
+            }
+
+        payload = {
+            "store": {
+                "name":        "IvoirPass",
+                "tagline":     "Votre billetterie ivoirienne",
+                "website_url": base_url,
+            },
+            "invoice": {
+                "items":         items,
+                "taxes":         {},
+                "total_amount":  str(int(order.total)),
+                "description":   f"Billets IvoirPass — {order.order_number}",
+            },
+            "actions": {
+                "cancel_url":   cancel_url,
+                "return_url":   return_url,
+                "callback_url": webhook_url,
+            },
+            "custom_data": {
+                "guest_order_number": order.order_number,
+                "buyer_email":        order.email,
+                "buyer_name":         order.buyer_name,
+            },
+        }
+
+        try:
+            response = requests.post(
+                settings.PAYDUNYA_API_BASE + '/checkout-invoice/create',
+                json=payload, headers=cls.get_headers(), timeout=30,
+            )
+            data = _safe_json(response, 'create_guest_invoice')
+            if data.get('response_code') == '00':
+                return {
+                    'success':            True,
+                    'provider_reference': data['token'],
+                    'payment_url':        data['response_text'],
+                    'raw':                data,
+                    'error':              None,
+                }
+            logger.error("Échec création facture PayDunya (guest) : %s", data)
+            return {
+                'success': False,
+                'error':   data.get('response_text', 'Erreur PayDunya inconnue'),
+                'provider_reference': '', 'payment_url': '', 'raw': data,
+            }
+        except Exception as e:
+            logger.error("Erreur connexion PayDunya (guest) : %s", e)
+            return {
+                'success': False, 'error': str(e),
+                'provider_reference': '', 'payment_url': '', 'raw': {},
+            }
+
+    @classmethod
+    def parse_webhook(cls, request):
+        """
+        Extrait et normalise le payload PayDunya.
+        Retourne le format commun : {order_number, provider_reference, status, raw}.
+        """
+        import json as _json
+        try:
+            data = _json.loads(request.body)
+        except Exception:
+            return {'order_number': '', 'provider_reference': '',
+                    'status': 'unknown', 'raw': {}}
+
+        invoice_data = data.get('data', {}) or {}
+        custom_data  = invoice_data.get('custom_data', {}) or {}
+        raw_status   = invoice_data.get('invoice', {}).get('status', '')
+        token        = invoice_data.get('invoiceToken', '') or data.get('token', '')
+
+        status_map = {
+            'completed': 'completed',
+            'cancelled': 'failed',
+            'pending':   'pending',
+        }
+        return {
+            'order_number':       custom_data.get('guest_order_number', ''),
+            'provider_reference': token,
+            'status':             status_map.get(raw_status, 'pending'),
+            'raw':                data,
+        }
+
+
+    @classmethod
     def _disbursement_headers(cls):
         return cls.get_headers()
 

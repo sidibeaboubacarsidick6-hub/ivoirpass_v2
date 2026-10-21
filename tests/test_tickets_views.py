@@ -192,7 +192,7 @@ class GuestPaymentInitiateTests(TestCase):
 
         payment = Payment.objects.filter(guest_order=self.order).first()
         self.assertIsNotNone(payment)
-        self.assertEqual(payment.paydunya_token, 'inv_tok_1')
+        self.assertEqual(payment.provider_reference, 'inv_tok_1')
 
     @patch('requests.post')
     def test_paiement_initie_erreur(self, mock_post):
@@ -357,8 +357,19 @@ class GuestWebhookTests(TestCase):
 
     @patch('apps.payments.paydunya.PayDunyaService.verify_payment')
     def test_webhook_completed_confirme(self, mock_verify):
+        # Créer le Payment associé : le webhook refuse maintenant si aucun
+        # Payment avec le bon provider n'existe (garde-fou anti-switch).
+        Payment.objects.create(
+            guest_order=self.order,
+            amount=self.order.total,
+            provider='paydunya',
+            provider_reference='tok_wh_1',
+            status=Payment.Status.PENDING,
+        )
         mock_verify.return_value = {
-            'success': True, 'status': 'completed', 'data': {},
+            'success': True, 'status': 'completed',
+            'amount': self.order.total,
+            'data': {'invoice': {'total_amount': str(int(self.order.total))}},
         }
         payload = {
             'hash': self._signature(),
