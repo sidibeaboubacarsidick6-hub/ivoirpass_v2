@@ -29,39 +29,23 @@ class FeexPayServiceTests(TestCase):
         return order
 
     # ------------------------------------------------------------------
-    # create_invoice
+    # create_invoice - Routage automatique par préfixe
     # ------------------------------------------------------------------
     @patch('apps.payments.feexpay.requests.post')
-    def test_create_invoice_wave_ci(self, mock_post):
-        """Un numéro 07 doit router vers wave_ci."""
+    def test_create_invoice_orange_ci(self, mock_post):
+        """Un numéro 07 doit router vers orange_ci (conforme préfixes CI)."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
-            'reference': 'ref-uuid-123',
-            'status': 'PENDING',
-            'amount': 200,
-            'payment_url': 'https://sandbox-wave.example.com/pay/ref-uuid-123',
+            'reference': 'ref-orange', 'status': 'PENDING', 'amount': 200,
         }
         mock_post.return_value = mock_resp
 
         order = self._make_order(phone='+2250700000000')
-        result = FeexPayService.create_invoice(order, None)
+        FeexPayService.create_invoice(order, None)
 
-        # Nouveau format normalisé
-        self.assertTrue(result['success'])
-        self.assertEqual(result['provider_reference'], 'ref-uuid-123')
-        self.assertEqual(
-            result['payment_url'],
-            'https://sandbox-wave.example.com/pay/ref-uuid-123',
-        )
-
-        args, kwargs = mock_post.call_args
-        self.assertIn('/requesttopay/wave_ci', args[0])
-        self.assertEqual(kwargs['json']['amount'], 200)
-        self.assertEqual(kwargs['json']['shop'], 'shop_test_123')
-        self.assertEqual(
-            kwargs['headers']['Authorization'], 'Bearer fp_test_token',
-        )
+        args, _ = mock_post.call_args
+        self.assertIn('/requesttopay/orange_ci', args[0])
 
     @patch('apps.payments.feexpay.requests.post')
     def test_create_invoice_mtn_ci(self, mock_post):
@@ -78,6 +62,54 @@ class FeexPayServiceTests(TestCase):
 
         args, _ = mock_post.call_args
         self.assertIn('/requesttopay/mtn_ci', args[0])
+
+    @patch('apps.payments.feexpay.requests.post')
+    def test_create_invoice_moov_ci(self, mock_post):
+        """Un numéro 01 doit router vers moov_ci."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'reference': 'ref-moov', 'status': 'PENDING', 'amount': 200,
+        }
+        mock_post.return_value = mock_resp
+
+        order = self._make_order(phone='+2250100000000')
+        FeexPayService.create_invoice(order, None)
+
+        args, _ = mock_post.call_args
+        self.assertIn('/requesttopay/moov_ci', args[0])
+
+    @patch('apps.payments.feexpay.requests.post')
+    def test_create_invoice_wave_ci_explicit(self, mock_post):
+        """L'endpoint wave_ci est bien appelé si on le force explicitement."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'reference': 'ref-uuid-123',
+            'status': 'PENDING',
+            'amount': 200,
+            'payment_url': 'https://sandbox-wave.example.com/pay/ref-uuid-123',
+        }
+        mock_post.return_value = mock_resp
+
+        order = self._make_order(phone='+2250700000000')
+        # On force explicitement le réseau Wave pour ce test
+        result = FeexPayService.create_invoice(order, None, network='wave_ci')
+
+        self.assertTrue(result['success'])
+        self.assertEqual(result['provider_reference'], 'ref-uuid-123')
+        self.assertEqual(
+            result['payment_url'],
+            'https://sandbox-wave.example.com/pay/ref-uuid-123',
+        )
+
+        args, kwargs = mock_post.call_args
+        self.assertIn('/requesttopay/wave_ci', args[0])
+        self.assertEqual(kwargs['json']['amount'], 200)
+        self.assertEqual(kwargs['json']['shop'], 'shop_test_123')
+        self.assertEqual(
+            kwargs['headers']['Authorization'], 'Bearer fp_test_token',
+        )
 
     # ------------------------------------------------------------------
     # verify_payment

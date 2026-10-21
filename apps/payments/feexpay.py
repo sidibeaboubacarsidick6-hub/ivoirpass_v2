@@ -81,16 +81,7 @@ class FeexPayService:
     @staticmethod
     def _detect_network(phone_number):
         """
-        Détection basique du réseau CI à partir du préfixe.
-
-        Préfixes usuels (à ajuster si besoin) :
-          - 07 → Orange
-          - 05 → MTN
-          - 01 → Moov
-          - Wave : souvent 07 aussi (Orange) mais Wave est un wallet
-            indépendant. On ne peut pas le déduire du numéro.
-            → Par défaut, on route vers Wave si aucun autre réseau
-              n'est identifiable, car Wave est très utilisé en CI.
+        Détection du réseau CI à partir du préfixe (conforme aux préfixes officiels).
         """
         phone = str(phone_number).replace('+', '').replace(' ', '')
         if phone.startswith('225'):
@@ -101,11 +92,9 @@ class FeexPayService:
         if phone.startswith('01'):
             return 'moov_ci'
         if phone.startswith('07'):
-            # Orange ou Wave — on privilégie Wave (wallet très répandu)
-            return 'wave_ci'
-        # Fallback
-        return 'wave_ci'
-
+            return 'orange_ci'  # <- On suit la documentation : 07 = Orange
+        # Fallback pour les autres préfixes (ou si Wave est choisi explicitement plus tard)
+        return 'wave_ci' 
     # ------------------------------------------------------------------
     # Création de facture (Payin)
     # ------------------------------------------------------------------
