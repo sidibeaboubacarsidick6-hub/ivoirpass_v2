@@ -135,6 +135,16 @@ def verify_payment_amount_and_binding(verify_result, expected_order, token):
         data = (verify_result or {}).get('data') or {}
         received = _extract_amount(data)
 
+        # 🛡️ Fallback : certains providers (FeexPay) renvoient le montant
+        # directement dans verify_result['amount'] sans enveloppe 'data'.
+        if received is None:
+            direct_amount = (verify_result or {}).get('amount')
+            if direct_amount is not None:
+                try:
+                    received = Decimal(str(direct_amount).strip())
+                except (InvalidOperation, ValueError, TypeError):
+                    received = None
+
         result['expected'] = expected
         result['received'] = received
 
@@ -159,7 +169,12 @@ def verify_payment_amount_and_binding(verify_result, expected_order, token):
 
         # 7. Binding : le token doit correspondre à un Payment lié à cette commande.
         from apps.payments.models import Payment
-        payment = Payment.objects.filter(paydunya_token=token).first()
+        from django.db.models import Q
+        # Cherche le Payment par n'importe quel identifiant provider :
+        # paydunya_token (legacy PayDunya) OU provider_reference (générique).
+        payment = Payment.objects.filter(
+            Q(paydunya_token=token) | Q(provider_reference=token)
+        ).first()
         if payment is None:
             result['ok'] = False
             result['reason'] = 'payment_not_found'
