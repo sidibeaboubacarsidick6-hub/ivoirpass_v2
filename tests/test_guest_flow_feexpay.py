@@ -117,3 +117,14 @@ class FeexPayGuestFlowTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         order.refresh_from_db()
         self.assertEqual(order.status, GuestOrder.Status.PENDING)
+
+    def test_missing_phone_fails(self):
+        order = _make_order()
+        order.phone = ''  # Numéro manquant
+        order.save()
+        
+        response = self.client.get(f'/billets/guest/payer/{order.access_token}/')
+        # Doit rediriger vers la page de détail avec un message d'erreur
+        self.assertEqual(response.status_code, 302)
+        payment = Payment.objects.get(guest_order=order)
+        self.assertEqual(payment.status, Payment.Status.FAILED)

@@ -172,8 +172,12 @@ def guest_payment_initiate(request, access_token):
     if updates:
         payment.save(update_fields=updates)
 
+        # Récupérer l'opérateur choisi par le client (?network=wave_ci)
+    selected_network = request.GET.get('network', None)
+    
     service = get_payment_service()
-    result = service.create_guest_invoice(order, request)
+    # Au lieu de : result = service.create_guest_invoice(order, request)
+    result = service.create_guest_invoice(order, request, network=selected_network)
 
     if result['success']:
         payment.provider_reference = result['provider_reference']

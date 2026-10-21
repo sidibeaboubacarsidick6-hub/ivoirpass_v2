@@ -1,3 +1,4 @@
+
 {% extends 'base.html' %}
 {% block title %}Commande confirmée — {{ order.order_number }}{% endblock %}
 
@@ -131,7 +132,7 @@
 
       {% elif order.status == 'cancelled' %}
 
-      <!-- ❌ Annule -->
+      <!-- ❌ Annulé -->
       <div class="ip-card p-5 text-center">
         <div style="font-size:3.5rem; margin-bottom:1rem;">❌</div>
         <h4 class="fw-bold mb-2">Paiement annulé</h4>
@@ -169,6 +170,26 @@
         <p class="text-muted small">
           Pensez à vérifier vos spams.
         </p>
+
+        <!-- Sélecteur du réseau de paiement -->
+        <form method="GET" action="{% url 'tickets:guest_payment' access_token=order.access_token %}" class="mt-4">
+          <div class="form-group mb-3">
+            <label for="network" class="form-label fw-bold">
+              Choisissez votre moyen de paiement :
+            </label>
+            <select name="network" id="network" class="form-select form-select-lg" required>
+              <option value="" disabled selected>-- Sélectionnez un opérateur --</option>
+              <option value="wave_ci">🌊 Wave</option>
+              <option value="orange_ci">🟠 Orange Money</option>
+              <option value="mtn_ci">🟡 MTN MoMo</option>
+              <option value="moov_ci">🔵 Moov Money</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-100">
+            Payer {{ order.total }} FCFA
+          </button>
+        </form>
       </div>
 
       {% endif %}

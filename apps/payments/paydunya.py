@@ -197,7 +197,7 @@ class PayDunyaService:
     }
 
     @classmethod
-    def create_guest_invoice(cls, order, request):
+    def create_guest_invoice(cls, order, request, network=None):
         """
         Crée une facture PayDunya pour une GuestOrder (flux production).
         Retourne le format normalisé commun aux providers.

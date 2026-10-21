@@ -1,3 +1,4 @@
+
 """
 IvoirPass V2 — Service de paiement FeexPay.
 
@@ -132,7 +133,22 @@ class FeexPayService:
         Crée une demande de paiement FeexPay.
         Retourne le format normalisé commun aux providers.
         """
-        if network is None:
+        # 1. Vérification stricte du numéro (indispensable pour le push USSD)
+        if not order.phone:
+            return {
+                'success': False,
+                'error': "Un numéro de téléphone est obligatoire pour payer via Mobile Money.",
+                'provider_reference': '',
+                'payment_url': '',
+                'raw': {},
+            }
+
+        # 2. Détermination du réseau
+        if network:
+            # Le client a explicitement choisi son opérateur
+            network = network
+        else:
+            # Fallback : on déduit via le préfixe
             network = cls._detect_network(order.phone)
 
         endpoint = f"/api/transactions/public/requesttopay/{network}"
