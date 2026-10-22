@@ -611,3 +611,5 @@ def _sentry_before_send(event, hint):
                 return None
 
     return event
+
+SMS_SENDER_ID = config('SMS_SENDER_ID', default='DIGITICKETS')
