@@ -1252,6 +1252,8 @@ def submit_dispute(request):
     Supporte le pré-remplissage depuis le chatbot :
     GET /reclamation/?source=chatbot&session=<key>
     → Le formulaire est pré-rempli avec l'historique de conversation.
+
+    🛡️ Anti-spam : Honeypot (champ website_url caché) + validation stricte.
     """
     # ─── GET : préparer le formulaire (avec prefill si chatbot) ───
     if request.method == 'GET':
@@ -1268,9 +1270,35 @@ def submit_dispute(request):
             {'prefill': prefill},
         )
 
+    # ─── POST : protection anti-spam (Honeypot) ─────────────────
+    # Les robots remplissent tous les champs, y compris ceux cachés en CSS.
+    # Un humain ne verra jamais ce champ, il restera donc vide.
+    if request.POST.get('website_url'):
+        # Robot détecté. On simule un succès pour ne pas les alerter,
+        # mais on ne crée rien en base.
+        messages.success(request, "Votre signalement a bien été pris en compte.")
+        return redirect('home')
+
     # ─── POST : créer le litige ─────────────────────────────────
     order_number = request.POST.get('order_number', '').strip()
-    dispute_type = request.POST.get('type', 'other')
+    dispute_type = request.POST.get('type', 'other').strip()
+    email = request.POST.get('email', '').strip()
+    subject = request.POST.get('subject', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    # Validation minimale : on rejette les soumissions vides ou malformées
+    # (les robots envoient souvent des champs vides ou très courts).
+    if not subject or len(subject) < 3:
+        messages.error(request, "Veuillez renseigner un sujet valide.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
+
+    if not description or len(description) < 10:
+        messages.error(request, "Veuillez décrire précisément votre problème.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
+
+    if not email or '@' not in email or '.' not in email.split('@')[-1]:
+        messages.error(request, "Veuillez renseigner une adresse email valide.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
 
     # Règle 30j : uniquement pour les litiges COMMERCIAUX.
     COMMERCIAL_TYPES = {'refund', 'non_delivery', 'qr_issue', 'wrong_item'}
@@ -1292,10 +1320,7 @@ def submit_dispute(request):
         'urgent', 'remboursement', 'erreur', 'bloqué', 'bloque',
         'rembourse', 'rembourser', 'scandale', 'arnaque',
     }
-    text_blob = (
-        (request.POST.get('subject', '') + ' ' +
-         request.POST.get('description', '')).lower()
-    )
+    text_blob = (subject + ' ' + description).lower()
     detected_priority = (
         Dispute.Priority.HIGH
         if any(kw in text_blob for kw in AUTO_HIGH_KEYWORDS)
@@ -1324,12 +1349,12 @@ def submit_dispute(request):
     dispute = Dispute.objects.create(
         type=dispute_type,
         reported_by=request.user if request.user.is_authenticated else None,
-        email=request.POST.get('email', ''),
-        phone=request.POST.get('phone', ''),
+        email=email,
+        phone=request.POST.get('phone', '').strip(),
         order_number=order_number,
-        ticket_number=request.POST.get('ticket_number', ''),
-        subject=request.POST.get('subject', '')[:200],
-        description=request.POST.get('description', ''),
+        ticket_number=request.POST.get('ticket_number', '').strip(),
+        subject=subject[:200],
+        description=description,
         source=dispute_source,
         priority=detected_priority,
         chatbot_history=chatbot_history,

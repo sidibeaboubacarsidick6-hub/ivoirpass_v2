@@ -1,4 +1,3 @@
-```django
 {% extends 'base.html' %}
 {% load static %}
 
@@ -23,7 +22,6 @@
         Vous rencontrez un problème ? Signalez-le nous, nous le traitons rapidement.
       </p>
 
-      <!-- Messages de succès/erreur -->
       {% if messages %}
         {% for message in messages %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -33,7 +31,6 @@
         {% endfor %}
       {% endif %}
 
-      <!-- Grille des types de problèmes -->
       <div class="row g-3 mb-4">
         <div class="col-4">
           <div class="card text-center p-3 border-0 shadow-sm h-100" style="border-radius:12px;">
@@ -79,12 +76,17 @@
         </div>
       </div>
 
-      <!-- Formulaire -->
       <div class="p-4" style="background:#f8f9fa; border-radius:12px;">
         <form method="POST" class="needs-validation" novalidate>
           {% csrf_token %}
 
-          <!-- Type (mappé vers Dispute.Type) -->
+          <!-- 🛡️ HONEYPOT ANTI-SPAM — Ne pas supprimer -->
+          <div style="display:none !important;" aria-hidden="true">
+            <label for="website_url">Site web (ne pas remplir)</label>
+            <input type="text" name="website_url" id="website_url" tabindex="-1" autocomplete="off">
+          </div>
+          <!-- Fin Honeypot -->
+
           <div class="mb-3">
             <label for="type" class="form-label fw-semibold">
               <i class="bi bi-tag me-1 text-orange"></i>Type de problème
@@ -100,7 +102,6 @@
             </select>
           </div>
 
-          <!-- Sujet -->
           <div class="mb-3">
             <label for="subject" class="form-label fw-semibold">
               <i class="bi bi-chat-left-text me-1 text-orange"></i>Sujet
@@ -110,7 +111,6 @@
                    maxlength="200" required>
           </div>
 
-          <!-- Email -->
           <div class="mb-3">
             <label for="email" class="form-label fw-semibold">
               <i class="bi bi-envelope me-1 text-orange"></i>Votre email
@@ -124,7 +124,6 @@
             {% endif %}
           </div>
 
-          <!-- Téléphone (optionnel) -->
           <div class="mb-3">
             <label for="phone" class="form-label fw-semibold">
               <i class="bi bi-telephone me-1 text-orange"></i>Téléphone
@@ -134,7 +133,6 @@
                    placeholder="+225 07 XX XX XX XX">
           </div>
 
-          <!-- Numéro de commande (optionnel) -->
           <div class="mb-3">
             <label for="order_number" class="form-label fw-semibold">
               <i class="bi bi-receipt me-1 text-orange"></i>Numéro de commande
@@ -145,7 +143,6 @@
                    placeholder="Ex: IP-2026-ABC123">
           </div>
 
-          <!-- Description (pré-remplie si vient du chatbot) -->
           <div class="mb-3">
             <label for="description" class="form-label fw-semibold">
               <i class="bi bi-chat-dots me-1 text-orange"></i>Description du problème
@@ -156,7 +153,6 @@
                       required>{{ prefill.description|default:'' }}</textarea>
           </div>
 
-          <!-- Champs cachés (contexte chatbot) -->
           {% if prefill.source == 'chatbot' %}
             <input type="hidden" name="source" value="chatbot">
             <input type="hidden" name="chatbot_session" value="{{ prefill.chatbot_session }}">
@@ -181,4 +177,3 @@
   </div>
 </div>
 {% endblock %}
-```
