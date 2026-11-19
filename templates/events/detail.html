@@ -569,7 +569,7 @@
 
           <!-- Description -->
           {% if ticket.description %}
-            <div class="ticket-card-desc">{{ ticket.description }}</div>
+            <div class="ticket-card-desc">{{ ticket.description|linebreaksbr }}</div>
           {% endif %}
         </div>
         {% empty %}

@@ -82,7 +82,7 @@
               <div class="flex-grow-1">
                 <div class="fw-bold">{{ tt.name }}</div>
                 {% if tt.description %}
-                  <div class="text-muted small mb-1">{{ tt.description }}</div>
+                  <div class="text-muted small mb-1">{{ tt.description|linebreaksbr }}</div>
                 {% endif %}
 
                 {# 🗓️ Vague 4 : jours couverts par ce billet #}
