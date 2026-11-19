@@ -177,9 +177,10 @@ TicketTypeFormSet = inlineformset_factory(
             'class': 'form-control form-control-sm',
             'placeholder': 'Ex: VIP, Standard...',
         }),
-        'description': forms.TextInput(attrs={
+        'description': forms.Textarea(attrs={
             'class': 'form-control form-control-sm',
             'placeholder': 'Description (optionnel)',
+            'rows': 3,
         }),
         'price': forms.NumberInput(attrs={
             'class': 'form-control form-control-sm',
@@ -309,5 +310,42 @@ EventDayFormSet = inlineformset_factory(
         }),
     },
     extra=1,
+    can_delete=True,
+)
+
+
+# ✅ NOUVEAU : Version pour l'ÉDITION (pas de ligne vide automatique)
+TicketTypeEditFormSet = inlineformset_factory(
+    Event,
+    TicketType,
+    fields=[
+        'name', 'description', 'price',
+        'quantity', 'max_per_order',
+        'is_visible', 'order'
+    ],
+    widgets={
+        'name': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+        'description': forms.Textarea(attrs={'class': 'form-control form-control-sm', 'rows': 3}),
+        'price': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+        'quantity': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+        'max_per_order': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+        'order': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+    },
+    extra=0,
+    can_delete=True,
+)
+
+# ✅ NOUVEAU : Version pour l'ÉDITION des partenaires (extra=0)
+EventPartnerEditFormSet = inlineformset_factory(
+    Event,
+    EventPartner,
+    fields=['name', 'logo', 'website_url', 'order'],
+    widgets={
+        'name': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+        'logo': forms.FileInput(attrs={'class': 'form-control form-control-sm', 'accept': 'image/*'}),
+        'website_url': forms.URLInput(attrs={'class': 'form-control form-control-sm'}),
+        'order': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+    },
+    extra=0,
     can_delete=True,
 )

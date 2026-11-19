@@ -249,6 +249,14 @@
                   {% endif %}
 
                   <div class="hero-card-title">{{ event.title }}</div>
+                                 <!-- ✅ AJOUT : L'InfoLine (short_description) -->
+                  {% if event.short_description %}
+                  <div class="text-white-50 small mb-2" style="font-size:0.8rem; line-height:1.2;">
+                      {{ event.short_description }}
+                  </div>
+                  {% endif %}
+
+                  <div class="hero-card-meta">
 
                   <div class="hero-card-meta">
                     <span>

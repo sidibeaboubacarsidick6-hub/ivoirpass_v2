@@ -277,19 +277,24 @@ def event_create(request):
 @organizer_required
 def event_edit(request, slug):
     """Modifier un événement existant."""
+    from apps.events.forms import (
+        EventForm, TicketTypeEditFormSet, EventFAQFormSet,
+        EventGalleryItemFormSet, EventPartnerEditFormSet
+    )
+    
     event = get_object_or_404(Event, slug=slug, organizer=request.user)
     form            = EventForm(instance=event)
-    formset         = TicketTypeFormSet(instance=event)
+    formset         = TicketTypeEditFormSet(instance=event)
     faq_formset     = EventFAQFormSet(instance=event)
     gallery_formset = EventGalleryItemFormSet(instance=event)
-    partner_formset = EventPartnerFormSet(instance=event)
+    partner_formset = EventPartnerEditFormSet(instance=event)
 
     if request.method == 'POST':
         form            = EventForm(request.POST, request.FILES, instance=event)
-        formset         = TicketTypeFormSet(request.POST, instance=event)
+        formset         = TicketTypeEditFormSet(request.POST, instance=event)
         faq_formset     = EventFAQFormSet(request.POST, instance=event)
         gallery_formset = EventGalleryItemFormSet(request.POST, request.FILES, instance=event)
-        partner_formset = EventPartnerFormSet(request.POST, request.FILES, instance=event)
+        partner_formset = EventPartnerEditFormSet(request.POST, request.FILES, instance=event)
 
         if (form.is_valid() and formset.is_valid() and faq_formset.is_valid()
                 and gallery_formset.is_valid() and partner_formset.is_valid()):
@@ -349,8 +354,8 @@ def event_edit(request, slug):
         'faq_formset':     faq_formset,
         'gallery_formset': gallery_formset,
         'partner_formset': partner_formset,
-        'event':   event,
-        'action':  'Modifier',
+        'event':           event,
+        'action':          'Modifier',
     })
 
 
