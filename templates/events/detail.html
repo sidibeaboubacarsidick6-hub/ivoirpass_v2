@@ -25,6 +25,16 @@
       {% if event.subtitle %}
         <p style="color:rgba(255,255,255,0.85); font-size:1.05rem;">{{ event.subtitle }}</p>
       {% endif %}
+      
+      <!-- ✅ AJOUT : InfoLine (numéro de téléphone / contact) -->
+      {% if event.short_description %}
+        <div style="background:rgba(255,255,255,0.15); color:#fff; padding:8px 16px; 
+                    border-radius:8px; display:inline-block; margin-bottom:0.8rem; 
+                    font-size:0.95rem; backdrop-filter:blur(4px);">
+          <i class="bi bi-telephone-fill me-2 text-orange"></i>{{ event.short_description }}
+        </div>
+      {% endif %}
+      
       <div class="d-flex flex-wrap gap-3 mt-2" style="font-size:0.9rem; color:rgba(255,255,255,0.8);">
         <span><i class="bi bi-calendar3 me-1 text-orange"></i>{{ event.start_date|date:"d F Y — H\hi" }}</span>
         {% if event.venue_city %}
