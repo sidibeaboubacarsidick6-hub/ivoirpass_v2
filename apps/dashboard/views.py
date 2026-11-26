@@ -1299,15 +1299,32 @@ def submit_dispute(request):
     
     # 3. Filtre de contenu (patterns spam connus)
     SPAM_KEYWORDS = [
+        # Casino / gambling
         'read the news', 'earn $', 'earn €', 'casino', 'slot',
-        'gaming', 'bonus', '1win', 'click here', 'visit our',
-        'crypto', 'forex', 'investment opportunity',
+        'gaming', 'bonus', '1win', 'crypto', 'forex',
+        # SEO / marketing
+        'seo', 'online visibility', 'backlinks', 'rank higher',
+        'rank on google', 'drive traffic', 'digital marketing',
+        'investment opportunity', 'click here', 'visit our',
+        # Fraude / phishing
+        'verify your account', 'suspended account', 'confirm your identity',
     ]
-    subject_check = request.POST.get('subject', '').lower()
-    description_check = request.POST.get('description', '').lower()
-    combined_check = subject_check + ' ' + description_check
+    subject_check = request.POST.get('subject', '').strip()
+    description_check = request.POST.get('description', '').strip()
+    combined_check = (subject_check + ' ' + description_check).lower()
     
-    if any(kw in combined_check for kw in SPAM_KEYWORDS):
+    # Détection spam : mots-clés OU keyboard smash (pas d'espace, charabia)
+    is_keyword_spam = any(kw in combined_check for kw in SPAM_KEYWORDS)
+    
+    # Keyboard smash : sujet sans espace de +20 chars (les vrais sujets ont des espaces)
+    import re as _re
+    is_keyboard_smash = (
+        len(subject_check) > 20
+        and ' ' not in subject_check
+        and bool(_re.match(r'^[a-zA-Z]+$', subject_check))
+    )
+    
+    if is_keyword_spam or is_keyboard_smash:
         messages.success(request, "Votre signalement a bien été pris en compte.")
         return redirect('home')
 
