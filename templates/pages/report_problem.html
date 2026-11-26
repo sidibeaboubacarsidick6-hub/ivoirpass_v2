@@ -84,6 +84,15 @@
         <form method="POST" class="needs-validation" novalidate>
           {% csrf_token %}
 
+          <!-- 🛡️ Token de temps (généré côté serveur) -->
+          <input type="hidden" name="form_token" value="{{ form_token }}">
+
+          <!-- 🛡️ Honeypot (ancien) -->
+          <div style="display:none !important;" aria-hidden="true">
+              <label for="website_url">Site web (ne pas remplir)</label>
+              <input type="text" name="website_url" id="website_url" tabindex="-1" autocomplete="off">
+          </div>
+
           <!-- Type (mappé vers Dispute.Type) -->
           <div class="mb-3">
             <label for="type" class="form-label fw-semibold">

@@ -1253,6 +1253,9 @@ def submit_dispute(request):
     GET /reclamation/?source=chatbot&session=<key>
     → Le formulaire est pré-rempli avec l'historique de conversation.
     """
+    from django.core import signing
+    import time as _time
+
     # ─── GET : préparer le formulaire (avec prefill si chatbot) ───
     if request.method == 'GET':
         prefill = {}
@@ -1261,16 +1264,72 @@ def submit_dispute(request):
 
         if source_param == 'chatbot' and session_key:
             prefill = _build_chatbot_prefill(session_key, request.user)
+        
+        # 🛡️ Génération du token signé (valide 2h, minimum 3s à remplir)
+        form_token = signing.dumps({'t': int(_time.time())}, salt='dispute-form')
 
         return render(
             request,
             'pages/report_problem.html',
-            {'prefill': prefill},
+            {
+                'prefill': prefill,
+                'form_token': form_token,
+            },
         )
 
-    # ─── POST : créer le litige ─────────────────────────────────
+    # ─── POST : protection anti-spam multicouche ────────────────
+    
+    # 1. Honeypot (ancienne protection, on la garde)
+    if request.POST.get('website_url'):
+        messages.success(request, "Votre signalement a bien été pris en compte.")
+        return redirect('home')
+    
+    # 2. Token de temps signé (impossible à contourner par un bot direct)
+    token = request.POST.get('form_token', '')
+    try:
+        data = signing.loads(token, salt='dispute-form', max_age=7200)  # 2h max
+        elapsed = _time.time() - data.get('t', 0)
+        if elapsed < 3:  # Un humain met minimum 3 secondes à remplir
+            messages.success(request, "Votre signalement a bien été pris en compte.")
+            return redirect('home')
+    except Exception:
+        # Token absent, invalide ou expiré → c'est un bot
+        messages.success(request, "Votre signalement a bien été pris en compte.")
+        return redirect('home')
+    
+    # 3. Filtre de contenu (patterns spam connus)
+    SPAM_KEYWORDS = [
+        'read the news', 'earn $', 'earn €', 'casino', 'slot',
+        'gaming', 'bonus', '1win', 'click here', 'visit our',
+        'crypto', 'forex', 'investment opportunity',
+    ]
+    subject_check = request.POST.get('subject', '').lower()
+    description_check = request.POST.get('description', '').lower()
+    combined_check = subject_check + ' ' + description_check
+    
+    if any(kw in combined_check for kw in SPAM_KEYWORDS):
+        messages.success(request, "Votre signalement a bien été pris en compte.")
+        return redirect('home')
+
+    # ─── POST : créer le litige (logique métier) ────────────────
     order_number = request.POST.get('order_number', '').strip()
-    dispute_type = request.POST.get('type', 'other')
+    dispute_type = request.POST.get('type', 'other').strip()
+    email = request.POST.get('email', '').strip()
+    subject = request.POST.get('subject', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    # Validation minimale
+    if not subject or len(subject) < 3:
+        messages.error(request, "Veuillez renseigner un sujet valide.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
+
+    if not description or len(description) < 10:
+        messages.error(request, "Veuillez décrire précisément votre problème.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
+
+    if not email or '@' not in email or '.' not in email.split('@')[-1]:
+        messages.error(request, "Veuillez renseigner une adresse email valide.")
+        return render(request, 'pages/report_problem.html', {'prefill': {}})
 
     # Règle 30j : uniquement pour les litiges COMMERCIAUX.
     COMMERCIAL_TYPES = {'refund', 'non_delivery', 'qr_issue', 'wrong_item'}
@@ -1292,10 +1351,7 @@ def submit_dispute(request):
         'urgent', 'remboursement', 'erreur', 'bloqué', 'bloque',
         'rembourse', 'rembourser', 'scandale', 'arnaque',
     }
-    text_blob = (
-        (request.POST.get('subject', '') + ' ' +
-         request.POST.get('description', '')).lower()
-    )
+    text_blob = (subject + ' ' + description).lower()
     detected_priority = (
         Dispute.Priority.HIGH
         if any(kw in text_blob for kw in AUTO_HIGH_KEYWORDS)
@@ -1324,12 +1380,12 @@ def submit_dispute(request):
     dispute = Dispute.objects.create(
         type=dispute_type,
         reported_by=request.user if request.user.is_authenticated else None,
-        email=request.POST.get('email', ''),
-        phone=request.POST.get('phone', ''),
+        email=email,
+        phone=request.POST.get('phone', '').strip(),
         order_number=order_number,
-        ticket_number=request.POST.get('ticket_number', ''),
-        subject=request.POST.get('subject', '')[:200],
-        description=request.POST.get('description', ''),
+        ticket_number=request.POST.get('ticket_number', '').strip(),
+        subject=subject[:200],
+        description=description,
         source=dispute_source,
         priority=detected_priority,
         chatbot_history=chatbot_history,
